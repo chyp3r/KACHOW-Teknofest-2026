@@ -1,15 +1,15 @@
-"""Resolves an authenticated user's effective confidentiality clearance.
+"""Kimliği doğrulanmış bir kullanıcının etkin gizlilik yetkilendirme seviyesini çözümler.
 
-The role model (see ``UserRole``'s own docstring): ADMIN and MANAGER both
-clear every level -- a company manager is trusted with full access, the same
-as an admin. EMPLOYEE's ceiling is not fixed by role at all; it comes from
-that individual's own ``UserModel.clearance_level``, since two employees can
-legitimately need different access to the same document set.
+Rol modeli (bkz. ``UserRole``'ün kendi docstring'i): ADMIN ve MANAGER her
+seviyeyi de geçer -- bir şirket yöneticisine, bir admin ile aynı şekilde
+tam erişim güvenilir. EMPLOYEE'nin tavanı role göre hiç sabit değildir;
+o bireyin kendi ``UserModel.clearance_level``'ından gelir, çünkü iki
+çalışanın aynı belge kümesine meşru olarak farklı erişime ihtiyacı olabilir.
 
-This module was previously an empty package (only a stale ``.pyc`` on disk,
-no source) -- the RBAC layer ``GuardrailPolicy.role_clearance_map`` and
-``app.ai.guardrails.output_gate`` were designed around from the start, but
-never actually wired to a real requester until now.
+Bu modül daha önce boş bir paketti (diskte yalnızca eski bir ``.pyc``, kaynak
+kodu yok) -- RBAC katmanı ``GuardrailPolicy.role_clearance_map`` ve
+``app.ai.guardrails.output_gate`` en baştan bunun etrafında tasarlandı,
+ama şimdiye kadar hiç gerçek bir isteyiciye bağlanmamıştı.
 """
 
 from typing import Optional
@@ -22,19 +22,21 @@ from app.domains.users.model.user_model import UserModel
 
 
 def clearance_for(user: Optional[UserModel]) -> Optional[SensitivityLevel]:
-    """Resolve a user's confidentiality ceiling.
+    """Bir kullanıcının gizlilik tavanını çözümler.
 
     Args:
-        user: The authenticated user, or ``None`` when unauthenticated (the
-            open demo/dev path when ``settings.REQUIRE_AUTH`` is off).
+        user: Kimliği doğrulanmış kullanıcı, ya da kimlik doğrulaması
+            yokken ``None`` (``settings.REQUIRE_AUTH`` kapalıyken açık
+            demo/dev yolu).
 
     Returns:
-        ``None`` when there is no authenticated user -- fail-secure, the
-        same "unknown clearance clears nothing" default
-        ``app.ai.guardrails.output_gate.evaluate_response`` already
-        documents for its own ``requester_clearance`` parameter. Otherwise
-        the resolved level: the policy ceiling for ADMIN/MANAGER, or the
-        individual ``user.clearance_level`` for EMPLOYEE.
+        Kimliği doğrulanmış kullanıcı yoksa ``None`` -- fail-secure
+        (güvenli tarafta hata), ``app.ai.guardrails.output_gate.
+        evaluate_response``'ın kendi ``requester_clearance`` parametresi
+        için zaten belgelediği "bilinmeyen yetkilendirme hiçbir şeyi
+        geçmez" varsayılanıyla aynı. Aksi halde çözümlenen seviye:
+        ADMIN/MANAGER için politika tavanı, ya da EMPLOYEE için bireysel
+        ``user.clearance_level``.
     """
     if user is None:
         return None
@@ -43,10 +45,11 @@ def clearance_for(user: Optional[UserModel]) -> Optional[SensitivityLevel]:
     try:
         role = UserRole(user.role)
     except ValueError:
-        # An unrecognised role string (data corruption, or a role value
-        # retired from the enum with rows never migrated) resolves to no
-        # clearance rather than raising -- a guardrail lookup must never
-        # itself become the reason a request 500s.
+        # Tanınmayan bir rol dizesi (veri bozulması, ya da satırları hiç
+        # göç ettirilmemiş, enum'dan kaldırılmış bir rol değeri), hata
+        # fırlatmak yerine yetkilendirme yok olarak çözümlenir -- bir
+        # koruma önlemi araması asla bir isteğin 500 vermesinin nedeni
+        # olmamalıdır.
         return None
 
     if role in (UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER):
@@ -59,32 +62,34 @@ def clearance_for(user: Optional[UserModel]) -> Optional[SensitivityLevel]:
 
 
 def bypasses_ownership(user: Optional[UserModel]) -> bool:
-    """Whether ``user`` sees every document *within its own company*, not
-    just its own.
+    """``user``'ın yalnızca kendi belgelerini değil, *kendi şirketi içindeki*
+    her belgeyi görüp görmediği.
 
-    ADMIN/MANAGER/ROOT already clear every confidentiality level (see
-    :func:`clearance_for`) -- confirmed with the user that "company managers
-    can access everything" extends to ownership too, not just clearance:
-    the pre-existing per-owner isolation (``DocumentRepository.is_owned_by``,
-    added for the unrelated "user B cannot reach user A's document" IDOR
-    fix) previously applied uniformly regardless of role, so even an admin
-    could not open a document they did not personally upload.
+    ADMIN/MANAGER/ROOT zaten her gizlilik seviyesini geçer (bkz.
+    :func:`clearance_for`) -- kullanıcıyla "şirket yöneticileri her şeye
+    erişebilir"in yalnızca yetkilendirmeyi değil sahipliği de kapsadığı
+    doğrulandı: önceden var olan sahip başına izolasyon
+    (``DocumentRepository.is_owned_by``, ilgisiz "kullanıcı B, kullanıcı
+    A'nın belgesine erişemez" IDOR düzeltmesi için eklenmişti) daha önce
+    rolden bağımsız olarak tek tip uygulanıyordu, bu yüzden bir admin bile
+    şahsen yüklemediği bir belgeyi açamıyordu.
 
-    Since the multi-tenancy work, "everything" here means *company-wide*,
-    not system-wide: this function only decides whether the ownership
-    check inside a single company is skipped. The company boundary itself
-    is enforced one layer up, by the mandatory ``company_id`` filter every
-    repository applies (and, from Faz 3 onward, Postgres RLS) -- a MANAGER
-    of company A can never reach company B's rows regardless of what this
-    function returns. Root reads across companies only through the explicit
-    scope-switch path (``X-Company-Scope``), never through this bypass.
+    Çoklu kiracılık çalışmasından bu yana, buradaki "her şey" *sistem
+    geneli* değil *şirket geneli* anlamına gelir: bu fonksiyon yalnızca tek
+    bir şirket içindeki sahiplik denetiminin atlanıp atlanmadığına karar
+    verir. Şirket sınırının kendisi bir katman yukarıda, her repository'nin
+    uyguladığı zorunlu ``company_id`` filtresiyle (ve, Faz 3'ten itibaren,
+    Postgres RLS ile) uygulanır -- A şirketinin bir MANAGER'ı, bu
+    fonksiyonun ne döndürdüğünden bağımsız olarak B şirketinin satırlarına
+    asla erişemez. Root, şirketler arasını yalnızca açık kapsam değiştirme
+    yolundan (``X-Company-Scope``) okur, asla bu atlama yoluyla değil.
 
     Args:
-        user: The authenticated user, or ``None``.
+        user: Kimliği doğrulanmış kullanıcı, ya da ``None``.
 
     Returns:
-        True for ADMIN/MANAGER/ROOT, False otherwise (including ``None``/an
-        unrecognised role -- ownership isolation is the fail-secure default).
+        ADMIN/MANAGER/ROOT için True, aksi halde False (``None``/tanınmayan
+        bir rol dahil -- sahiplik izolasyonu fail-secure varsayılandır).
     """
     if user is None:
         return False
@@ -96,22 +101,22 @@ def bypasses_ownership(user: Optional[UserModel]) -> bool:
 
 
 def assert_clearance(user: Optional[UserModel], required_level: SensitivityLevel) -> None:
-    """Raise unless ``user`` clears ``required_level``.
+    """``user``, ``required_level``'ı geçmedikçe hata fırlatır.
 
-    Convenience wrapper for the router-level checks
-    (``documents/router.py``, ``chat/router.py``) that need to turn an
-    insufficient clearance into an HTTP 403 -- the tool layer
-    (``document_tools.py``) and ``output_gate.py`` compare
-    :func:`clearance_for`'s result directly instead, since a tool call
-    returns a refusal string to the model rather than raising.
+    Yetersiz bir yetkilendirmeyi HTTP 403'e dönüştürmesi gereken router
+    seviyesi denetimler (``documents/router.py``, ``chat/router.py``) için
+    kolaylık sarmalayıcısı -- araç katmanı (``document_tools.py``) ve
+    ``output_gate.py`` bunun yerine :func:`clearance_for`'ın sonucunu
+    doğrudan karşılaştırır, çünkü bir araç çağrısı hata fırlatmak yerine
+    modele bir red dizesi döner.
 
     Args:
-        user: The authenticated user, or ``None``.
-        required_level: The resource's confidentiality level.
+        user: Kimliği doğrulanmış kullanıcı, ya da ``None``.
+        required_level: Kaynağın gizlilik seviyesi.
 
     Raises:
-        AuthorizationException: If ``user`` is ``None`` or does not clear
-            ``required_level``.
+        AuthorizationException: ``user`` ``None`` ise ya da
+            ``required_level``'ı geçmiyorsa.
     """
     clearance = clearance_for(user)
     if clearance is None or clearance < required_level:

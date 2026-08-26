@@ -8,20 +8,20 @@ logger = logging.getLogger(__name__)
 
 
 class LocalStorage(BaseStorage):
-    """LocalStorage implementation using the local filesystem with path safety."""
+    """Yol güvenliğiyle yerel dosya sistemini kullanan LocalStorage implementasyonu."""
 
     def __init__(self, base_dir: str):
-        """Initialize Local Storage.
+        """Yerel depoyu başlat.
 
         Args:
-            base_dir: Root directory for saving files.
+            base_dir: Dosyaların kaydedileceği kök dizin.
         """
         self.base_dir = os.path.abspath(base_dir)
         os.makedirs(self.base_dir, exist_ok=True)
         logger.info(f"Initialized LocalStorage at root: {self.base_dir}")
 
     def _get_abs_path(self, file_path: str) -> str:
-        """Resolve absolute path and protect against directory traversal attacks."""
+        """Mutlak yolu çözümle ve dizin geçişi saldırılarına karşı koru."""
         abs_path = os.path.abspath(os.path.join(self.base_dir, file_path))
         if not abs_path.startswith(self.base_dir):
             raise ValueError(
@@ -30,7 +30,7 @@ class LocalStorage(BaseStorage):
         return abs_path
 
     async def put_file(self, file_path: str, content: bytes) -> str:
-        """Save bytes asynchronously to local file."""
+        """Byte'ları eşzamansız olarak yerel dosyaya kaydet."""
         abs_path = self._get_abs_path(file_path)
         os.makedirs(os.path.dirname(abs_path), exist_ok=True)
 
@@ -43,7 +43,7 @@ class LocalStorage(BaseStorage):
         return file_path
 
     async def get_file(self, file_path: str) -> bytes:
-        """Read bytes asynchronously from local file."""
+        """Yerel dosyadan byte'ları eşzamansız olarak oku."""
         abs_path = self._get_abs_path(file_path)
         if not os.path.exists(abs_path):
             raise FileNotFoundError(f"Local file not found at: {file_path}")
@@ -55,7 +55,7 @@ class LocalStorage(BaseStorage):
         return await asyncio.to_thread(_read)
 
     async def delete_file(self, file_path: str) -> bool:
-        """Delete file asynchronously from local filesystem."""
+        """Dosyayı yerel dosya sisteminden eşzamansız olarak sil."""
         abs_path = self._get_abs_path(file_path)
         if not os.path.exists(abs_path):
             return False

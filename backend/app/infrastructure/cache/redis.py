@@ -7,19 +7,19 @@ logger = logging.getLogger(__name__)
 
 
 class RedisCache:
-    """SOTA Asynchronous Redis Cache client wrapper."""
+    """Güncel eşzamansız Redis Cache istemci sarmalayıcısı."""
 
     def __init__(self, redis_url: str):
-        """Initialize Redis Cache wrapper.
+        """Redis Cache sarmalayıcısını başlat.
 
         Args:
-            redis_url: Connection string (e.g. "redis://localhost:6379/0").
+            redis_url: Bağlantı dizesi (örn. "redis://localhost:6379/0").
         """
         self.redis_url = redis_url
         self.client: Optional[aioredis.Redis] = None
 
     async def connect(self) -> None:
-        """Establish async connection to Redis if not already connected."""
+        """Henüz bağlı değilse Redis'e eşzamansız bağlantı kur."""
         if self.client is None:
             self.client = aioredis.from_url(
                 self.redis_url, decode_responses=True
@@ -27,16 +27,16 @@ class RedisCache:
             logger.info(f"Connected to Redis at {self.redis_url}")
 
     async def close(self) -> None:
-        """Close the Redis connection pool."""
+        """Redis bağlantı havuzunu kapat."""
         if self.client is not None:
-            # .close() is a deprecated alias for .aclose() on this redis-py
-            # version and emits a DeprecationWarning on every call.
+            # .close(), bu redis-py sürümünde .aclose() için eski (deprecated)
+            # bir takma addır ve her çağrıda bir DeprecationWarning yayar.
             await self.client.aclose()
             self.client = None
             logger.info("Closed Redis cache connection.")
 
     async def get(self, key: str) -> Optional[str]:
-        """Get a value from the cache by key."""
+        """Önbellekten anahtara göre bir değer al."""
         await self.connect()
         try:
             return await self.client.get(key)
@@ -47,7 +47,7 @@ class RedisCache:
     async def set(
         self, key: str, value: str, expire_seconds: Optional[int] = None
     ) -> bool:
-        """Set a value in the cache with optional TTL."""
+        """İsteğe bağlı TTL ile önbelleğe bir değer ayarla."""
         await self.connect()
         try:
             await self.client.set(key, value, ex=expire_seconds)
@@ -57,7 +57,7 @@ class RedisCache:
             return False
 
     async def delete(self, key: str) -> bool:
-        """Delete a key from the cache."""
+        """Önbellekten bir anahtarı sil."""
         await self.connect()
         try:
             result = await self.client.delete(key)
@@ -67,13 +67,13 @@ class RedisCache:
             return False
 
     async def incr(self, key: str) -> Optional[int]:
-        """Atomically increment a key (creating it at 1 if absent) and return the new value.
+        """Bir anahtarı atomik olarak artır (yoksa 1'de oluştur) ve yeni değeri döndür.
 
-        Used for epoch-bump cache invalidation (see
-        ``app.core.authz.cache.AuthzDecisionCache``): incrementing a
-        namespace's epoch counter is O(1) and touches nothing else, unlike
-        scanning and deleting every cached decision key under that
-        namespace.
+        Epoch-artırma önbellek geçersizleştirmesi için kullanılır (bkz.
+        ``app.core.authz.cache.AuthzDecisionCache``): bir namespace'in
+        epoch sayacını artırmak O(1)'dir ve başka hiçbir şeye dokunmaz;
+        o namespace altındaki her önbelleklenmiş karar anahtarını tarayıp
+        silmenin aksine.
         """
         await self.connect()
         try:
@@ -83,17 +83,18 @@ class RedisCache:
             return None
 
     async def publish(self, channel: str, message: str) -> None:
-        """Publish a message to a Redis pub/sub channel.
+        """Bir Redis pub/sub kanalına mesaj yayınla.
 
-        Used for the notification stream's fan-out (see
-        ``app.domains.notifications.router``'s SSE endpoint): the process-
-        wide in-memory ``EventBus`` alone is not enough once more than one
-        uvicorn worker is running, since a subscriber connected to worker A
-        never sees an event published from worker B. Fail-open like every
-        other method here -- a dropped live-push notification still exists
-        as a row in ``notifications`` and shows up on the next
-        ``GET /notifications`` poll, so a Redis hiccup degrades to "less
-        real-time", never to data loss.
+        Bildirim akışının dağıtımı için kullanılır (bkz.
+        ``app.domains.notifications.router``'ın SSE uç noktası): birden
+        fazla uvicorn worker'ı çalıştığında süreç geneli bellek içi
+        ``EventBus`` tek başına yeterli değildir, çünkü worker A'ya bağlı
+        bir abone, worker B'den yayınlanan bir olayı asla görmez. Buradaki
+        diğer her metod gibi açık başarısız olur -- düşürülen bir canlı-
+        push bildirimi hâlâ ``notifications``'ta bir satır olarak var olur
+        ve bir sonraki ``GET /notifications`` sorgusunda görünür, bu yüzden
+        bir Redis aksaklığı "daha az gerçek zamanlı"ya düşer, asla veri
+        kaybına değil.
         """
         await self.connect()
         try:
@@ -102,7 +103,7 @@ class RedisCache:
             logger.error(f"Redis publish failed for channel={channel}: {e}")
 
     async def exists(self, key: str) -> bool:
-        """Check if a key exists in the cache."""
+        """Bir anahtarın önbellekte var olup olmadığını kontrol et."""
         await self.connect()
         try:
             result = await self.client.exists(key)
@@ -112,7 +113,7 @@ class RedisCache:
             return False
 
     async def clear(self) -> bool:
-        """Flush the database keys."""
+        """Veritabanı anahtarlarını temizle."""
         await self.connect()
         try:
             await self.client.flushdb()

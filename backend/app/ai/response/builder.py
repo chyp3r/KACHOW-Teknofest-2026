@@ -1,12 +1,12 @@
-"""Backward-compatible wrapper over the output gate.
+"""Output gate üzerinde geriye dönük uyumlu bir sarmalayıcı (wrapper).
 
-``evaluate_response`` (``app.ai.guardrails.output_gate``) is the real gate
-now: injection-echo check, groundedness, and PII-leakage, in one place. This
-module's ``build_response``/``FALLBACK_REPLY`` are kept only because they
-were the public surface every existing caller and test already used --
-``planning_graph._run_assist`` now calls ``evaluate_response`` directly and
-passes it real source materials and sensitivity context, which this
-two-value wrapper has no room for.
+``evaluate_response`` (``app.ai.guardrails.output_gate``) artık gerçek
+kapıdır: enjeksiyon-yankı kontrolü, dayanaklılık ve PII sızıntısı, tek bir
+yerde. Bu modülün ``build_response``/``FALLBACK_REPLY``'si yalnızca var olan
+her çağıranın ve testin zaten kullandığı genel yüzey olduğu için tutuluyor --
+``planning_graph._run_assist`` artık doğrudan ``evaluate_response``'u çağırıyor
+ve ona bu iki değerli sarmalayıcının yer bulamadığı gerçek kaynak
+materyallerini ve hassasiyet bağlamını geçiriyor.
 """
 
 import logging
@@ -19,15 +19,15 @@ __all__ = ["FALLBACK_REPLY", "build_response"]
 
 
 def build_response(reply: str) -> tuple[str, bool]:
-    """Validate and finalise a reply with no source/sensitivity context.
+    """Kaynak/hassasiyet bağlamı olmadan bir yanıtı doğrular ve sonlandırır.
 
     Args:
-        reply: The raw, already-generated reply.
+        reply: Ham, zaten üretilmiş yanıt.
 
     Returns:
-        A ``(text, flagged)`` pair. ``text`` is ``reply`` unchanged when it
-        passes every check, or the gate's edited/replacement text otherwise.
-        ``flagged`` is True whenever the gate's action was not ``"pass"``.
+        Bir ``(text, flagged)`` çifti. Her kontrolü geçtiğinde ``text``,
+        ``reply`` ile değişmeden aynıdır, aksi halde kapının düzenlenmiş/yer
+        değiştirmiş metnidir. ``flagged``, kapının eylemi ``"pass"`` olmadığında True'dur.
     """
     verdict = evaluate_response(reply)
     if verdict.action != "pass":

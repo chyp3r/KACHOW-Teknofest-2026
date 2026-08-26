@@ -27,7 +27,7 @@ from app.observability.otel import init_tracing
 from app.observability.transfer_metrics import init_transfer_metrics
 from app.observability.logger import setup_logging
 
-# Initialize system logging formatters
+# Sistem loglama formatlayıcılarını başlat
 setup_logging(settings.ENVIRONMENT)
 
 app = FastAPI(
@@ -36,9 +36,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS: an explicit origin allowlist, not "*". Browsers reject "*" combined
-# with allow_credentials=True outright, so the previous configuration was not
-# just permissive -- it silently failed for every credentialed request.
+# CORS: "*" değil, açık bir origin izin listesi. Tarayıcılar allow_credentials=True
+# ile birlikte "*" kullanımını doğrudan reddeder; bu yüzden önceki yapılandırma
+# sadece fazla izin vermekle kalmıyor -- kimlik bilgisi taşıyan her istekte
+# sessizce başarısız oluyordu.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -47,36 +48,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Registered last = runs outermost (Starlette applies middleware in reverse
-# registration order), so request_id is already set before every other
-# middleware and every route handler runs.
+# Son eklenen = en dışta çalışır (Starlette middleware'leri kayıt sırasının
+# tersinde uygular), böylece request_id, diğer tüm middleware'ler ve her route
+# handler çalışmadan önce zaten ayarlanmış olur.
 app.add_middleware(StructuredLoggingMiddleware)
 app.add_middleware(ResponseTimeMiddleware)
 app.add_middleware(CorrelationIdMiddleware)
-# Sets the tenant ContextVar app.infrastructure.database.session.get_db reads
-# to apply Postgres RLS's GUCs -- must run before any route dependency (incl.
-# get_db itself) executes, same as CorrelationIdMiddleware above.
+# app.infrastructure.database.session.get_db fonksiyonunun Postgres RLS
+# GUC'lerini uygulamak için okuduğu tenant ContextVar'ını ayarlar -- yukarıdaki
+# CorrelationIdMiddleware ile aynı sebeple, herhangi bir route dependency'si
+# (get_db dahil) çalışmadan önce çalışmalıdır.
 app.add_middleware(TenantContextMiddleware)
 
-# Prometheus /metrics: default HTTP instrumentation plus the AI-specific
-# collectors (node/LLM latency, draft scores, HITL counters, ...).
+# Prometheus /metrics: varsayılan HTTP enstrümantasyonu artı AI'a özgü
+# toplayıcılar (node/LLM gecikmesi, taslak skorları, HITL sayaçları, ...).
 init_metrics(app)
 init_ai_metrics()
 init_company_metrics()
 init_transfer_metrics()
 
-# Infrastructure-level tracing (HTTP/DB/Redis/outbound-httpx spans) -- no-op
-# when OTEL_EXPORTER_OTLP_ENDPOINT is unset. See app/observability/otel.py.
+# Altyapı seviyesinde izleme (HTTP/DB/Redis/giden-httpx span'leri) --
+# OTEL_EXPORTER_OTLP_ENDPOINT ayarlanmamışsa hiçbir şey yapmaz. Bkz.
+# app/observability/otel.py.
 init_tracing(app)
 
-# Register Global Exception Handlers
 app.add_exception_handler(BaseAppException, app_exception_handler)
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 app.add_exception_handler(HTTPException, http_exception_handler)
 app.add_exception_handler(Exception, generic_exception_handler)
 
-# Include Routers. /health lives under /api/v1/health (app.domains.system) --
-# no separate bare /health here, which used to return a differently-shaped
-# response from the same information.
+# /health, /api/v1/health altında yaşar (app.domains.system) -- burada ayrı bir
+# bare /health yoktur; eskiden bu, aynı bilgi için farklı şekilli bir yanıt
+# döndürürdü.
 app.include_router(api_router, prefix=settings.API_V1_STR)
 

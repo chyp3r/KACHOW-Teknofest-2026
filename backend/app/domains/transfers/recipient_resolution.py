@@ -1,14 +1,15 @@
-"""Deterministic name -> user resolution for artifact transfers.
+"""Belge transferleri için deterministik isim -> kullanıcı çözümlemesi.
 
-Not called by anything in this phase (Faz 3, #199) -- manual sends
-(`POST /transfers/send`) already carry an explicit `recipient_id`, resolved
-by the caller through `UserSearchDrawer`/`PersonPickerBody` (Faz 2). This
-service exists and is fully tested now so the Faz 4 AI channel's
-`propose_transfer` tool (`app.ai.tools.transfer_tools`) has a deterministic,
-already-proven service to call instead of asking the LLM to guess a name ->
-user match itself (see the plan's §2.2/§2.4: "İsim eşleşmesini LLM
-üzerinden tahmin etme" -- the model only ever supplies the raw name as a
-tool argument; this is what turns it into a real user).
+Bu fazda hiçbir yer tarafından çağrılmıyor (Faz 3, #199) -- manuel
+gönderimler (`POST /transfers/send`) zaten çağıran tarafından
+`UserSearchDrawer`/`PersonPickerBody` (Faz 2) aracılığıyla çözümlenmiş,
+açık bir `recipient_id` taşır. Bu servis şimdiden var ve tamamen test
+edilmiş durumda, böylece Faz 4 AI kanalının `propose_transfer` aracı
+(`app.ai.tools.transfer_tools`), LLM'den bir isim -> kullanıcı eşleşmesini
+kendisinin tahmin etmesini istemek yerine deterministik, kanıtlanmış bir
+servisi çağırabilir (bkz. planın §2.2/§2.4'ü: "İsim eşleşmesini LLM
+üzerinden tahmin etme" -- model her zaman ham ismi bir araç argümanı
+olarak sağlar; bunu gerçek bir kullanıcıya dönüştüren şey budur).
 """
 
 from dataclasses import dataclass
@@ -28,15 +29,15 @@ class RecipientCandidate:
 
 @dataclass(frozen=True)
 class RecipientResolution:
-    """The outcome of resolving one free-text name within one company.
+    """Bir şirket içinde bir serbest metin isminin çözümlenme sonucu.
 
     Attributes:
-        status: `"resolved"` (exactly one candidate), `"ambiguous"`
-            (more than one -- the caller must ask the user to disambiguate,
-            never guess), or `"not_found"`.
-        candidates: Empty for `"not_found"`, exactly one for `"resolved"`,
-            two or more for `"ambiguous"` -- favorites ranked first, then
-            alphabetically by username.
+        status: `"resolved"` (tam olarak bir aday), `"ambiguous"` (birden
+            fazla -- çağıran kullanıcıdan belirsizliği gidermesini
+            istemelidir, asla tahmin etmemelidir) ya da `"not_found"`.
+        candidates: `"not_found"` için boş, `"resolved"` için tam olarak
+            bir, `"ambiguous"` için iki veya daha fazla -- önce favoriler,
+            sonra kullanıcı adına göre alfabetik sıralanır.
     """
 
     status: Literal["resolved", "ambiguous", "not_found"]
@@ -49,16 +50,16 @@ class RecipientResolutionService:
         self.favorite_repository = favorite_repository
 
     async def resolve(self, *, name: str, company_id: str, requester_id: str) -> RecipientResolution:
-        """Resolve `name` to a company user.
+        """`name`'i bir şirket kullanıcısına çözümler.
 
-        An exact (case-insensitive) `username` match wins outright over a
-        broader substring search -- if someone types the recipient's full
-        username, that is never treated as ambiguous just because a
-        substring search would also surface unrelated partial matches.
-        Falling back to substring search only when no exact match exists
-        keeps "Ahmet" correctly ambiguous between two different Ahmets
-        while "ahmet.yilmaz" resolves directly to the one account with
-        that exact username.
+        Tam (büyük/küçük harf duyarsız) bir `username` eşleşmesi, daha
+        geniş bir alt dize aramasına doğrudan üstün gelir -- biri alıcının
+        tam kullanıcı adını yazarsa, bir alt dize araması ilgisiz kısmi
+        eşleşmeleri de ortaya çıkaracak diye bu asla belirsiz sayılmaz.
+        Yalnızca tam eşleşme bulunmadığında alt dize aramasına geri dönmek,
+        "Ahmet"in iki farklı Ahmet arasında doğru şekilde belirsiz
+        kalmasını sağlarken "ahmet.yilmaz" tam olarak o kullanıcı adına
+        sahip tek hesaba doğrudan çözümlenir.
         """
         name = name.strip()
         if not name:

@@ -43,8 +43,9 @@ from app.domains.users.service import UserService
 from app.api.exceptions.authentication import AuthenticationException
 from app.api.exceptions.authorization import AuthorizationException
 from app.infrastructure.cache import get_cache
-# Re-exported so every router keeps importing its dependency callables from
-# this one module -- see app.core.authz.dependency's own docstring.
+# Her router'ın bağımlılık çağrılabilirlerini bu tek modülden içe aktarmaya
+# devam etmesi için yeniden dışa aktarılıyor -- bkz. app.core.authz.dependency'nin
+# kendi docstring'i.
 from app.core.authz.dependency import (  # noqa: F401
     get_authz_service,
     require_permission,
@@ -60,14 +61,14 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db)
 ) -> UserModel:
-    """Dependency to retrieve and authenticate the currently logged-in user from the JWT access token."""
+    """JWT erişim token'ından şu anda oturum açmış kullanıcıyı alıp kimliğini doğrulayan bağımlılık."""
     if not token:
         raise AuthenticationException(message="Authentication token is missing.")
 
-    # Check blacklist in Redis
+    # Redis'te kara listeyi kontrol et
     cache = get_cache()
     if await cache.exists(f"token_blacklist:{token}"):
-        raise AuthenticationException(message="Session has been terminated. Please log in again.")
+        raise AuthenticationException(message="Bu oturum sonlandırıldı. Lütfen tekrar giriş yapın.")
 
     payload = decode_token(token)
     user_id = payload.get("sub")
@@ -84,10 +85,11 @@ async def get_current_user(
     except Exception as exc:
         raise AuthenticationException(message="User not found.") from exc
 
-    # Best-effort, and cheap in aggregate: `company_metrics.cached_slug` is a
-    # permanent in-process cache (a company's slug never changes), so this
-    # pays one extra query per company for the life of the process, not per
-    # request. ROOT has no company to attribute a request to and is skipped.
+    # En iyi çaba (best-effort) ve toplamda ucuz: `company_metrics.cached_slug`
+    # kalıcı bir süreç-içi önbellektir (bir şirketin slug'ı asla değişmez), bu
+    # yüzden bu işlem süreç ömrü boyunca şirket başına bir ek sorgu yapar,
+    # istek başına değil. ROOT'un isteği ilişkilendirebileceği bir şirketi
+    # olmadığından atlanır.
     from app.observability import company_metrics
 
     if user.company_id is not None:
@@ -103,14 +105,14 @@ async def get_current_user(
 
 
 def require_roles(*allowed_roles: UserRole):
-    """Dependency factory that enforces role-based access control on a route.
+    """Bir route üzerinde rol tabanlı erişim kontrolünü zorunlu kılan bağımlılık fabrikası.
 
-    A thin shim over the ABAC PDP's ``role_permitted`` (see
-    ``app.core.authz.engine``), per the tenancy plan's ABAC design -- so the
-    role-membership check every route already relied on lives in one place
-    alongside the rest of the engine, rather than being reimplemented here.
-    Behaviour is unchanged: same membership test, same exception on a
-    mismatch, so no existing route or test changes.
+    ABAC PDP'nin ``role_permitted``'ı (bkz. ``app.core.authz.engine``) üzerinde
+    ince bir katman -- tenancy planının ABAC tasarımına göre, böylece her
+    route'un zaten güvendiği rol-üyeliği kontrolü burada yeniden uygulanmak
+    yerine motorun geri kalanıyla birlikte tek bir yerde yaşar. Davranış
+    değişmedi: aynı üyelik testi, uyuşmazlıkta aynı istisna, dolayısıyla
+    mevcut hiçbir route veya test değişmiyor.
     """
     from app.core.authz.engine import role_permitted
 
@@ -130,43 +132,44 @@ async def require_auth_if_enabled(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
 ) -> UserModel:
-    """Require an authenticated, tenant-bound user.
+    """Kimliği doğrulanmış, tenant'a bağlı bir kullanıcı gerektirir.
 
-    Multi-tenancy made authentication mandatory everywhere: every row in the
-    system now carries a ``company_id`` (see the tenancy plan's Faz 1), so
-    there is no longer an "unauthenticated demo/dev path" for a request to
-    fall back to -- there would be no company to scope its reads/writes to.
-    The name is kept (rather than renamed to e.g. ``require_authenticated_
-    user``) purely to avoid touching every router's import and
-    ``Depends(...)`` call site in this same change; a rename is a fine
-    follow-up with no behavioural stakes.
+    Çoklu kiracılık (multi-tenancy), kimlik doğrulamayı her yerde zorunlu
+    hale getirdi: sistemdeki her satır artık bir ``company_id`` taşıyor
+    (bkz. tenancy planının Faz 1'i), bu yüzden bir isteğin geri
+    düşebileceği bir "kimliksiz demo/dev yolu" artık yok -- okuma/yazmalarını
+    kapsayacak bir şirket olmazdı. İsim korundu (örn. ``require_authenticated_
+    user`` olarak yeniden adlandırılmadı) yalnızca bu değişiklikte her
+    router'ın import'unu ve ``Depends(...)`` çağrı noktasını değiştirmekten
+    kaçınmak için; yeniden adlandırma, davranışsal riski olmayan iyi bir
+    takip işi olur.
 
     Returns:
-        The authenticated, active user.
+        Kimliği doğrulanmış, aktif kullanıcı.
     """
     return await get_current_user(token=token, db=db)
 
 
 # ---------------------------------------------------------------------------
-# Document analysis (Görev 1)
+# Belge analizi (Görev 1)
 # ---------------------------------------------------------------------------
-# Lazy singletons following the get_storage_client()/get_vector_store() idiom:
-# corpus loading and graph compilation are not free, so only the first request
-# pays for them.
+# get_storage_client()/get_vector_store() deyimini izleyen tembel (lazy)
+# singleton'lar: korpus yükleme ve graph derlemesi bedava değildir, bu yüzden
+# yalnızca ilk istek bunun bedelini öder.
 _mevzuat_retriever: Optional[HybridRetriever] = None
 _document_analysis_mevzuat_retriever: Any = None
 _document_analysis_graph: Any = None
 
 
 async def get_mevzuat_retriever() -> HybridRetriever:
-    """Build the local legislation retriever once per process.
+    """Yerel mevzuat retriever'ını süreç başına bir kez oluşturur.
 
-    Uses native Qdrant hybrid search with a pre-saved sparse vocabulary. This
-    is the *local-corpus* retriever specifically: it also backs the general
-    assistant's RAG flow (get_rag_graph, Görev 3), which MEVZUAT_SOURCE does
-    not affect -- that switch is scoped to document analysis alone. Document
-    analysis's own retriever, which may layer MCP-first retrieval on top of
-    this one, is get_document_analysis_mevzuat_retriever below.
+    Önceden kaydedilmiş bir seyrek (sparse) sözlükle native Qdrant hibrit
+    aramayı kullanır. Bu özellikle *yerel-korpus* retriever'ıdır: genel
+    asistanın RAG akışını da (get_rag_graph, Görev 3) destekler; MEVZUAT_SOURCE
+    bunu etkilemez -- o anahtar yalnızca belge analizini kapsar. Bunun
+    üzerine MCP-first retrieval katmanı ekleyebilecek belge analizinin kendi
+    retriever'ı ise aşağıdaki get_document_analysis_mevzuat_retriever'dır.
     """
     global _mevzuat_retriever
     if _mevzuat_retriever is None:
@@ -186,12 +189,11 @@ _example_retriever: Optional[ExampleRetriever] = None
 
 
 async def get_example_retriever() -> ExampleRetriever:
-    """Build the draft few-shot style-example retriever once per process.
+    """Taslak few-shot stil-örneği retriever'ını süreç başına bir kez oluşturur.
 
-    Same idiom and same native Qdrant hybrid search as
-    ``get_mevzuat_retriever`` above, targeting the separate
-    ``resmi_yazisma_ornek`` collection built by
-    ``scripts/index_yazisma_examples.py`` instead of the legislation corpus.
+    Yukarıdaki ``get_mevzuat_retriever`` ile aynı deyim ve aynı native Qdrant
+    hibrit arama; mevzuat korpusu yerine ``scripts/index_yazisma_examples.py``
+    tarafından oluşturulan ayrı ``resmi_yazisma_ornek`` koleksiyonunu hedefler.
     """
     global _example_retriever
     if _example_retriever is None:
@@ -208,26 +210,28 @@ async def get_example_retriever() -> ExampleRetriever:
     return _example_retriever
 
 
-#: Same collection name app.ai.tools.document_tools.QA_COLLECTION_NAME and
-#: app.domains.documents.service.DocumentService._index_for_qa use --
-#: duplicated as a literal, not imported, to keep this module's dependency
-#: surface limited to app.ai.* the same way the rest of this file already is.
+#: app.ai.tools.document_tools.QA_COLLECTION_NAME ve
+#: app.domains.documents.service.DocumentService._index_for_qa'nın kullandığı
+#: aynı koleksiyon adı -- bu modülün bağımlılık yüzeyini, dosyanın geri
+#: kalanında olduğu gibi app.ai.* ile sınırlı tutmak için import edilmek
+#: yerine literal olarak tekrarlanmıştır.
 _DOCUMENT_QA_COLLECTION_NAME = "document_qa"
 
 _document_qa_retriever: Optional[HybridRetriever] = None
 
 
 async def get_document_qa_retriever() -> HybridRetriever:
-    """Build the draft workflow's document-grounding retriever once per process.
+    """Taslak iş akışının belgeye-dayanma (document-grounding) retriever'ını süreç başına bir kez oluşturur.
 
-    Same idiom as ``get_example_retriever`` above, targeting the
-    ``document_qa`` collection populated per-document at upload time (see
-    ``DocumentService._index_for_qa``) instead of a fixed offline corpus --
-    the assistant's own ``search_document`` tool already queries this same
-    collection (``app.ai.tools.document_tools``). No sparse vocab file exists
-    for it (there is no single fitted corpus to fit one against), so sparse
-    query weights default to 1.0, the same degrade ``get_mevzuat_retriever``
-    documents for its own optional vocab path.
+    Yukarıdaki ``get_example_retriever`` ile aynı deyim; sabit bir çevrimdışı
+    korpus yerine, yükleme sırasında belge başına doldurulan ``document_qa``
+    koleksiyonunu hedefler (bkz. ``DocumentService._index_for_qa``) --
+    asistanın kendi ``search_document`` aracı zaten bu aynı koleksiyonu
+    sorguluyor (``app.ai.tools.document_tools``). Bunun için bir seyrek
+    (sparse) sözlük dosyası yoktur (karşı fit edilecek tek bir korpus yoktur),
+    bu yüzden seyrek sorgu ağırlıkları varsayılan olarak 1.0'dır -- tıpkı
+    ``get_mevzuat_retriever``'ın kendi opsiyonel sözlük yolu için belgelediği
+    aynı düşüş (degrade) gibi.
     """
     global _document_qa_retriever
     if _document_qa_retriever is None:
@@ -242,27 +246,27 @@ async def get_document_qa_retriever() -> HybridRetriever:
 async def get_document_analysis_mevzuat_retriever(
     local: HybridRetriever = Depends(get_mevzuat_retriever),
 ) -> Any:
-    """Build document analysis's legislation retriever once per process.
+    """Belge analizinin mevzuat retriever'ını süreç başına bir kez oluşturur.
 
-    MEVZUAT_SOURCE="mcp" (default) layers MCP-first retrieval over the same
-    local corpus used everywhere else, falling back to it on any failure;
-    "local" returns the local retriever directly, unchanged from before this
-    setting existed.
+    MEVZUAT_SOURCE="mcp" (varsayılan), her yerde kullanılan aynı yerel
+    korpusun üzerine MCP-first retrieval katmanı ekler ve herhangi bir
+    hatada ona geri döner; "local" ise yerel retriever'ı doğrudan döndürür,
+    bu ayar var olmadan önceki haliyle değişmeden.
 
-    The returned object may or may not have its live cache warmed yet --
-    that happens separately (see app.lifespan._warm_up_graphs) so that a
-    slow or unreachable MCP server never blocks compiling this graph, only
-    delays when the live source starts actually being used.
+    Döndürülen nesnenin canlı önbelleği henüz ısıtılmış olabilir ya da
+    olmayabilir -- bu ayrıca gerçekleşir (bkz. app.lifespan._warm_up_graphs)
+    böylece yavaş veya erişilemeyen bir MCP sunucusu bu graph'ın derlenmesini
+    asla engellemez, yalnızca canlı kaynağın fiilen kullanılmaya
+    başlanmasını geciktirir.
 
     Args:
-        local: The local-corpus retriever, always constructed regardless of
-            source (it is MCP-first's fallback, and local mode's only
-            retriever).
+        local: Kaynaktan bağımsız olarak her zaman oluşturulan yerel-korpus
+            retriever'ı (MCP-first'ün yedeği ve yerel modun tek retriever'ı).
 
     Returns:
-        A HybridRetriever (source="local") or a FallbackMevzuatRetriever
-        wrapping it (source="mcp"). Both satisfy the same
-        `async retrieve(query, limit) -> list[Document]` interface.
+        Bir HybridRetriever (source="local") veya onu saran bir
+        FallbackMevzuatRetriever (source="mcp"). İkisi de aynı
+        `async retrieve(query, limit) -> list[Document]` arayüzünü karşılar.
     """
     global _document_analysis_mevzuat_retriever
     if _document_analysis_mevzuat_retriever is None:
@@ -278,13 +282,13 @@ async def get_document_analysis_mevzuat_retriever(
 async def get_document_analysis_graph(
     retriever: Any = Depends(get_document_analysis_mevzuat_retriever),
 ) -> Any:
-    """Compile the document analysis workflow once per process.
+    """Belge analizi iş akışını süreç başına bir kez derler.
 
     Args:
-        retriever: The legislation retriever injected into the graph.
+        retriever: Graph'a enjekte edilen mevzuat retriever'ı.
 
     Returns:
-        The compiled LangGraph workflow.
+        Derlenmiş LangGraph iş akışı.
     """
     global _document_analysis_graph
     if _document_analysis_graph is None:
@@ -298,7 +302,7 @@ async def get_document_analysis_graph(
 
 
 def get_document_repository(db: AsyncSession = Depends(get_db)) -> DocumentRepository:
-    """Provide the document ownership/listing registry repository."""
+    """Belge sahiplik/listeleme kayıt deposunu sağlar."""
     return DocumentRepository(db)
 
 
@@ -308,12 +312,12 @@ def get_user_repository(db: AsyncSession = Depends(get_db)) -> UserRepository:
 
 
 def get_chat_session_repository(db: AsyncSession = Depends(get_db)) -> ChatSessionRepository:
-    """Provide the chat session listing repository."""
+    """Sohbet oturumu listeleme deposunu sağlar."""
     return ChatSessionRepository(db)
 
 
 def get_chat_message_repository(db: AsyncSession = Depends(get_db)) -> ChatMessageRepository:
-    """Provide the chat message log repository."""
+    """Sohbet mesajı kayıt deposunu sağlar."""
     return ChatMessageRepository(db)
 
 
@@ -322,17 +326,17 @@ def get_document_analysis_service(
     document_repository: DocumentRepository = Depends(get_document_repository),
     db: AsyncSession = Depends(get_db),
 ) -> DocumentService:
-    """Provide the document analysis service with its collaborators injected.
+    """İş birlikçileri enjekte edilmiş belge analizi servisini sağlar.
 
     Args:
-        analysis_graph: The compiled analysis workflow.
-        document_repository: Ownership/listing registry.
-        db: Shared with the pool repositories below so filing an upload into
-            its owner's default pool commits in the same transaction as
-            registering the document itself.
+        analysis_graph: Derlenmiş analiz iş akışı.
+        document_repository: Sahiplik/listeleme kaydı.
+        db: Aşağıdaki pool repository'leriyle paylaşılır, böylece bir
+            yüklemenin sahibinin varsayılan pool'una dosyalanması, belgenin
+            kendisini kaydetmekle aynı işlemde (transaction) commit edilir.
 
     Returns:
-        A ready-to-use `DocumentService`.
+        Kullanıma hazır bir `DocumentService`.
     """
     from app.domains.pools.repository import DocumentPoolItemRepository, DocumentPoolRepository
     from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
@@ -348,38 +352,42 @@ def get_document_analysis_service(
         pool_repository=DocumentPoolRepository(db),
         pool_item_repository=DocumentPoolItemRepository(db),
         quota_service=QuotaService(UsageCounterRepository(db), CompanyQuotaRepository(db)),
-        # Builds the on-demand detailed summary (generate_detailed_summary)
-        # -- not part of analysis_graph, since that summary is deliberately
-        # not a graph node (see create_document_analysis_graph's own
-        # docstring for why). Same llm_client analysis_graph itself uses;
-        # SummarizerAgent is cheap to construct (no I/O), so a fresh one per
-        # request is fine, mirroring how analysis_graph builds its own
-        # per-agent instances internally.
+        # Talep üzerine oluşturulan detaylı özeti (generate_detailed_summary)
+        # inşa eder -- analysis_graph'ın bir parçası değildir, çünkü bu özet
+        # kasıtlı olarak bir graph node'u değildir (nedeni için
+        # create_document_analysis_graph'ın kendi docstring'ine bakın).
+        # analysis_graph'ın kendisinin kullandığı aynı llm_client;
+        # SummarizerAgent'ı oluşturmak ucuzdur (I/O yok), bu yüzden istek
+        # başına yeni bir tane oluşturmak sorun değildir -- analysis_graph'ın
+        # kendi ajan başına örnekleri dahili olarak nasıl inşa ettiğini
+        # yansıtır.
         summarizer_agent=SummarizerAgent(get_llm_client()),
-        # Backs reextract_document_text -- the user's manual "Yeniden OCR"
-        # override, always a full vision-model pass bypassing
-        # get_document_extractor()'s chain entirely (see that method's own
-        # docstring for why). A fresh instance per request, same as
-        # summarizer_agent above and the vision extractor
-        # get_document_extractor() builds internally -- cheap to construct,
-        # no I/O until .extract() is actually called.
+        # reextract_document_text'i destekler -- kullanıcının manuel "Yeniden
+        # OCR" geçersiz kılması, get_document_extractor()'ın zincirini
+        # tamamen atlayarak her zaman tam bir vision-model geçişi yapar
+        # (nedeni için o metodun kendi docstring'ine bakın). Yukarıdaki
+        # summarizer_agent ve get_document_extractor()'ın dahili olarak
+        # inşa ettiği vision extractor ile aynı şekilde istek başına yeni
+        # bir örnek -- oluşturmak ucuzdur, .extract() fiilen çağrılana
+        # kadar I/O yoktur.
         vision_extractor=(
             OllamaVisionExtractor() if settings.LOCAL_MODE else EvrenVisionExtractor()
         ),
     )
 
 # ---------------------------------------------------------------------------
-# Drafting & Routing (Görev 2)
+# Taslak Oluşturma & Yönlendirme (Görev 2)
 # ---------------------------------------------------------------------------
 _draft_graph: Any = None
 _routing_graph: Any = None
 
 
 async def get_draft_graph() -> Any:
-    """Compile the document drafting workflow once per process.
+    """Belge taslak oluşturma iş akışını süreç başına bir kez derler.
 
-    The writer/reviser use the quality tier; the hybrid gate's judge leg runs
-    on the fast tier, since it emits a small verdict rather than draft text.
+    Yazar/revizör kalite katmanını kullanır; hibrit kapının hakem bacağı
+    hızlı katmanda çalışır, çünkü taslak metin yerine küçük bir karar
+    üretir.
     """
     global _draft_graph
     if _draft_graph is None:
@@ -402,13 +410,13 @@ async def get_draft_graph() -> Any:
 
 
 async def get_routing_graph() -> Any:
-    """Compile the document routing workflow once per process.
+    """Belge yönlendirme iş akışını süreç başına bir kez derler.
 
-    Uses the fast tier: the output is one unit label plus one sentence, so the
-    quality model buys nothing here but latency. `units_provider` is a plain
-    callable (not resolved once here) so every routing decision re-reads the
-    active unit list from the database, even though the graph itself is only
-    compiled once.
+    Hızlı katmanı kullanır: çıktı bir birim etiketi artı bir cümledir, bu
+    yüzden kalite modeli burada yalnızca gecikme (latency) kazandırır.
+    `units_provider` düz bir çağrılabilir'dir (burada bir kez çözülmez), bu
+    yüzden graph'ın kendisi yalnızca bir kez derlense de her yönlendirme
+    kararı aktif birim listesini veritabanından yeniden okur.
     """
     global _routing_graph
     if _routing_graph is None:
@@ -425,11 +433,11 @@ def get_draft_service(
     routing_graph: Any = Depends(get_routing_graph),
     db: AsyncSession = Depends(get_db),
 ) -> DraftService:
-    """Provide the draft service with its collaborators injected.
+    """İş birlikçileri enjekte edilmiş taslak servisini sağlar.
 
-    `db` only backs `quota_service` here -- the draft itself is still
-    persisted through `app.domains.drafts.draft_recorder`'s own independent
-    session (see that module's docstring), unchanged.
+    `db` burada yalnızca `quota_service`'i destekler -- taslağın kendisi
+    hâlâ `app.domains.drafts.draft_recorder`'ın kendi bağımsız oturumu
+    üzerinden kalıcı hale getirilir (bkz. o modülün docstring'i), değişmeden.
     """
     from app.domains.quotas.repository import CompanyQuotaRepository, UsageCounterRepository
     from app.domains.quotas.service import QuotaService
@@ -444,11 +452,11 @@ def get_draft_service(
 
 
 def get_draft_repository(db: AsyncSession = Depends(get_db)) -> DraftRepository:
-    """Provide the draft version-chain repository (see `DraftModel`).
+    """Taslak sürüm-zinciri deposunu sağlar (bkz. `DraftModel`).
 
-    Read-only DI path -- writes go through `app.domains.drafts.
-    draft_recorder`'s own self-contained session (see that module's
-    docstring for why).
+    Salt-okunur DI yolu -- yazmalar `app.domains.drafts.
+    draft_recorder`'ın kendi kendine yeten oturumu üzerinden gider
+    (nedeni için o modülün docstring'ine bakın).
     """
     return DraftRepository(db)
 
@@ -456,24 +464,23 @@ def get_draft_repository(db: AsyncSession = Depends(get_db)) -> DraftRepository:
 def get_draft_history_service(
     draft_repository: DraftRepository = Depends(get_draft_repository),
 ) -> DraftHistoryService:
-    """Provide the read-side drafts service backing `GET /drafts`.
+    """`GET /drafts`'ı destekleyen okuma-tarafı taslaklar servisini sağlar.
 
-    Named distinctly from `get_draft_service`/`DraftService` above (the
-    documents domain's drafting *generation* service) to avoid colliding
-    with it -- both legitimately are "the draft service" for their own
-    domain.
+    Yukarıdaki `get_draft_service`/`DraftService`'ten (documents alanının
+    taslak *üretim* servisi) farklı adlandırıldı, çakışmayı önlemek için --
+    ikisi de kendi alanları için meşru olarak "taslak servisi"dir.
     """
     return DraftHistoryService(draft_repository)
 
 # ---------------------------------------------------------------------------
-# Chat & Orchestration (Görev 3)
+# Sohbet & Orkestrasyon (Görev 3)
 # ---------------------------------------------------------------------------
 _rag_graph: Any = None
 _planning_graph: Any = None
 
 
 async def get_rag_graph() -> Any:
-    """Compile the RAG workflow once per process."""
+    """RAG iş akışını süreç başına bir kez derler."""
     global _rag_graph
     if _rag_graph is None:
         _rag_graph = create_rag_graph(
@@ -490,10 +497,10 @@ async def get_planning_graph(
     routing_graph: Any = Depends(get_routing_graph),
     mevzuat_retriever: Any = Depends(get_document_analysis_mevzuat_retriever),
 ) -> Any:
-    """Compile the master planning graph once per process.
+    """Ana planlama graph'ını süreç başına bir kez derler.
 
-    The only graph that gets a checkpointer -- see create_planning_graph's
-    docstring for why the sub-graphs deliberately do not.
+    Checkpointer alan tek graph budur -- alt-graph'ların neden kasıtlı
+    olarak almadığı için create_planning_graph'ın docstring'ine bakın.
     """
     global _planning_graph
     if _planning_graph is None:
@@ -523,13 +530,13 @@ async def get_planning_graph(
             profile_provider=get_company_profile,
             rules_provider=get_company_rules,
             units_provider=get_active_units_for_routing,
-            # Faz 4 (#201) -- always built and injected, gated where the
-            # propose_transfer tool is actually offered instead
-            # (settings.AI_TRANSFER_ENABLED; see planning_graph._run_assist).
-            # Same reason units_provider/adapter_provider are unconditional:
-            # an unused provider is inert, and gating construction here
-            # would just be a second place the flag has to be checked
-            # correctly.
+            # Faz 4 (#201) -- her zaman oluşturulur ve enjekte edilir; kapı
+            # (gate) bunun yerine propose_transfer aracının fiilen sunulduğu
+            # yerdedir (settings.AI_TRANSFER_ENABLED; bkz.
+            # planning_graph._run_assist). units_provider/adapter_provider'ın
+            # koşulsuz olmasıyla aynı sebep: kullanılmayan bir provider
+            # etkisizdir, ve inşayı burada kapılamak yalnızca bayrağın doğru
+            # kontrol edilmesi gereken ikinci bir yer olurdu.
             transfer_provider=build_transfer_graph_provider(),
             document_cache_provider=get_cached_document,
         )
@@ -539,5 +546,5 @@ async def get_planning_graph(
 def get_chat_service(
     planning_graph: Any = Depends(get_planning_graph),
 ) -> ChatService:
-    """Provide the ChatService."""
+    """ChatService'i sağlar."""
     return ChatService(planning_graph=planning_graph)

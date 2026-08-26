@@ -1,18 +1,18 @@
-"""A company's identity -- who the agent says it is, and whose letterhead a
-draft's own header/signature block resolves to when the writing brief leaves
-that slot unspecified.
+"""Bir şirketin kimliği -- ajanın kendini kim olarak tanıttığı ve yazım
+briefi o alanı boş bıraktığında bir taslağın kendi antet/imza bloğunun
+kime çözümleneceği.
 
-Deliberately a separate structure from ``app.ai.adapters.company_adapter.
-CompanyAdapter``, not a few more fields bolted onto it: ``CompanyAdapter``'s
-whole contract is "never a source of fact, only a style preference" (see its
-own docstring); a company's real name, its letterhead and its default
-signer title are facts, not style. Mixing the two would mean either
-weakening that contract or teaching every adapter consumer to split fields
-back apart by hand. Same "AI Core never imports ``app.domains``" rule as
-``company_adapter.py`` applies here -- the reader/writer lives in
-``app.domains.companies.provider`` instead and is injected into the
-assistant/draft/revise graphs as a plain async callable at construction
-time, the same ``adapter_provider``/``units_provider`` pattern.
+``app.ai.adapters.company_adapter.CompanyAdapter``'a birkaç alan daha eklemek
+yerine bilinçli olarak ayrı bir yapı: ``CompanyAdapter``'ın tüm sözleşmesi
+"asla bir gerçek kaynağı değil, yalnızca bir stil tercihi"dir (bkz. kendi
+docstring'i); bir şirketin gerçek adı, anteti ve varsayılan imzalayan unvanı
+stil değil, gerçektir. İkisini karıştırmak ya bu sözleşmeyi zayıflatmak ya da
+her adapter tüketicisine alanları elle geri ayırmayı öğretmek anlamına
+gelirdi. ``company_adapter.py``'deki aynı "AI Core asla ``app.domains``'i
+import etmez" kuralı burada da geçerli -- okuyucu/yazıcı bunun yerine
+``app.domains.companies.provider``'da yaşar ve construction zamanında
+assistant/draft/revise graph'larına düz bir async callable olarak enjekte
+edilir, aynı ``adapter_provider``/``units_provider`` deseni.
 """
 
 from dataclasses import dataclass
@@ -21,45 +21,45 @@ from typing import Any, Awaitable, Callable, Optional
 
 @dataclass(frozen=True)
 class CompanyProfile:
-    """One company's identity, as far as the AI layer needs to know it.
+    """Bir şirketin kimliği, AI katmanının bilmesi gerektiği kadarıyla.
 
     Attributes:
-        company_id: Which tenant this profile belongs to.
-        version: Bumped on every write (see ``app.domains.companies.
-            provider.set_company_profile``) -- same audit-trail purpose as
-            ``CompanyAdapter.version``.
-        display_name: The company's full legal/official name (e.g.
+        company_id: Bu profilin hangi kiracıya ait olduğu.
+        version: Her yazımda artırılır (bkz. ``app.domains.companies.
+            provider.set_company_profile``) -- ``CompanyAdapter.version``
+            ile aynı denetim izi amacı.
+        display_name: Şirketin tam yasal/resmî adı (örn.
             "Ankara Büyükşehir Belediyesi Fen İşleri Dairesi Başkanlığı").
-        short_name: A shorter form for casual reference, if different from
-            ``display_name``.
-        agent_name: What the assistant calls itself when introducing itself
-            (e.g. "Fen İşleri Karar Destek Asistanı"). Empty means the
-            system default identity applies (see ``format_agent_identity``).
-        letterhead: The multi-line "T.C. ..." institutional header a draft's
-            own header section should use when the writing brief doesn't
-            already supply a sender identity.
-        default_signer_title: The title (unvan) to fall back to in a
-            draft's signature block when neither the writing brief nor the
-            source document supplies one (e.g. "Daire Başkanı").
-        default_signer_name: The name (ad soyad) to fall back to in a
-            draft's signature block under the same conditions as
-            ``default_signer_title``. Deliberately never the incoming
-            document's own ``imza_sahibi`` -- that name belongs to the
-            *counterparty* (see ``app.ai.identity.parties.CounterParty``),
-            never to us. Kept separate from ``default_signer_title``
-            (not merged into one "default signer" string) because a company
-            may configure one without the other -- a fixed signer title
-            with a rotating named signer is common, and the reverse is
-            possible too.
-        aliases: Alternate ways this company's own name appears in a
-            document or a user's own message (abbreviations, a unit's own
-            short form, a legacy name) -- consulted the same way
-            ``display_name``/``short_name`` are when deciding whether a
-            name found in context refers to *us* (see
-            ``app.ai.identity.parties.resolve_party_context``). Never used
-            to render anything; purely a matching aid.
-        updated_at: ISO-8601 timestamp of the last write, or None if this
-            profile has never been set (see :meth:`empty`).
+        short_name: ``display_name``'den farklıysa, gündelik referans için
+            daha kısa bir biçim.
+        agent_name: Asistanın kendini tanıtırken kullandığı ad (örn.
+            "Fen İşleri Karar Destek Asistanı"). Boş ise sistem varsayılan
+            kimliği uygulanır (bkz. ``format_agent_identity``).
+        letterhead: Yazım briefi henüz bir gönderen kimliği sağlamamışsa
+            bir taslağın kendi başlık bölümünün kullanması gereken
+            çok satırlı "T.C. ..." kurumsal başlığı.
+        default_signer_title: Ne yazım briefi ne de kaynak belge bir unvan
+            sağlamadığında, bir taslağın imza bloğunda varsayılan olarak
+            kullanılacak unvan (örn. "Daire Başkanı").
+        default_signer_name: ``default_signer_title`` ile aynı koşullar
+            altında, bir taslağın imza bloğunda varsayılan olarak
+            kullanılacak ad (ad soyad). Bilinçli olarak asla gelen belgenin
+            kendi ``imza_sahibi``'si değildir -- o ad *karşı tarafa* aittir
+            (bkz. ``app.ai.identity.parties.CounterParty``), bize asla
+            değil. ``default_signer_title``'dan ayrı tutulur (tek bir
+            "varsayılan imzalayan" string'inde birleştirilmez), çünkü bir
+            şirket birini diğeri olmadan yapılandırabilir -- dönüşümlü
+            imzalayan adıyla sabit bir imza unvanı yaygındır, tersi de
+            mümkündür.
+        aliases: Bu şirketin kendi adının bir belgede veya kullanıcının
+            kendi mesajında görünme biçimleri (kısaltmalar, bir birimin
+            kendi kısa formu, eski bir ad) -- bağlamda bulunan bir adın
+            *bize* ait olup olmadığına karar verirken ``display_name``/
+            ``short_name`` ile aynı şekilde başvurulur (bkz.
+            ``app.ai.identity.parties.resolve_party_context``). Hiçbir şeyi
+            render etmek için kullanılmaz; yalnızca bir eşleştirme yardımcısıdır.
+        updated_at: Son yazımın ISO-8601 zaman damgası, veya bu profil hiç
+            ayarlanmamışsa None (bkz. :meth:`empty`).
     """
 
     company_id: str
@@ -75,8 +75,8 @@ class CompanyProfile:
 
     @property
     def is_empty(self) -> bool:
-        """True when there is nothing here worth overriding the system
-        default identity or a draft's default header/signature with."""
+        """Sistem varsayılan kimliğinin veya bir taslağın varsayılan
+        başlık/imzasının üzerine yazmaya değer hiçbir şey olmadığında True."""
         return not (
             self.display_name
             or self.short_name
@@ -89,21 +89,21 @@ class CompanyProfile:
 
     @classmethod
     def empty(cls, company_id: str) -> "CompanyProfile":
-        """The profile a company with nothing configured resolves to.
+        """Hiçbir şey yapılandırılmamış bir şirketin çözümlendiği profil.
 
-        Never ``None`` -- every caller can unconditionally check
-        ``.is_empty`` instead of also handling a missing profile as a
-        separate case, same convention as ``CompanyAdapter.empty``.
+        Asla ``None`` değildir -- her çağıran, eksik bir profili ayrı bir
+        durum olarak ele almak yerine koşulsuz olarak ``.is_empty``'yi
+        kontrol edebilir; ``CompanyAdapter.empty`` ile aynı kural.
         """
         return cls(company_id=company_id)
 
     def to_dict(self) -> dict[str, Any]:
-        """JSON-safe representation -- what actually gets written into
-        ``CompanyModel.settings`` and the Redis cache value.
+        """JSON güvenli temsil -- ``CompanyModel.settings``'e ve Redis önbellek
+        değerine fiilen yazılan şey.
 
-        ``company_id`` is deliberately excluded, same reasoning as
-        ``CompanyAdapter.to_dict``: the settings blob already lives inside
-        that company's own row.
+        ``company_id`` bilinçli olarak hariç tutulur, ``CompanyAdapter.to_dict``
+        ile aynı gerekçeyle: settings blob'u zaten o şirketin kendi satırının
+        içinde yaşar.
         """
         return {
             "version": self.version,
@@ -119,8 +119,8 @@ class CompanyProfile:
 
     @classmethod
     def from_dict(cls, company_id: str, value: Optional[dict[str, Any]]) -> "CompanyProfile":
-        """Reconstruct from a ``to_dict()``-shaped mapping (or ``None``,
-        for a company that has never had one set)."""
+        """``to_dict()`` şeklindeki bir mapping'den (veya hiç ayarlanmamış bir
+        şirket için ``None``'dan) yeniden inşa eder."""
         if not value:
             return cls.empty(company_id)
         return cls(
@@ -137,8 +137,8 @@ class CompanyProfile:
         )
 
 
-#: Async callable taking a ``company_id`` and returning that company's
-#: current profile (never raises, never returns None -- see
-#: ``CompanyProfile.empty``) -- injected into the planning/draft/revise
-#: graphs the same way ``AdapterProvider`` is.
+#: Bir ``company_id`` alan ve o şirketin güncel profilini döndüren async
+#: callable (asla hata fırlatmaz, asla None döndürmez -- bkz.
+#: ``CompanyProfile.empty``) -- ``AdapterProvider``'ın enjekte edildiği
+#: şekilde planning/draft/revise graph'larına enjekte edilir.
 ProfileProvider = Callable[[str], Awaitable[CompanyProfile]]

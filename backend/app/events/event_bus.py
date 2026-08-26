@@ -8,20 +8,20 @@ logger = logging.getLogger(__name__)
 EventListener = Callable[[Any], Union[None, Any]]
 
 class EventBus:
-    """SOTA asynchronous in-memory event bus for event-driven coordination."""
+    """Event-driven koordinasyon için bellek içi asenkron event bus."""
 
     def __init__(self):
         self._listeners: Dict[str, List[EventListener]] = {}
 
     def subscribe(self, event_type: str, listener: EventListener) -> None:
-        """Subscribe a listener callable to a specific event type."""
+        """Bir listener callable'ını belirli bir event türüne abone eder."""
         if event_type not in self._listeners:
             self._listeners[event_type] = []
         self._listeners[event_type].append(listener)
         logger.debug(f"Subscribed listener to event: {event_type}")
 
     def unsubscribe(self, event_type: str, listener: EventListener) -> None:
-        """Unsubscribe a listener callable from an event type."""
+        """Bir listener callable'ının bir event türüne aboneliğini kaldırır."""
         if event_type in self._listeners:
             try:
                 self._listeners[event_type].remove(listener)
@@ -30,7 +30,7 @@ class EventBus:
                 pass
 
     async def publish(self, event: BaseEvent) -> None:
-        """Publish an event to all subscribed listeners asynchronously."""
+        """Bir event'i abone olan tüm listener'lara asenkron olarak yayınlar."""
         event_type = event.event_type
         listeners = self._listeners.get(event_type, [])
         
@@ -62,5 +62,5 @@ class EventBus:
         except Exception as e:
             logger.error(f"Error in sync event listener for event {event.event_type}: {e}", exc_info=True)
 
-# Global singleton event bus instance
+# Global tekil (singleton) event bus örneği
 event_bus = EventBus()

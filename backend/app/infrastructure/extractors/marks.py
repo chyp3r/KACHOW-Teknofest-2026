@@ -1,28 +1,29 @@
-"""Best-effort detection of signatures, stamps, and handwritten annotations.
+"""İmzaların, mühürlerin ve el yazısı notların en iyi çaba tespiti.
 
-Pure `numpy` + `Pillow` -- both already present in the running image (no
-`scipy`, `cv2`, `onnxruntime`, or `torch`; see the design notes this module
-was built from). Works directly on the bilevel-ish ink mask of an already-
-rasterised page: connected-component analysis over a coarse density grid,
-then a small set of shape heuristics (stroke-width variance, baseline
-irregularity, aspect ratio, ink density) separate signature/stamp/
-handwriting-shaped ink from printed text.
+Saf `numpy` + `Pillow` -- her ikisi de zaten çalışan imajda mevcut (`scipy`,
+`cv2`, `onnxruntime`, veya `torch` yok; bu modülün üzerine inşa edildiği
+tasarım notlarına bakın). Doğrudan zaten rasterize edilmiş bir sayfanın
+ikili-benzeri mürekkep maskesi üzerinde çalışır: kaba bir yoğunluk ızgarası
+üzerinde bağlı bileşen analizi, ardından küçük bir şekil sezgisi seti
+(vuruş genişliği varyansı, taban çizgisi düzensizliği, en-boy oranı, mürekkep
+yoğunluğu) imza/mühür/el yazısı şeklindeki mürekkebi basılı metinden ayırır.
 
-This is a review hint, not a forensic determination, and the module is
-explicit about that limit throughout: there is no hand-labelled signature or
-stamp dataset for this project's document corpus, so nothing here has a
-measured precision or recall -- only detection *counts* against real scans
-(see `scripts/evaluate_marks.py`). `check_required_fields` treats a detected
-signature as evidence a document is signed; a missed one is a false "eksik
-bilgi", not a legal determination that the document is actually unsigned, so
-callers must keep presenting this as something for a person to confirm.
+Bu bir inceleme ipucudur, adli bir belirleme değildir, ve modül boyunca bu
+sınırlama konusunda açıktır: bu proje belge korpusu için elle etiketlenmiş
+bir imza veya mühür veri kümesi yoktur, bu yüzden burada hiçbir şeyin
+ölçülmüş bir kesinlik ya da geri çağırma değeri yoktur -- yalnızca gerçek
+taramalara karşı tespit *sayıları* vardır (bkz. `scripts/evaluate_marks.py`).
+`check_required_fields`, tespit edilen bir imzayı bir belgenin imzalı
+olduğuna dair kanıt olarak ele alır; kaçırılan bir tanesi yasal bir
+belirleme değil, yanlış bir "eksik bilgi"dir, bu yüzden çağıranlar bunu bir
+kişinin doğrulaması gereken bir şey olarak sunmaya devam etmelidir.
 
-Deliberately not a per-pixel connected-component labeller (no
-`scipy.ndimage.label`): the page is gridded into `_GRID_CELL_PX`-sized cells
-first, ink density is computed per cell (fully vectorised), and only the
-resulting few-thousand-cell grid is flood-filled in plain Python -- fast
-enough without the dependency, at the cost of losing sub-cell precision,
-which this heuristic does not need.
+Bilinçli olarak piksel başına bağlı bileşen etiketleyicisi değildir
+(`scipy.ndimage.label` yok): sayfa önce `_GRID_CELL_PX` boyutlu hücrelere
+bölünür, mürekkep yoğunluğu hücre başına hesaplanır (tamamen vektörize),
+ve yalnızca ortaya çıkan birkaç bin hücrelik ızgara düz Python'da flood-fill
+yapılır -- bağımlılık olmadan yeterince hızlı, alt-hücre kesinliğini
+kaybetme pahasına, ki bu sezgi buna ihtiyaç duymaz.
 """
 
 import logging
@@ -32,7 +33,7 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
-try:  # pragma: no cover - exercised via patching in tests
+try:  # pragma: no cover - testlerde patch ile çalıştırılır
     import numpy as np
 except ImportError:  # pragma: no cover
     np = None
@@ -44,8 +45,8 @@ except ImportError:  # pragma: no cover
 
 
 class DetectedMark(BaseModel):
-    """One ink region flagged as possibly a signature, stamp, or handwritten
-    annotation. A heuristic review hint -- see the module docstring."""
+    """Muhtemelen bir imza, mühür veya el yazısı not olarak işaretlenen bir
+    mürekkep bölgesi. Bir sezgisel inceleme ipucu -- bkz. modül docstring'i."""
 
     kind: str = Field(description="'signature', 'stamp' veya 'handwriting'.")
     page: int = Field(description="1 tabanlı sayfa numarası.")
@@ -60,133 +61,146 @@ class DetectedMark(BaseModel):
     )
 
 
-#: Grid cell edge length in pixels for the coarse density scan. Small enough
-#: to resolve stroke-scale ink at OCR_RENDER_DPI (300), large enough that
-#: flood-filling the grid (plain Python, not vectorised) stays fast -- a full
-#: 2496x3508 page (this project's typical scanned-page resolution) grids down
-#: to roughly 125x175 cells, not 8.7 million pixels.
+#: Kaba yoğunluk taraması için ızgara hücresi kenar uzunluğu, piksel
+#: cinsinden. OCR_RENDER_DPI'de (300) vuruş ölçeğinde mürekkebi çözebilecek
+#: kadar küçük, ızgarayı flood-fill yapmayı (vektörize değil, düz Python)
+#: hızlı tutacak kadar büyük -- tam bir 2496x3508 sayfa (bu projenin tipik
+#: taranmış sayfa çözünürlüğü), 8.7 milyon piksel değil, kabaca 125x175
+#: hücreye ızgaralanır.
 _GRID_CELL_PX = 20
-#: A cell counts as "inked" above this fraction of black pixels.
+#: Bir hücre bu siyah piksel oranının üzerinde "mürekkepli" sayılır.
 _CELL_INK_THRESHOLD = 0.08
-#: Fixed grayscale threshold separating ink from paper. Not Otsu or any
-#: adaptive method -- the corpus this was built for (datasets/resmi_yazisma/
-#: 00_gelen_kaynaklar/cevap_yazisi/) is already near-bilevel CCITT-G4 scans,
-#: so a fixed threshold is enough and one fewer thing to get wrong.
+#: Mürekkebi kağıttan ayıran sabit gri tonlama eşiği. Otsu ya da başka bir
+#: adaptif yöntem değil -- bunun için inşa edildiği korpus
+#: (datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/) zaten neredeyse
+#: ikili CCITT-G4 taramalarıdır, bu yüzden sabit bir eşik yeterlidir ve
+#: yanlış yapılacak bir şey daha azdır.
 _INK_GRAY_THRESHOLD = 128
-#: A component spanning more than this fraction of the page width is a text
-#: line or letterhead run, not a mark -- without this filter every paragraph
-#: of body text would be flagged.
+#: Sayfa genişliğinin bu oranından daha fazla yayılan bir bileşen bir işaret
+#: değil, bir metin satırı veya antettir -- bu filtre olmadan her gövde
+#: metni paragrafı işaretlenirdi.
 _MAX_MARK_WIDTH_FRACTION = 0.5
-#: Minimum component size, in grid cells, to consider at all. Filters out
-#: isolated printed characters, punctuation, and scan speckle.
+#: Hiç dikkate alınması için ızgara hücresi cinsinden minimum bileşen
+#: boyutu. Yalıtılmış basılı karakterleri, noktalama işaretlerini ve
+#: tarama gürültüsünü filtreler.
 _MIN_COMPONENT_CELLS = 6
-#: A component this compact (close to square), this dense, and made of many
-#: short ink runs (see `_STAMP_MIN_RUN_DENSITY` just below) is treated as a
-#: stamp candidate rather than run through the stroke/baseline checks below --
-#: an official seal or letterhead crest is fine detailed artwork (a ring of
-#: text, a coat of arms), not a line of pen strokes. Measured against the
-#: real scanned corpus this module targets (see `scripts/evaluate_marks.py`):
-#: a real Turkish resmi mühür is roughly 3.5-4cm (about 1.4-1.6in) across, so
-#: `_STAMP_MIN_DIMENSION_PX` is set well under that (still errs toward
-#: over-detection rather than missing a smaller or partially-scanned seal),
-#: not at it.
+#: Bu kadar kompakt (kareye yakın), bu kadar yoğun, ve birçok kısa mürekkep
+#: koşusundan oluşan (hemen aşağıdaki `_STAMP_MIN_RUN_DENSITY`'ye bakın) bir
+#: bileşen, aşağıdaki vuruş/taban çizgisi kontrollerinden geçirilmek yerine
+#: bir mühür adayı olarak ele alınır -- resmi bir mühür veya antetli kaşe
+#: incelikli bir sanat eseridir (metin halkası, arma), bir kalem vuruşu
+#: satırı değil. Bu modülün hedeflediği gerçek taranmış korpusa karşı
+#: ölçüldüğünde (bkz. `scripts/evaluate_marks.py`): gerçek bir Türkçe resmi
+#: mühür yaklaşık 3.5-4cm (yaklaşık 1.4-1.6in) çapındadır, bu yüzden
+#: `_STAMP_MIN_DIMENSION_PX` bunun oldukça altında ayarlanmıştır (yine de
+#: daha küçük veya kısmen taranmış bir mührü kaçırmaktansa aşırı tespit
+#: yönünde hata yapar), tam onda değil.
 _STAMP_ASPECT_RATIO_RANGE = (0.55, 1.8)
 _STAMP_MIN_INK_DENSITY = 0.12
-#: In pixels, assuming OCR_RENDER_DPI (300) -- every page this module
-#: receives is rendered at that density (see BaseDocumentExtractor.extract's
-#: raster_cache, keyed by DPI, that TesseractExtractor/OllamaVisionExtractor
-#: both populate at exactly that value).
+#: OCR_RENDER_DPI (300) varsayılarak piksel cinsinden -- bu modülün aldığı
+#: her sayfa tam olarak o yoğunlukta render edilir (bkz.
+#: BaseDocumentExtractor.extract'ın DPI'ya göre anahtarlanan raster_cache'i,
+#: TesseractExtractor/OllamaVisionExtractor'ın ikisinin de tam olarak o
+#: değerde doldurduğu).
 _STAMP_MIN_DIMENSION_PX = 150
-#: Minimum mean count of separate horizontal ink runs per 100px of region
-#: width (see `_stroke_run_density`) for a stamp-shaped candidate to actually
-#: be classified as one. Added after ground-truth labelling (15 real
-#: documents, see datasets/resmi_yazisma/ocr_ground_truth.json) found this
-#: module reporting 0% signature recall: a real cursive signature can be
-#: roughly square and dense enough to satisfy the shape/size checks above on
-#: its own (CY-012's actual wet signature over "Yaşar GÜLER" measured
-#: aspect ratio 1.69, density 0.121, size 320x540px -- comfortably inside
-#: every threshold above), so without this gate the stamp branch intercepted
-#: real signatures before the stroke/baseline checks below ever ran. Measured
-#: on the real corpus, run density cleanly separates the two populations: a
-#: letterhead crest's fine detailed artwork runs 2.18-9.28 (mean ~2.2 for the
-#: T.C./ministry emblem in this corpus's own letterhead), while every
-#: confirmed real signature that happened to also pass the stamp shape check
-#: measured 1.26-1.30 -- a wide gap, not a narrow one, so this is not a
-#: fragile cutoff.
+#: Bir mühür şeklindeki adayın gerçekten öyle sınıflandırılması için
+#: bölgenin 100px genişliği başına ortalama ayrı yatay mürekkep koşusu
+#: sayısı (bkz. `_stroke_run_density`). Ground-truth etiketlemesinden sonra
+#: eklendi (15 gerçek belge, bkz.
+#: datasets/resmi_yazisma/ocr_ground_truth.json), bu modülün %0 imza geri
+#: çağırma bildirmesini buldu: gerçek bir el yazısı imza, kabaca kare ve
+#: yukarıdaki şekil/boyut kontrollerini tek başına karşılayacak kadar yoğun
+#: olabilir (CY-012'nin gerçek ıslak imzası "Yaşar GÜLER" üzerinde en-boy
+#: oranı 1.69, yoğunluk 0.121, boyut 320x540px ölçtü -- yukarıdaki her
+#: eşiğin rahatça içinde), bu yüzden bu kapı olmadan mühür dalı, aşağıdaki
+#: vuruş/taban çizgisi kontrolleri hiç çalışmadan gerçek imzaları
+#: yakalıyordu. Gerçek korpus üzerinde ölçüldüğünde, koşu yoğunluğu iki
+#: popülasyonu net biçimde ayırır: bir antetli kaşenin incelikli sanat
+#: eseri 2.18-9.28 arasında koşar (bu korpusun kendi antetindeki
+#: T.C./bakanlık amblemi için ortalama ~2.2), mühür şekil kontrolünü de
+#: geçen her onaylanmış gerçek imza ise 1.26-1.30 ölçtü -- dar değil geniş
+#: bir boşluk, bu yüzden bu kırılgan bir eşik değildir.
 _STAMP_MIN_RUN_DENSITY = 2.0
-#: Coefficient of variation of stroke width above which ink reads as
-#: handwritten (irregular pen pressure/angle) rather than printed (uniform
-#: glyph stroke width). On its own this does not separate a short printed
-#: phrase from a handwritten mark -- see _MAX_STROKE_RUN_DENSITY, which does.
+#: Bunun üzerinde mürekkebin basılıdan (tek biçim glif vuruş genişliği)
+#: ziyade el yazısı (düzensiz kalem basıncı/açısı) olarak okunduğu vuruş
+#: genişliği varyasyon katsayısı. Tek başına bu, kısa basılı bir ifadeyi
+#: el yazısı bir işaretten ayırmaz -- bunu yapan _MAX_STROKE_RUN_DENSITY'ye
+#: bakın.
 _HANDWRITING_MIN_STROKE_CV = 0.5
-#: Normalised standard deviation of the per-column top-of-ink position above
-#: which a region reads as sitting off a shared baseline -- cursive or
-#: otherwise irregular, as opposed to printed text's aligned baseline. Same
-#: caveat as _HANDWRITING_MIN_STROKE_CV above.
+#: Üzerinde bir bölgenin paylaşılan bir taban çizgisi dışında oturduğu
+#: okunduğu -- basılı metnin hizalı taban çizgisinin aksine el yazısı veya
+#: başka türlü düzensiz -- sütun başına mürekkep-üstü konumunun normalize
+#: edilmiş standart sapması. Yukarıdaki _HANDWRITING_MIN_STROKE_CV ile aynı
+#: uyarı.
 #:
-#: Lowered from 0.15 after the same ground-truth labelling found this
-#: threshold itself blocking real signatures even once the stamp-interception
-#: bug above was fixed: CY-012/CY-009/CY-006's confirmed or highly-probable
-#: signatures measured baseline_std 0.119-0.139, all below the original 0.15
-#: floor -- a signature's pen strokes still start from a comparatively
-#: consistent height (it is a name written along a rough line, unlike a
-#: scattered margin annotation), so the general "handwriting" threshold
-#: calibrated for annotations was too strict specifically for signatures.
-#: Re-verified against the full 45-document corpus after lowering (see
-#: scripts/evaluate_marks.py) that this does not reopen the original 24-on-
-#: one-page over-triggering problem _MAX_STROKE_RUN_DENSITY was added to fix.
+#: Mühür-müdahale hatası yukarıda düzeltildikten sonra bile bu eşiğin
+#: gerçek imzaları engellediğini bulan aynı ground-truth etiketlemesinden
+#: sonra 0.15'ten düşürüldü: CY-012/CY-009/CY-006'nın onaylanmış veya
+#: yüksek olasılıklı imzaları, orijinal 0.15 tabanının altında,
+#: baseline_std 0.119-0.139 ölçtü -- bir imzanın kalem vuruşları hâlâ
+#: nispeten tutarlı bir yükseklikten başlar (kabaca bir çizgi boyunca
+#: yazılmış bir isimdir, dağınık bir kenar notu gibi değil), bu yüzden
+#: notlar için kalibre edilen genel "el yazısı" eşiği özellikle imzalar
+#: için çok katıydı. Düşürüldükten sonra tam 45 belgelik korpusa karşı
+#: yeniden doğrulandı (bkz. scripts/evaluate_marks.py) ki bu,
+#: _MAX_STROKE_RUN_DENSITY'nin düzeltmek için eklendiği orijinal
+#: bir-sayfada-24 aşırı tetikleme sorununu yeniden açmıyor.
 _HANDWRITING_MIN_BASELINE_STD = 0.10
-#: Maximum mean count of separate horizontal ink runs per 100px of region
-#: width. This is the feature that actually separates a short printed phrase
-#: from a handwritten mark -- stroke-width variance and baseline
-#: irregularity alone cross their thresholds at word scale too (an ordinary
-#: printed word's mix of ascenders/descenders and varying letter widths is
-#: enough). Printed text, even a single word, is several distinct glyphs
-#: with a gap between each -- many short runs per row. A signature or
-#: handwritten mark is typically one or a few continuous connected strokes --
-#: far fewer, longer runs relative to its width. Verified against the real
-#: scanned corpus this module targets (datasets/resmi_yazisma/
-#: 00_gelen_kaynaklar/cevap_yazisi/): every genuinely-printed text fragment
-#: on a sample page scored >=1.26, a hand-built cursive test shape scored 1.0.
+#: Bölgenin 100px genişliği başına maksimum ortalama ayrı yatay mürekkep
+#: koşusu sayısı. Bu, kısa basılı bir ifadeyi el yazısı bir işaretten
+#: gerçekten ayıran özelliktir -- vuruş genişliği varyansı ve taban çizgisi
+#: düzensizliği tek başına kelime ölçeğinde de eşiklerini geçer (sıradan
+#: basılı bir kelimenin çıkıntı/inen harf karışımı ve değişen harf
+#: genişlikleri yeterlidir). Basılı metin, tek bir kelime bile olsa, her
+#: biri arasında boşluk olan birkaç ayrı glifden oluşur -- satır başına
+#: birçok kısa koşu. Bir imza veya el yazısı işaret tipik olarak bir veya
+#: birkaç sürekli bağlı vuruştur -- genişliğine göre çok daha az, daha
+#: uzun koşu. Bu modülün hedeflediği gerçek taranmış korpusa karşı
+#: doğrulandı (datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/):
+#: bir örnek sayfadaki gerçekten basılı her metin parçası >=1.26 skorladı,
+#: elle inşa edilmiş bir el yazısı test şekli 1.0 skorladı.
 _MAX_STROKE_RUN_DENSITY = 1.5
-#: A signature-shaped region at or below this fraction of page height is
-#: classified as a signature (where RYUEHY m.17 places one); the same shape
-#: above it is reported as a handwritten annotation instead. The only
-#: positional signal used, and a coarse one -- both are the same underlying
-#: ink-shape class.
+#: Sayfa yüksekliğinin bu oranında veya altında imza şeklindeki bir bölge
+#: bir imza olarak sınıflandırılır (RYUEHY m.17'nin bir tane koyduğu yer);
+#: onun üzerindeki aynı şekil bunun yerine el yazısı bir not olarak
+#: bildirilir. Kullanılan tek konumsal sinyal, ve kaba bir tanesi -- ikisi
+#: de aynı temel mürekkep-şekil sınıfıdır.
 #:
-#: Originally 2/3 ("bottom third"), which excluded every real signature this
-#: module was tested against: this corpus's letters are short-bodied replies
-#: on an otherwise-blank A4 page, so the signature sits wherever the body
-#: text happens to end -- measured 0.38-0.65 across 12 confirmed real
-#: signatures on this corpus (see datasets/resmi_yazisma/
-#: ocr_ground_truth.json), not literally the bottom third of the page.
-#: Lowered to 0.35 (comfortably below the lowest confirmed case, 0.38) after
-#: specifically checking documents in that positional band that were outside
-#: the original labelled sample: every one of them (CY-006/023/028/034) also
-#: turned out to be a genuine signature on a template already confirmed
-#: elsewhere in the corpus, not a coincidental false positive -- i.e. this
-#: is corpus evidence broadened to check for overfitting, not a threshold
-#: picked from the original sample alone.
+#: Başlangıçta 2/3 idi ("alt üçte bir"), bu modülün test edildiği her
+#: gerçek imzayı dışlıyordu: bu korpusun mektupları, aksi halde boş bir
+#: A4 sayfada kısa gövdeli yanıtlardır, bu yüzden imza gövde metninin
+#: bittiği yere düşer -- bu korpustaki 12 onaylanmış gerçek imza üzerinde
+#: 0.38-0.65 ölçüldü (bkz.
+#: datasets/resmi_yazisma/ocr_ground_truth.json), sayfanın kelimenin tam
+#: anlamıyla alt üçte biri değil. En düşük onaylanmış vakanın (0.38)
+#: rahatça altında olan 0.35'e düşürüldü, orijinal etiketli örneğin
+#: dışında o konumsal banttaki belgeleri özellikle kontrol ettikten sonra:
+#: onlardan her biri (CY-006/023/028/034) de korpusun başka bir yerinde
+#: zaten onaylanmış bir şablon üzerinde gerçek bir imza olduğu ortaya
+#: çıktı, rastlantısal bir yanlış pozitif değil -- yani bu, orijinal
+#: örneklemden seçilmiş bir eşik değil, aşırı uyumu kontrol etmek için
+#: genişletilmiş korpus kanıtıdır.
 _SIGNATURE_ZONE_START_FRACTION = 0.35
 
 
 def detect_marks(image, page: int) -> list[DetectedMark]:
-    """Best-effort: find signature-, stamp-, and handwriting-shaped ink
-    regions on one rasterised page.
+    """En iyi çaba: rasterize edilmiş bir sayfada imza-, mühür- ve el yazısı
+    şeklindeki mürekkep bölgelerini bul.
 
-    Never raises -- a detector bug must never fail a document upload. Missing
-    `numpy`/`Pillow` (guarded imports, matching every other extractor in this
-    package) degrades to reporting nothing, the same as any other failure.
+    Asla exception fırlatmaz -- bir dedektör hatası bir belge yüklemesini
+    asla başarısız kılmamalıdır. Eksik `numpy`/`Pillow` (bu pakette diğer
+    her çıkarıcıyla eşleşen korumalı import'lar), diğer herhangi bir
+    başarısızlıkla aynı biçimde hiçbir şey bildirmeye düşer.
 
     Args:
-        image: A rasterised PIL page image, e.g. from the OCR chain's
-            `raster_cache` (see `BaseDocumentExtractor.extract`).
-        page: 1-based page number, recorded on every returned mark.
+        image: Örneğin OCR zincirinin `raster_cache`'inden gelen rasterize
+            edilmiş bir PIL sayfa görüntüsü (bkz.
+            `BaseDocumentExtractor.extract`).
+        page: Döndürülen her işarete kaydedilen 1 tabanlı sayfa numarası.
 
     Returns:
-        Detected marks, or an empty list on any failure or when nothing
-        crosses the size/shape thresholds above.
+        Tespit edilen işaretler, ya da herhangi bir başarısızlıkta veya
+        yukarıdaki boyut/şekil eşiklerinden hiçbiri geçilmediğinde boş liste.
     """
     if np is None or _PILImage is None:
         return []
@@ -198,8 +212,8 @@ def detect_marks(image, page: int) -> list[DetectedMark]:
 
 
 def _detect_marks(image, page: int) -> list[DetectedMark]:
-    """The real implementation, unguarded -- see `detect_marks` for the
-    try/except boundary every caller actually gets."""
+    """Korumasız gerçek implementasyon -- her çağıranın gerçekte aldığı
+    try/except sınırı için `detect_marks`'a bakın."""
     gray = np.asarray(image.convert("L"))
     height, width = gray.shape
     if height < _GRID_CELL_PX or width < _GRID_CELL_PX:
@@ -245,38 +259,39 @@ def _detect_marks(image, page: int) -> list[DetectedMark]:
 
 
 def _grid_ink_density(ink, cell_px: int):
-    """Ink fraction per `cell_px` x `cell_px` grid cell, fully vectorised.
+    """Tamamen vektörize edilmiş, `cell_px` x `cell_px` ızgara hücresi
+    başına mürekkep oranı.
 
     Args:
-        ink: Bilevel ink mask (True = ink), full page resolution.
-        cell_px: Grid cell edge length in pixels.
+        ink: Tam sayfa çözünürlüğünde ikili mürekkep maskesi (True = mürekkep).
+        cell_px: Izgara hücresi kenar uzunluğu, piksel cinsinden.
 
     Returns:
-        2D array of per-cell ink density, shape
-        `(height // cell_px, width // cell_px)`.
+        `(height // cell_px, width // cell_px)` şeklinde hücre başına
+        mürekkep yoğunluğunun 2D dizisi.
     """
     height, width = ink.shape
     rows, cols = height // cell_px, width // cell_px
-    # Trim to a whole number of cells -- a partial trailing row/column of a
-    # few pixels is not worth padding for.
+    # Tam sayıda hücreye kırp -- birkaç pikseli kalan kısmi bir art satır/
+    # sütun dolgulamaya değmez.
     trimmed = ink[: rows * cell_px, : cols * cell_px]
     return trimmed.reshape(rows, cell_px, cols, cell_px).mean(axis=(1, 3))
 
 
 def _connected_components(grid) -> list[list[tuple[int, int]]]:
-    """4-connected components of `True` cells in a boolean grid.
+    """Boolean bir ızgarada `True` hücrelerin 4-bağlantılı bileşenleri.
 
-    Plain flood fill, not `scipy.ndimage.label` -- correct at the grid's
-    scale (tens of thousands of cells, not the millions of pixels a page
-    has), which is exactly why detection grids the page first. See the
-    module docstring.
+    `scipy.ndimage.label` değil, düz flood fill -- ızgaranın ölçeğinde
+    doğru (bir sayfanın sahip olduğu milyonlarca piksel değil, on binlerce
+    hücre), ki bu tam olarak tespitin sayfayı önce ızgaraladığı nedendir.
+    Modül docstring'ine bakın.
 
     Args:
-        grid: Boolean 2D array.
+        grid: Boolean 2D dizi.
 
     Returns:
-        One list of `(row, col)` cell coordinates per component, in
-        discovery order.
+        Bileşen başına, bulunma sırasına göre bir `(row, col)` hücre
+        koordinatları listesi.
     """
     visited = np.zeros_like(grid, dtype=bool)
     rows, cols = grid.shape
@@ -307,42 +322,45 @@ def _connected_components(grid) -> list[list[tuple[int, int]]]:
 
 
 def _classify(region, y_center_fraction: float) -> tuple[Optional[str], float]:
-    """Heuristically classify one ink region. Deliberately coarse -- see the
-    module docstring for why there is no accuracy claim attached to this.
+    """Bir mürekkep bölgesini sezgisel olarak sınıflandır. Bilinçli olarak
+    kaba -- buna neden bir doğruluk iddiası eklenmediği için modül
+    docstring'ine bakın.
 
-    Ordered checks, first match wins:
-      1. Roughly square/circular, reasonably dense, at least
-         `_STAMP_MIN_DIMENSION_PX` across, AND made of many short ink runs
-         (`_STAMP_MIN_RUN_DENSITY`) -> `stamp` (an official seal or
-         letterhead crest is fine detailed artwork, not a few pen strokes).
-         The run-density gate matters here specifically -- without it, a
-         real signature that happens to be roughly square and dense enough
-         (a genuine, measured failure mode: see `_STAMP_MIN_RUN_DENSITY`'s
-         own comment) passes the same shape test a genuine seal does and is
-         intercepted before check 2 ever runs. The size floor still matters
-         too: without it a small dense square -- a printed character, a
-         logo fragment -- would otherwise pass the same shape test.
-      2. Irregular stroke width AND baseline AND low run density (few,
-         continuous strokes rather than many discrete glyphs -- see
-         `_MAX_STROKE_RUN_DENSITY`; the first two alone are not enough, see
-         its docstring) at or below `_SIGNATURE_ZONE_START_FRACTION` of page
-         height -> `signature` (where RYUEHY m.17 places one -- see that
-         constant's own comment for why this is not literally "the bottom
-         third" on this corpus's short-bodied letters).
-      3. The same shape elsewhere on the page -> `handwriting` (an
-         annotation, a handwritten reference number, a margin note).
-      4. Anything else -> not a mark at all; this is what a printed word or
-         short text fragment small enough to form its own component looks
-         like.
+    Sıralı kontroller, ilk eşleşme kazanır:
+      1. Kabaca kare/dairesel, makul yoğunlukta, en az
+         `_STAMP_MIN_DIMENSION_PX` genişliğinde, VE birçok kısa mürekkep
+         koşusundan oluşan (`_STAMP_MIN_RUN_DENSITY`) -> `stamp` (resmi
+         bir mühür veya antetli kaşe incelikli sanat eseridir, birkaç
+         kalem vuruşu değil). Koşu yoğunluğu kapısı burada özellikle
+         önemlidir -- bu olmadan, kabaca kare ve yeterince yoğun olan
+         gerçek bir imza (gerçek, ölçülmüş bir başarısızlık modu: bkz.
+         `_STAMP_MIN_RUN_DENSITY`'nin kendi yorumu) gerçek bir mührün
+         geçtiği aynı şekil testini geçer ve 2. kontrol hiç çalışmadan
+         önce yakalanır. Boyut tabanı da hâlâ önemlidir: bu olmadan küçük
+         yoğun bir kare -- basılı bir karakter, bir logo parçası -- aynı
+         şekil testini geçerdi.
+      2. Düzensiz vuruş genişliği VE taban çizgisi VE düşük koşu
+         yoğunluğu (birçok ayrı glif yerine az sayıda sürekli vuruş --
+         bkz. `_MAX_STROKE_RUN_DENSITY`; ilk ikisi tek başına yeterli
+         değildir, kendi docstring'ine bakın), `_SIGNATURE_ZONE_START_FRACTION`
+         sayfa yüksekliğinde veya altında -> `signature` (RYUEHY m.17'nin
+         bir tane koyduğu yer -- bu korpusun kısa gövdeli mektuplarında
+         bunun neden tam anlamıyla "alt üçte bir" olmadığı için bu
+         sabitin kendi yorumuna bakın).
+      3. Sayfanın başka bir yerindeki aynı şekil -> `handwriting` (bir
+         not, elle yazılmış bir referans numarası, bir kenar notu).
+      4. Başka her şey -> hiç işaret değil; bu, kendi bileşenini
+         oluşturacak kadar küçük basılı bir kelime veya kısa metin
+         parçasının nasıl göründüğüdür.
 
     Args:
-        region: The ink mask cropped to one component's bounding box.
-        y_center_fraction: The component's vertical centre as a fraction of
-            page height (0.0 top, 1.0 bottom) -- the only positional signal
-            used, and only to separate `signature` from `handwriting`.
+        region: Bir bileşenin sınırlayıcı kutusuna kırpılmış mürekkep maskesi.
+        y_center_fraction: Bileşenin dikey merkezinin sayfa yüksekliğinin
+            bir oranı olarak (0.0 üst, 1.0 alt) -- kullanılan tek konumsal
+            sinyal, ve yalnızca `signature`'ı `handwriting`'den ayırmak için.
 
     Returns:
-        `(kind, confidence)`, or `(None, 0.0)` when nothing qualifies.
+        `(kind, confidence)`, ya da hiçbir şey uygun değilse `(None, 0.0)`.
     """
     height, width = region.shape
     if height == 0 or width == 0:
@@ -377,18 +395,19 @@ def _classify(region, y_center_fraction: float) -> tuple[Optional[str], float]:
 
 
 def _horizontal_runs(region) -> list[list[int]]:
-    """Lengths of consecutive-ink runs in each non-empty row.
+    """Her boş olmayan satırdaki ardışık mürekkep koşularının uzunlukları.
 
-    Shared scan behind both `_stroke_width_cv` (flattens every run's length)
-    and `_stroke_run_density` (counts runs per row) -- two different
-    questions over the same underlying structure, not two separate scans.
+    Hem `_stroke_width_cv` (her koşunun uzunluğunu düzleştirir) hem de
+    `_stroke_run_density` (satır başına koşu sayar) tarafından paylaşılan
+    tarama -- aynı temel yapı üzerinde iki ayrı soru, iki ayrı tarama değil.
 
     Args:
-        region: Bilevel ink mask, already cropped to one component.
+        region: Zaten tek bir bileşene kırpılmış ikili mürekkep maskesi.
 
     Returns:
-        One list of run lengths per row that carries any ink; rows with no
-        ink at all are omitted, not represented as an empty list.
+        Herhangi bir mürekkep taşıyan satır başına bir koşu uzunlukları
+        listesi; hiç mürekkebi olmayan satırlar boş bir liste olarak değil,
+        tamamen atlanır.
     """
     rows_of_runs: list[list[int]] = []
     for row in region:
@@ -408,20 +427,20 @@ def _horizontal_runs(region) -> list[list[int]]:
 
 
 def _stroke_width_cv(region) -> float:
-    """Coefficient of variation of horizontal ink run lengths.
+    """Yatay mürekkep koşu uzunluklarının varyasyon katsayısı.
 
-    Printed glyphs at a given font size have a fairly consistent stroke
-    width; handwritten ink varies with pen pressure and angle. Scale-free
-    (std over mean), so it does not need to know the page's DPI. On its own
-    this does not separate a short printed phrase from a handwritten mark --
-    see `_stroke_run_density`, which does; both are required together in
-    `_classify`.
+    Belirli bir yazı tipi boyutundaki basılı glifler oldukça tutarlı bir
+    vuruş genişliğine sahiptir; el yazısı mürekkep kalem basıncı ve açısıyla
+    değişir. Ölçekten bağımsızdır (ortalama üzerinden standart sapma), bu
+    yüzden sayfanın DPI'sini bilmesine gerek yoktur. Tek başına bu, kısa
+    basılı bir ifadeyi el yazısı bir işaretten ayırmaz -- bunu yapan
+    `_stroke_run_density`'ye bakın; `_classify`'da ikisi birlikte gereklidir.
 
     Args:
-        region: Bilevel ink mask, already cropped to one component.
+        region: Zaten tek bir bileşene kırpılmış ikili mürekkep maskesi.
 
     Returns:
-        0.0 when there are fewer than two runs to compare (nothing to vary).
+        Karşılaştırılacak ikiden az koşu varsa (değişecek bir şey yoksa) 0.0.
     """
     run_lengths = [length for runs in _horizontal_runs(region) for length in runs]
     if len(run_lengths) < 2:
@@ -432,18 +451,18 @@ def _stroke_width_cv(region) -> float:
 
 
 def _stroke_run_density(region) -> float:
-    """Mean count of separate horizontal ink runs per 100px of region width.
+    """Bölge genişliğinin 100px'i başına ortalama ayrı yatay mürekkep koşusu sayısı.
 
-    See `_MAX_STROKE_RUN_DENSITY` for the full rationale: this is the
-    feature that actually tells a short printed phrase apart from a
-    handwritten mark, which stroke-width variance and baseline irregularity
-    alone do not at word scale.
+    Tam gerekçe için `_MAX_STROKE_RUN_DENSITY`'ye bakın: kelime ölçeğinde
+    vuruş genişliği varyansı ve taban çizgisi düzensizliği tek başına
+    yapamadığı halde, kısa basılı bir ifadeyi el yazısı bir işaretten
+    gerçekten ayırt eden özellik budur.
 
     Args:
-        region: Bilevel ink mask, already cropped to one component.
+        region: Zaten tek bir bileşene kırpılmış ikili mürekkep maskesi.
 
     Returns:
-        0.0 for a region with no ink at all.
+        Hiç mürekkebi olmayan bir bölge için 0.0.
     """
     width = region.shape[1]
     if width == 0:
@@ -456,18 +475,18 @@ def _stroke_run_density(region) -> float:
 
 
 def _baseline_std(region) -> float:
-    """Normalised variability of the top-most ink pixel across columns.
+    """Sütunlar arasında en üstteki mürekkep pikselinin normalize edilmiş değişkenliği.
 
-    Printed text sitting on a shared baseline has a fairly constant
-    top-of-glyph position column to column; cursive or otherwise irregular
-    ink does not. Normalised by region height so it is comparable across
-    component sizes.
+    Paylaşılan bir taban çizgisi üzerinde oturan basılı metin, sütundan
+    sütuna oldukça sabit bir glif-üstü konumuna sahiptir; el yazısı veya
+    başka türlü düzensiz mürekkep sahip değildir. Bileşen boyutları arasında
+    karşılaştırılabilir olması için bölge yüksekliğine göre normalize edilir.
 
     Args:
-        region: Bilevel ink mask, already cropped to one component.
+        region: Zaten tek bir bileşene kırpılmış ikili mürekkep maskesi.
 
     Returns:
-        0.0 when fewer than two columns carry any ink.
+        İkiden az sütunda mürekkep varsa 0.0.
     """
     height = region.shape[0]
     if height == 0:

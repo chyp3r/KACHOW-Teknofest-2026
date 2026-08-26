@@ -1,16 +1,16 @@
-"""Deterministic parsing of a user's revision request.
+"""Kullanıcının revizyon isteğinin deterministik ayrıştırılması.
 
-A revise turn never re-classifies and never re-retrieves legislation by
-default (see ``app.ai.workflows.revise``) -- it operates directly on the
-active draft, the text the user already saw. This module is the first,
-LLM-free step: turning the user's raw instruction into a structured
-``RevisionInstruction`` that later steps (targeting, conditional
-re-retrieval, conflict auditing) all read from, without re-parsing the raw
-text themselves.
+Bir revize turu asla yeniden sınıflandırma yapmaz ve varsayılan olarak asla
+mevzuatı yeniden çekmez (bkz. ``app.ai.workflows.revise``) -- doğrudan aktif
+taslak, kullanıcının zaten gördüğü metin üzerinde çalışır. Bu modül ilk,
+LLM kullanmayan adımdır: kullanıcının ham talimatını, daha sonraki adımların
+(hedefleme, koşullu yeniden çekme, çelişki denetimi) ham metni kendileri
+yeniden ayrıştırmadan okuduğu yapılandırılmış bir ``RevisionInstruction``'a
+dönüştürür.
 
-The user's instruction is never rewritten or softened here -- ``raw`` is
-carried forward verbatim into every downstream prompt. This module only
-adds structure *around* it; it never edits it.
+Kullanıcının talimatı burada asla yeniden yazılmaz veya yumuşatılmaz --
+``raw``, her aşağı akış promptuna kelimesi kelimesine taşınır. Bu modül
+yalnızca onun *etrafına* yapı ekler; onu asla düzenlemez.
 """
 
 import re
@@ -29,43 +29,45 @@ from app.ai.workflows.intent_scorer import _compile_surface, normalize
 Scope = Literal["paragraph", "section", "whole"]
 Operation = Literal["tone_formal", "tone_informal", "shorten", "lengthen", "content"]
 
-#: Recognized structural parts of the fixed 9-part official letter format
-#: (see prompts/templates/writer.md) and the phrases that name them.
-#: "konu" is deliberately absent here -- unlike the other three, a bare
-#: "konu" is genuinely ambiguous in Turkish (see `_KONU_HINT_PATTERN`) and
-#: gets its own, narrower resolution instead of a plain surface list.
+#: Sabit 9 parçalı resmi mektup biçiminin (bkz. prompts/templates/writer.md)
+#: tanınan yapısal parçaları ve onları adlandıran ifadeler. "konu" burada
+#: bilinçli olarak yok -- diğer üçünün aksine, çıplak bir "konu" Türkçe'de
+#: gerçekten belirsizdir (bkz. `_KONU_HINT_PATTERN`) ve düz bir yüzey listesi
+#: yerine kendi, daha dar çözümlemesini alır.
 _SECTION_HINTS: dict[str, tuple[str, ...]] = {
     "giris": ("giris", "ilk paragraf", "baslangic paragrafi"),
     "kapanis": ("kapanis", "son paragraf", "arz kismi", "rica kismi"),
     "imza": ("imza", "imza blogu", "imza kismi"),
 }
-#: Left-word-boundary compiled patterns for `_SECTION_HINTS` (C20) -- a plain
-#: substring test let "imza" match inside an unrelated word starting with
-#: it; same compiler `intent_scorer.ALL_RULES` uses for its own surfaces.
+#: `_SECTION_HINTS` (C20) için sol kelime sınırıyla derlenmiş kalıplar --
+#: düz bir alt dize testi "imza"nın onunla başlayan ilgisiz bir kelimenin
+#: içinde eşleşmesine izin veriyordu; `intent_scorer.ALL_RULES`'ın kendi
+#: yüzeyleri için kullandığı aynı derleyici.
 _SECTION_HINT_PATTERNS: dict[str, tuple[re.Pattern[str], ...]] = {
     canonical: tuple(_compile_surface(surface) for surface in surfaces)
     for canonical, surfaces in _SECTION_HINTS.items()
 }
 
-#: "konu" resolved separately (C20): a bare substring test on "konu" made
-#: "Bu konuda daha resmi bir dil kullan" ("On this topic, use more formal
-#: language" -- a generic remark, not naming the letter's own Konu field at
-#: all) match and narrow an instruction meant for the whole draft down to
-#: just the Konu line. Turkish case marks the difference: the accusative
-#: ("konuyu", "konusunu" -- a direct object, "change THE Konu field") means
-#: the field; the locative/instrumental ("konuda", "konuyla" -- "regarding
-#: this topic") does not. The first alternative matches bare "konu" or an
-#: accusative-suffixed form only when nothing else is glued directly after
-#: it (so "konuda" cannot match through the optional group); the second
-#: matches "konu" followed by a specific field-naming word ("konu satırı",
-#: "konu başlığı", "konu kısmı", "konu alanı").
+#: "konu" ayrı çözümlenir (C20): "konu" üzerinde düz bir alt dize testi,
+#: "Bu konuda daha resmi bir dil kullan" ifadesinin (genel bir yorum, mektubun
+#: kendi Konu alanını hiç adlandırmıyor) eşleşmesine ve bütün taslak için
+#: düşünülmüş bir talimatı yalnızca Konu satırına daraltmasına neden
+#: oluyordu. Türkçe'de hal ekleri farkı belirtir: akuzatif ("konuyu",
+#: "konusunu" -- doğrudan nesne, "KONU alanını değiştir") alanı ifade eder;
+#: lokatif/enstrümantal ("konuda", "konuyla" -- "bu konuyla ilgili") etmez.
+#: İlk alternatif, hemen ardına başka bir şey yapışmadığında yalnızca çıplak
+#: "konu"yu veya akuzatif ekli bir biçimi eşleştirir (böylece "konuda"
+#: isteğe bağlı grup üzerinden eşleşemez); ikincisi, "konu"yu belirli bir
+#: alan-adlandıran kelimenin takip ettiği durumları eşleştirir ("konu
+#: satırı", "konu başlığı", "konu kısmı", "konu alanı").
 _KONU_HINT_PATTERN = re.compile(
     r"\bkonu(?:yu|sunu)?(?=\s|$)|\bkonu\s+(?:satir|basli[gk]|kism|alan)"
 )
 
-#: Phrases inside the *closing* paragraph specifically -- used to locate the
-#: "kapanış" section structurally rather than just by position, since a
-#: closing sentence can appear mid-paragraph rather than alone on one.
+#: Özellikle *kapanış* paragrafının içindeki ifadeler -- kapanış cümlesi
+#: yalnız kendi paragrafında değil, bir paragrafın ortasında da
+#: görünebildiğinden "kapanış" bölümünü yalnızca konuma göre değil yapısal
+#: olarak bulmak için kullanılır.
 _CLOSING_MARKERS = ("arz ederim", "rica ederim", "bilgilerinize sunulur")
 
 _ORDINAL_PATTERN = re.compile(r"(\d+)\s*\.?\s*paragraf")
@@ -73,12 +75,12 @@ _ORDINAL_WORDS: dict[str, int] = {
     "ilk": 1, "birinci": 1, "ikinci": 2, "ucuncu": 3, "dorduncu": 4, "son": -1,
 }
 
-#: Verbs that mean "add a paragraph", not "edit the Nth one" (C19). "Metne 2
-#: paragraf daha ekle" ("add 2 more paragraphs to the text") reads the "2" as
-#: a *count* of new paragraphs to insert, not the ordinal index of an
-#: existing one -- `_ORDINAL_PATTERN` alone cannot tell the two apart (both
-#: are "\d+ paragraf"), so this rejects the numeric ordinal reading whenever
-#: one of these addition verbs is also present in the same instruction.
+#: "N. paragrafı düzenle" değil, "bir paragraf ekle" anlamına gelen fiiller
+#: (C19). "Metne 2 paragraf daha ekle", "2"yi mevcut bir paragrafın sıra
+#: numarası değil, eklenecek yeni paragrafların *sayısı* olarak okur --
+#: `_ORDINAL_PATTERN` tek başına ikisini ayırt edemez (ikisi de
+#: "\d+ paragraf"), bu yüzden bu, aynı talimatta bu ekleme fiillerinden biri
+#: de mevcut olduğunda sayısal sıra numarası okumasını reddeder.
 _PARAGRAPH_ADDITION_HINTS = ("ekle", "ilave et", "ilave edilsin", "eklensin")
 
 _OPERATION_HINTS: dict[Operation, tuple[str, ...]] = {
@@ -88,20 +90,20 @@ _OPERATION_HINTS: dict[Operation, tuple[str, ...]] = {
     "lengthen": ("uzat", "daha uzun", "detaylandir", "genislet"),
 }
 
-#: Splits a compound instruction into per-clause fragments for
-#: ``decompose_instruction``. Turkish coordinators plus the usual clause
-#: terminators -- deliberately narrow (a false split just produces one extra
-#: fragment that fails to parse into a directive and gets dropped, see
-#: ``decompose_instruction``; a missed split falls back to whole-draft scope,
-#: today's existing safe default).
+#: ``decompose_instruction`` için bileşik bir talimatı cümle başına
+#: parçalara böler. Türkçe bağlaçlar artı olağan cümle sonlandırıcıları --
+#: bilinçli olarak dar tutulmuş (yanlış bir bölme yalnızca bir direktife
+#: ayrıştırılamayıp düşen bir ekstra parça üretir, bkz.
+#: ``decompose_instruction``; kaçırılan bir bölme bütün-taslak kapsamına
+#: geri döner, bugünün mevcut güvenli varsayılanı).
 _CLAUSE_SPLIT = re.compile(
     r"\s+ve\s+|\s+ayrıca\s+|\s+bir de\s+|\s*;\s*|\n+|(?<=[.!?])\s+(?=[A-ZÇĞİÖŞÜ])"
 )
 
-#: Claim kinds whose presence in an instruction means it is trying to
-#: introduce or reference normative content (a law, an institution, a
-#: document number, an amount) rather than just ask for a style/length
-#: change -- see ``needs_reretrieval``.
+#: Bir talimatta bulunması, yalnızca bir stil/uzunluk değişikliği istemek
+#: yerine normatif içerik (bir kanun, bir kurum, bir belge numarası, bir
+#: tutar) tanıtmaya veya ona atıfta bulunmaya çalıştığı anlamına gelen
+#: iddia türleri -- bkz. ``needs_reretrieval``.
 _NORMATIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     LEGISLATION_PATTERN,
     INSTITUTION_PATTERN,
@@ -113,18 +115,17 @@ _NORMATIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
 
 @dataclass(frozen=True)
 class EditDirective:
-    """One atomic edit extracted from a (possibly compound) instruction.
+    """(Muhtemelen bileşik) bir talimattan çıkarılan tek bir atomik düzenleme.
 
     Attributes:
-        scope: What part of the draft this directive targets.
-        operation: What kind of change it asks for. Informational only.
-        section_hint: A recognized structural part name, when
-            ``scope == "section"``.
-        ordinal: A 1-based paragraph index (``-1`` means "last"), when
-            ``scope == "paragraph"``.
-        raw: This directive's own clause, unmodified.
-        order: Position among the instruction's directives, for stable
-            right-to-left application (see ``locate_target``'s caller).
+        scope: Bu direktifin taslağın hangi kısmını hedeflediği.
+        operation: Ne tür bir değişiklik istediği. Yalnızca bilgi amaçlı.
+        section_hint: ``scope == "section"`` olduğunda, tanınan bir yapısal parça adı.
+        ordinal: ``scope == "paragraph"`` olduğunda, 1'den başlayan bir
+            paragraf indeksi (``-1`` "son" demektir).
+        raw: Bu direktifin kendi cümlesi, değiştirilmeden.
+        order: Kararlı sağdan-sola uygulama için talimatın direktifleri
+            arasındaki konum (bkz. ``locate_target``'ın çağıranı).
     """
 
     scope: Scope
@@ -137,28 +138,31 @@ class EditDirective:
 
 @dataclass(frozen=True)
 class RevisionInstruction:
-    """The user's revise request, parsed into a scope and an operation.
+    """Kullanıcının revize isteği, bir kapsam ve bir işleme ayrıştırılmış.
 
     Attributes:
-        scope: What part of the draft the instruction targets.
-        operation: What kind of change it asks for. Informational only --
-            it does not change which prompt runs, only what a caller might
-            log or show; the model reads ``raw`` directly.
-        section_hint: A recognized structural part name (see
-            ``_SECTION_HINTS``), when ``scope == "section"``.
-        ordinal: A 1-based paragraph index (``-1`` means "last"), when
-            ``scope == "paragraph"``.
-        raw: The instruction text, unmodified, for the prompt.
-        directives: The instruction decomposed into its atomic edits (see
-            ``decompose_instruction``). Always at least one entry, whose
-            ``raw`` is the full instruction when it could not be split
-            further -- the same safe default ``scope="whole"`` represents.
-        introduces_normative_content: Whether the instruction references a
-            law, article, institution, document number, date or amount --
-            i.e. asks for something a re-retrieval of legislation might be
-            needed to ground (see ``needs_reretrieval``).
-        normative_tokens: The specific tokens that made
-            ``introduces_normative_content`` true.
+        scope: Talimatın taslağın hangi kısmını hedeflediği.
+        operation: Ne tür bir değişiklik istediği. Yalnızca bilgi amaçlı --
+            hangi promptun çalıştığını değiştirmez, yalnızca bir çağıranın
+            loglayabileceği veya gösterebileceği şeyi; model ``raw``'ı
+            doğrudan okur.
+        section_hint: ``scope == "section"`` olduğunda, tanınan bir yapısal
+            parça adı (bkz. ``_SECTION_HINTS``).
+        ordinal: ``scope == "paragraph"`` olduğunda, 1'den başlayan bir
+            paragraf indeksi (``-1`` "son" demektir).
+        raw: Talimat metni, prompt için değiştirilmeden.
+        directives: Talimatın atomik düzenlemelerine ayrıştırılmış hali
+            (bkz. ``decompose_instruction``). Her zaman en az bir giriş
+            içerir; daha fazla bölünemediğinde ``raw``'ı talimatın
+            tamamıdır -- ``scope="whole"``'un temsil ettiği aynı güvenli
+            varsayılan.
+        introduces_normative_content: Talimatın bir kanuna, maddeye, kuruma,
+            belge numarasına, tarihe veya tutara atıfta bulunup
+            bulunmadığı -- yani mevzuatın yeniden çekilmesinin dayanak
+            oluşturmak için gerekebileceği bir şey istemesi (bkz.
+            ``needs_reretrieval``).
+        normative_tokens: ``introduces_normative_content``'i doğru yapan
+            spesifik token'lar.
     """
 
     scope: Scope
@@ -173,7 +177,7 @@ class RevisionInstruction:
 
 @dataclass(frozen=True)
 class TargetSpan:
-    """A char range in the draft the rewrite should be confined to."""
+    """Yeniden yazımın sınırlanması gereken taslaktaki bir karakter aralığı."""
 
     start: int
     end: int
@@ -181,7 +185,7 @@ class TargetSpan:
 
 
 def _parse_one(raw: str) -> tuple[Scope, Operation, Optional[str], Optional[int]]:
-    """Extract scope/operation/section_hint/ordinal from a single clause."""
+    """Tek bir cümleden scope/operation/section_hint/ordinal çıkarır."""
     normalized = normalize(raw)
 
     section_hint: Optional[str] = None
@@ -221,8 +225,8 @@ def _parse_one(raw: str) -> tuple[Scope, Operation, Optional[str], Optional[int]
 
 
 def _normative_tokens(text: str) -> tuple[str, ...]:
-    """Every normative-content token (law/madde/institution/date/amount) in
-    ``text``, de-duplicated but order-preserving."""
+    """``text``'teki her normatif-içerik token'ı (kanun/madde/kurum/tarih/tutar);
+    tekilleştirilmiş ama sıra korunmuş."""
     seen: dict[str, None] = {}
     for pattern in _NORMATIVE_PATTERNS:
         for match in pattern.findall(text):
@@ -233,22 +237,22 @@ def _normative_tokens(text: str) -> tuple[str, ...]:
 
 
 def decompose_instruction(instruction: str) -> tuple[EditDirective, ...]:
-    """Split a compound instruction into its atomic edit directives.
+    """Bileşik bir talimatı atomik düzenleme direktiflerine ayırır.
 
     Args:
-        instruction: The user's raw revise request, possibly asking for
-            several distinct changes at once ("Konuyu değiştir ve son
+        instruction: Kullanıcının ham revize isteği; muhtemelen aynı anda
+            birkaç farklı değişiklik istiyor ("Konuyu değiştir ve son
             paragrafı kısalt.").
 
     Returns:
-        One ``EditDirective`` per recognized clause. A clause that names
-        neither a section nor a paragraph and has no operation surface is
-        dropped as noise (a coordinator by itself, e.g. a stray "ve"). When
-        that leaves zero or one directive, a single ``scope="whole"``
-        directive carrying the *entire* original instruction is returned
-        instead -- decomposition is a targeting optimization, not something
-        callers should ever have to special-case when it finds nothing to
-        split.
+        Tanınan her cümle için bir ``EditDirective``. Ne bir bölüm ne de
+        bir paragraf adlandıran ve hiçbir işlem yüzeyi olmayan bir cümle
+        gürültü olarak düşürülür (kendi başına bir bağlaç, örn. başıboş bir
+        "ve"). Bu, sıfır veya bir direktif bıraktığında, bunun yerine
+        *orijinal talimatın tamamını* taşıyan tek bir ``scope="whole"``
+        direktifi döndürülür -- ayrıştırma bir hedefleme optimizasyonudur,
+        çağıranların bölünecek bir şey bulamadığında özel durum olarak ele
+        alması gereken bir şey değildir.
     """
     fragments = [frag.strip() for frag in _CLAUSE_SPLIT.split(instruction) if frag.strip()]
 
@@ -256,8 +260,8 @@ def decompose_instruction(instruction: str) -> tuple[EditDirective, ...]:
     for order, fragment in enumerate(fragments):
         scope, operation, section_hint, ordinal = _parse_one(fragment)
         if scope == "whole" and operation == "content":
-            # Neither a location nor an operation was recognized in this
-            # fragment alone -- not a directive, just connective tissue.
+            # Bu parçanın kendisinde ne bir konum ne de bir işlem
+            # tanınmadı -- bir direktif değil, sadece bağlayıcı doku.
             continue
         directives.append(
             EditDirective(
@@ -267,20 +271,22 @@ def decompose_instruction(instruction: str) -> tuple[EditDirective, ...]:
         )
 
     if len(fragments) > 1 and len(directives) < len(fragments):
-        # At least one coordinator-separated clause named neither a
-        # section/paragraph nor an operation -- e.g. "muhatap Ankara
-        # Valiliği" in "Konuyu değiştir ve muhatap Ankara Valiliği". That
-        # clause cannot ride along inside another directive's own located
-        # span (a directive's prompt is confined to its own span -- see
-        # _build_directive_prompt), so it would otherwise be silently
-        # dropped: this was Görev 2's "bilgi kısmı hiçbir yere yazılmıyor"
-        # bug. Re-parsing the *combined* text for a single section_hint
-        # (the old fallback below) is not a fix either -- it can rediscover
-        # a narrow location from just one clause and misapply the whole
-        # compound ask to that one span. Safe default: a multi-clause
-        # instruction that does not fully decompose into located directives
-        # falls back to one whole-draft rewrite, carrying every clause's
-        # own text (`instruction`, unmodified) so nothing asked for is lost.
+        # En az bir bağlaçla ayrılmış cümle ne bir bölüm/paragraf ne de bir
+        # işlem adlandırdı -- örn. "Konuyu değiştir ve muhatap Ankara
+        # Valiliği" içindeki "muhatap Ankara Valiliği". O cümle başka bir
+        # direktifin kendi bulunmuş aralığının içine binemez (bir
+        # direktifin promptu kendi aralığıyla sınırlıdır -- bkz.
+        # _build_directive_prompt), bu yüzden aksi halde sessizce
+        # düşürülürdü: bu, Görev 2'nin "bilgi kısmı hiçbir yere
+        # yazılmıyor" hatasıydı. *Birleştirilmiş* metni tek bir
+        # section_hint için yeniden ayrıştırmak (aşağıdaki eski yedek) da
+        # bir düzeltme değil -- yalnızca bir cümleden dar bir konum yeniden
+        # keşfedebilir ve bütün bileşik isteği o tek aralığa yanlış
+        # uygulayabilir. Güvenli varsayılan: bulunmuş direktiflere tam
+        # olarak ayrıştırılamayan çok cümleli bir talimat, her cümlenin
+        # kendi metnini (`instruction`, değiştirilmeden) taşıyan tek bir
+        # bütün-taslak yeniden yazıma geri döner; böylece istenen hiçbir
+        # şey kaybolmaz.
         return (
             EditDirective(
                 scope="whole", operation="content", section_hint=None,
@@ -301,20 +307,20 @@ def decompose_instruction(instruction: str) -> tuple[EditDirective, ...]:
 
 
 def parse_revision_instruction(instruction: str) -> RevisionInstruction:
-    """Extract a scope and an operation from a revise request.
+    """Bir revize isteğinden bir kapsam ve bir işlem çıkarır.
 
-    Deterministic keyword matching over the draft's own known, fixed
-    structure -- not a general NLU parse. An instruction naming neither a
-    paragraph number nor a recognized section resolves to ``scope="whole"``,
-    which is the safe default: a full, still single-call rewrite rather than
-    a guess at which part was meant.
+    Taslağın kendi bilinen, sabit yapısı üzerinde deterministik anahtar
+    kelime eşleştirmesi -- genel bir NLU ayrıştırması değil. Ne bir paragraf
+    numarası ne de tanınan bir bölüm adlandıran bir talimat, güvenli
+    varsayılan olan ``scope="whole"``'a çözümlenir: hangi kısmın kastedildiğine
+    dair bir tahmin yerine yine tek çağrılı, tam bir yeniden yazım.
 
     Args:
-        instruction: The user's revise request.
+        instruction: Kullanıcının revize isteği.
 
     Returns:
-        The parsed instruction, including its decomposition into atomic
-        directives and whether it references normative content.
+        Atomik direktiflere ayrıştırılmış hali ve normatif içeriğe atıfta
+        bulunup bulunmadığı dahil, ayrıştırılmış talimat.
     """
     scope, operation, section_hint, ordinal = _parse_one(instruction)
     tokens = _normative_tokens(instruction)
@@ -329,53 +335,54 @@ def parse_revision_instruction(instruction: str) -> RevisionInstruction:
 
 
 def needs_reretrieval(instruction: RevisionInstruction) -> bool:
-    """Whether this revision should trigger a fresh legislation lookup.
+    """Bu revizyonun yeni bir mevzuat aramasını tetiklemesi gerekip gerekmediği.
 
-    True when the instruction itself names a law, article, institution,
-    date or amount that the draft's frozen context may not already cover --
-    a pure tone/length request never does. See
-    ``app.ai.revision.retrieval.maybe_extend_context``, the only caller.
+    Talimatın kendisi, taslağın donmuş bağlamının zaten kapsamıyor olabileceği
+    bir kanun, madde, kurum, tarih veya tutar adlandırdığında True -- saf bir
+    ton/uzunluk isteği asla bunu yapmaz. Bkz. tek çağıranı olan
+    ``app.ai.revision.retrieval.maybe_extend_context``.
 
     Args:
-        instruction: The parsed instruction.
+        instruction: Ayrıştırılmış talimat.
 
     Returns:
-        Whether a conditional re-retrieval should run.
+        Koşullu bir yeniden çekmenin çalışması gerekip gerekmediği.
     """
     return instruction.introduces_normative_content
 
 
 def _split_paragraphs(draft: str) -> list[tuple[int, int]]:
-    """Return (start, end) char offsets of each blank-line-separated paragraph."""
+    """Boş satırla ayrılmış her paragrafın (start, end) karakter ofsetlerini döndürür."""
     return [(m.start(), m.end()) for m in re.finditer(r"[^\n]+(?:\n(?!\n)[^\n]+)*", draft)]
 
 
-#: The draft's own fixed metadata-header field labels (see writer.md's
-#: numbered structure, fields 2-6: Sayı/Tarih/Konu/Muhatap/İlgi/Ekler) --
-#: same label set app.ai.verification.placeholders._HEADER_LINE_PATTERN
-#: recognises for its own, unrelated backstop, extended with İlgi/Ekler
-#: since those two can also sit on the same header block.
+#: Taslağın kendi sabit üst veri başlığı alan etiketleri (bkz. writer.md'nin
+#: numaralı yapısı, alanlar 2-6: Sayı/Tarih/Konu/Muhatap/İlgi/Ekler) --
+#: app.ai.verification.placeholders._HEADER_LINE_PATTERN'ın kendi, ilgisiz
+#: yedeği için tanıdığı aynı etiket kümesi; bu ikisi de aynı başlık
+#: bloğunda oturabildiğinden İlgi/Ekler ile genişletilmiş.
 _HEADER_FIELD_LINE = re.compile(
     r"^\s*(Sayı|Sayi|Tarih|Konu|Muhatap|İlgi|Ilgi|Ekler)\s*:", re.IGNORECASE
 )
 
 
 def _is_header_paragraph(text: str) -> bool:
-    """Whether a blank-line-separated block is pure letter metadata, never
-    something a user means by "ilk paragraf"/"giriş".
+    """Boş satırla ayrılmış bir bloğun saf mektup üst verisi olup olmadığı;
+    bir kullanıcının "ilk paragraf"/"giriş" derken asla kastetmediği şey.
 
-    The bug this closes: a typical draft's "Konu:"/"Sayı:"/"Tarih:" lines
-    sit on consecutive lines with *no* blank line between them (see
-    writer.md's fixed structure), so ``_split_paragraphs`` groups them into
-    one block that -- unfiltered -- lands at index 0, exactly where "1.
-    paragrafı sil"/"girişi değiştir" naturally point. Nobody asking to edit
-    a letter's opening means its metadata header; unfiltered, the reviser
-    was handed that block as its own rewrite target for an unrelated body
-    edit and, applying it to a "Sayı: ..." line instead of prose, would as
-    often as not mangle or drop it outright -- the concrete "sayıyı siliyor"
-    symptom this closes. A leading antet block ("T.C.\\nKURUM ADI", no
-    labelled field at all) is caught the same way, via the literal "T.C."
-    marker every antet starts with.
+    Bunun kapattığı hata: tipik bir taslağın "Konu:"/"Sayı:"/"Tarih:"
+    satırları arasında *hiç* boş satır olmadan ardışık satırlarda oturur
+    (bkz. writer.md'nin sabit yapısı), bu yüzden ``_split_paragraphs``
+    bunları -- filtrelenmemiş halde -- tam olarak "1. paragrafı sil"/
+    "girişi değiştir"in doğal olarak işaret ettiği indeks 0'a düşen tek bir
+    blokta gruplar. Bir mektubun açılışını düzenlemesini isteyen hiç kimse
+    üst veri başlığını kastetmez; filtrelenmemiş haliyle reviser'a bu blok,
+    ilgisiz bir gövde düzenlemesi için kendi yeniden yazım hedefi olarak
+    verildi ve düz metin yerine bir "Sayı: ..." satırına uygulanınca çoğu
+    zaman onu bozar veya tamamen düşürürdü -- bunun kapattığı somut "sayıyı
+    siliyor" belirtisi. Baştaki bir antet bloğu ("T.C.\\nKURUM ADI", hiç
+    etiketli alan yok) da aynı şekilde, her antetin başladığı literal
+    "T.C." işaretiyle yakalanır.
     """
     stripped = text.strip()
     if not stripped:
@@ -387,10 +394,10 @@ def _is_header_paragraph(text: str) -> bool:
 
 
 def _body_paragraphs(draft: str, paragraphs: list[tuple[int, int]]) -> list[tuple[int, int]]:
-    """``paragraphs`` with any pure-metadata block dropped, for ordinal/
-    "giriş" targeting only -- ``konu``/``kapanis``/``imza`` section hints
-    keep scanning the full list unfiltered, since ``konu`` specifically
-    means to find the header's own Konu line."""
+    """Yalnızca sıra/"giriş" hedeflemesi için, saf üst veri bloğu düşürülmüş
+    ``paragraphs`` -- ``konu``/``kapanis``/``imza`` bölüm ipuçları, ``konu``
+    özellikle başlığın kendi Konu satırını bulmak anlamına geldiğinden
+    tam listeyi filtrelenmeden taramaya devam eder."""
     body = [span for span in paragraphs if not _is_header_paragraph(draft[span[0] : span[1]])]
     return body or paragraphs
 
@@ -432,17 +439,17 @@ def _locate_one(
 def locate_target(
     draft: str, instruction: "RevisionInstruction | EditDirective"
 ) -> Optional[TargetSpan]:
-    """Find the char span ``instruction`` targets, if it names one precisely.
+    """``instruction``'ın kesin olarak adlandırdığı karakter aralığını bulur.
 
     Args:
-        draft: The current draft text.
-        instruction: The parsed instruction or a single directive from it --
-            both carry the same ``scope``/``section_hint``/``ordinal`` triple.
+        draft: Güncel taslak metni.
+        instruction: Ayrıştırılmış talimat veya ondan tek bir direktif --
+            ikisi de aynı ``scope``/``section_hint``/``ordinal`` üçlüsünü taşır.
 
     Returns:
-        The target span, or ``None`` when the scope is ``"whole"`` or the
-        named paragraph/section can't be located -- callers treat ``None``
-        as "rewrite the whole draft" rather than guessing.
+        Hedef aralık, veya kapsam ``"whole"`` olduğunda ya da adlandırılan
+        paragraf/bölüm bulunamadığında ``None`` -- çağıranlar ``None``'ı
+        tahmin etmek yerine "bütün taslağı yeniden yaz" olarak ele alır.
     """
     paragraphs = _split_paragraphs(draft)
     if not paragraphs:
@@ -454,45 +461,44 @@ def locate_target(
     )
 
 
-#: Above this ratio of rewritten-to-target length, the model's output looks
-#: like it ignored the requested scope and regenerated far more than the
-#: targeted span -- splicing that in verbatim would double up whatever
-#: comes after the target's own end rather than replacing just the target.
+#: Yeniden yazılan/hedef uzunluk oranının bu değerinin üzerinde, modelin
+#: çıktısı istenen kapsamı yok sayıp hedeflenen aralıktan çok daha fazlasını
+#: yeniden ürettiği gibi görünür -- bunu olduğu gibi eklemek, yalnızca hedefi
+#: değiştirmek yerine hedefin kendi sonundan sonra gelen her şeyi ikiye katlar.
 _SCOPE_OVERRUN_LENGTH_RATIO = 3.0
 
-#: How much of the *whole draft's* own length the rewritten text has to
-#: reach, on top of the ratio above, before this counts as "the model
-#: regenerated everything" rather than "this paragraph just got a lot
-#: longer than before" -- both together are what distinguish the two.
+#: Yukarıdaki orana ek olarak, bunun "bu paragraf öncekinden çok daha uzun
+#: oldu" yerine "model her şeyi yeniden üretti" olarak sayılması için
+#: yeniden yazılan metnin *bütün taslağın* kendi uzunluğunun ne kadarına
+#: ulaşması gerektiği -- ikisini birlikte ayırt eden şey budur.
 _SCOPE_OVERRUN_DRAFT_FRACTION = 0.7
 
 
 def resolve_merge_target(
     target: Optional[TargetSpan], rewritten: str, source_draft: str
 ) -> Optional[TargetSpan]:
-    """Detect a directive's rewrite ignoring its own scope (C22).
+    """Bir direktifin yeniden yazımının kendi kapsamını yok saymasını tespit eder (C22).
 
-    A directive scoped to one paragraph or section tells the model, in its
-    own prompt, to return only that section's new text (see
-    ``revise_graph._build_directive_prompt``'s ``scope_rule``). A model
-    that ignores this and regenerates the whole draft anyway produces text
-    that is both far longer than the target it was asked to replace *and*
-    close to the full draft's own length -- splicing that through
-    ``_merge`` at the original narrow span would paste a whole extra draft
-    into the middle of the real one, roughly doubling the content instead
-    of replacing it.
+    Bir paragrafa veya bölüme kapsamlanan bir direktif, modele kendi
+    promptunda yalnızca o bölümün yeni metnini döndürmesini söyler (bkz.
+    ``revise_graph._build_directive_prompt``'ın ``scope_rule``'u). Bunu yok
+    sayıp yine de bütün taslağı yeniden üreten bir model, hem değiştirmesi
+    istenen hedeften çok daha uzun *hem de* bütün taslağın kendi uzunluğuna
+    yakın bir metin üretir -- bunu orijinal dar aralıkta ``_merge`` ile
+    eklemek, gerçek olanın ortasına bütün bir ekstra taslak yapıştırır ve
+    içeriği değiştirmek yerine kabaca ikiye katlar.
 
     Args:
-        target: The directive's own located span, or ``None`` (already a
-            whole-draft scope, so there is nothing to overrun by definition).
-        rewritten: The model's raw output for this directive.
-        source_draft: The full draft this directive was scoped against.
+        target: Direktifin kendi bulunmuş aralığı, veya ``None`` (zaten
+            bütün-taslak kapsamı, bu yüzden tanım gereği aşılacak bir şey yok).
+        rewritten: Modelin bu direktif için ham çıktısı.
+        source_draft: Bu direktifin kapsamlandığı tam taslak.
 
     Returns:
-        ``target`` unchanged in the ordinary case, or ``None`` when an
-        overrun is detected -- the caller's own ``_merge`` call then takes
-        the same whole-draft-replacement path a directive with no located
-        span already gets, rather than splicing.
+        Olağan durumda ``target`` değişmeden, veya bir aşım tespit
+        edildiğinde ``None`` -- çağıranın kendi ``_merge`` çağrısı, o zaman
+        eklemek yerine hiç bulunmuş aralığı olmayan bir direktifin zaten
+        aldığı aynı bütün-taslak-değiştirme yolunu alır.
     """
     if target is None:
         return None
@@ -512,32 +518,34 @@ def resolve_merge_target(
 
 
 def spans_overlap(targets: Sequence[Optional[TargetSpan]]) -> bool:
-    """Whether any two of the given target spans overlap (C5).
+    """Verilen hedef aralıklardan herhangi ikisinin çakışıp çakışmadığı (C5).
 
-    The multi-directive right-to-left merge (see
-    ``revise_graph.rewrite_node``) assumes every directive's own span stays
-    a valid, disjoint range against the original draft -- an overlap breaks
-    that assumption, letting one directive's splice corrupt another's
-    offsets or duplicate/drop the shared text between them.
+    Çok-direktifli sağdan-sola birleştirme (bkz.
+    ``revise_graph.rewrite_node``), her direktifin kendi aralığının orijinal
+    taslağa karşı geçerli, ayrık bir aralık olarak kaldığını varsayar -- bir
+    çakışma bu varsayımı bozar, bir direktifin eklemesinin bir diğerinin
+    ofsetlerini bozmasına veya aralarındaki paylaşılan metni
+    çoğaltmasına/düşürmesine izin verir.
 
     Args:
-        targets: Every directive's own located span. A ``None`` entry (an
-            unlocatable directive) is never itself part of an overlap --
-            that case is already handled by requiring every target to be
-            non-``None`` before this is even called.
+        targets: Her direktifin kendi bulunmuş aralığı. Bir ``None`` girdi
+            (bulunamayan bir direktif) hiçbir zaman kendisi bir çakışmanın
+            parçası değildir -- bu durum, bu hiç çağrılmadan önce her
+            hedefin ``None`` olmamasını gerektirerek zaten ele alınır.
 
     Returns:
-        True when any two non-``None`` spans intersect.
+        Herhangi iki ``None`` olmayan aralık kesiştiğinde True.
     """
     spans = sorted((t.start, t.end) for t in targets if t is not None)
     return any(spans[i][1] > spans[i + 1][0] for i in range(len(spans) - 1))
 
 
 def _merge(source_draft: str, target: Optional[TargetSpan], rewritten: str) -> str:
-    """Splice the rewritten text back in. The untouched head and tail come
-    straight from the original text rather than being reproduced by the
-    model, so an unintended change outside the target span is structurally
-    impossible rather than merely something to check for afterward."""
+    """Yeniden yazılan metni geri ekler. Dokunulmamış baş ve son kısımlar,
+    model tarafından yeniden üretilmek yerine doğrudan orijinal metinden
+    gelir, bu yüzden hedef aralığın dışında istenmeyen bir değişiklik,
+    sonradan kontrol edilecek bir şey olmaktan çıkıp yapısal olarak
+    imkansız hale gelir."""
     rewritten = rewritten.strip()
     if target is None:
         return rewritten

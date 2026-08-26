@@ -9,19 +9,21 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class DraftShareModel(Base, TimestampMixin):
-    """One draft version sent from one user to another (the şartname's
-    "çalışanlar arası taslak gönder/al" -- employee-to-employee draft
-    delivery).
+    """Bir kullanıcıdan diğerine gönderilmiş bir taslak versiyonu (şartnamedeki
+    "çalışanlar arası taslak gönder/al" -- çalışandan çalışana taslak
+    teslimatı).
 
-    Targets a specific ``drafts`` row (a specific version), not a session --
-    ``DraftModel`` is already an append-only version chain, and sending
-    "the current draft" just means sending its latest row's id at send
-    time; nothing here needs to track "did a newer version get sent later",
-    that is simply a second, separate share row.
+    Bir oturumu değil, belirli bir ``drafts`` satırını (belirli bir
+    versiyonu) hedefler -- ``DraftModel`` zaten yalnızca-ekleme (append-only)
+    bir versiyon zinciridir, ve "geçerli taslağı" göndermek yalnızca
+    gönderim anında en son satırının id'sini göndermek anlamına gelir;
+    burada "daha sonra daha yeni bir versiyon gönderildi mi" diye takip
+    edilecek bir şey yoktur, bu basitçe ikinci, ayrı bir paylaşım
+    satırıdır.
 
-    There is no dedicated inbox/outbox table: "inbox" is
-    ``recipient_id = me``, "outbox" is ``sender_id = me``, both against this
-    one table (see ``DraftShareRepository.list_inbox``/``list_outbox``).
+    Ayrı bir inbox/outbox tablosu yoktur: "inbox" ``recipient_id = ben``,
+    "outbox" ``sender_id = ben``dir, ikisi de bu tek tabloya karşı (bkz.
+    ``DraftShareRepository.list_inbox``/``list_outbox``).
     """
 
     __tablename__ = "draft_shares"
@@ -33,16 +35,17 @@ class DraftShareModel(Base, TimestampMixin):
     draft_id: Mapped[str] = mapped_column(String, ForeignKey("drafts.id"), nullable=False, index=True)
     sender_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
     recipient_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
-    #: The unit ``drafts.destination`` (the AI's routing suggestion at
-    #: generation time) resolves to, copied in at send time -- see
-    #: ``DraftShareService.send``. `NULL` when ``destination`` doesn't match
-    #: any current unit name (renamed/deleted since, or a direct draft with
-    #: no routing decision at all); an honest miss, not an error.
+    #: ``drafts.destination``'ın (üretim anındaki AI'ın routing önerisi)
+    #: çözümlendiği birim; gönderim anında kopyalanır -- bkz.
+    #: ``DraftShareService.send``. ``destination`` mevcut hiçbir birim
+    #: adıyla eşleşmiyorsa (o zamandan beri yeniden adlandırılmış/silinmiş,
+    #: ya da hiç routing kararı olmayan doğrudan bir taslak) `NULL`;
+    #: hata değil, dürüst bir eşleşmeme.
     suggested_unit_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("units.id"), nullable=True
     )
     message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    #: "sent" | "read" | "accepted" | "rejected" | "withdrawn".
+    #: "sent" | "read" | "accepted" | "rejected" | "withdrawn" (durum değerleri).
     status: Mapped[str] = mapped_column(String, nullable=False, default="sent")
     responded_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     response_note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -1,14 +1,14 @@
-"""Shared "does this instruction carry topic content of its own" helper.
+"""Paylaşılan "bu talimat kendine ait bir konu içeriği taşıyor mu" yardımcısı.
 
-Both ``app.ai.workflows.scope`` (does a message need an anchor at all) and
-``app.ai.workflows.relevance`` (does a document-attached request concern
-*this* document) need the same building block: strip the drafting/revision
-command itself out of a message and see what -- if anything -- is left. A
-bare "Cevap yaz." is definitionally in-domain (it asks the system to do
-exactly what it exists to do, with nothing further to be *about*); "Cevap
-yaz, çiğköfte kampanyası için" is not, because "çiğköfte kampanyası"
-survives the strip. Factored out once so the two modules can't quietly
-diverge on what counts as a command versus a topic.
+Hem ``app.ai.workflows.scope`` (bir mesajın hiç bir çapaya ihtiyacı var mı)
+hem de ``app.ai.workflows.relevance`` (belge ekli bir talep *bu* belgeyle
+mi ilgili) aynı yapı taşına ihtiyaç duyar: taslak hazırlama/revizyon
+komutunu bir mesajdan çıkar ve -- varsa -- geriye ne kaldığına bak. Çıplak
+bir "Cevap yaz." tanım gereği kapsam içidir (sistemden tam olarak var olma
+amacı olan şeyi yapmasını ister, başka bir şey *hakkında* olmadan);
+"Cevap yaz, çiğköfte kampanyası için" değildir, çünkü "çiğköfte kampanyası"
+çıkarma işleminden sağ çıkar. İki modülün komut ile konu sayılan şey
+konusunda sessizce ayrışmaması için bir kere ortak bir yere çıkarıldı.
 """
 
 from app.ai.workflows.intent_rules import CONTINUATION_SURFACES, DRAFT_RULES, REVISE_RULES

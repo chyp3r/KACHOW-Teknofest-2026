@@ -6,18 +6,19 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-#: Placeholders are ``{{name}}``, never ``{name}``. The templates embed literal
-#: JSON examples with single braces, so :meth:`str.format` cannot be used on
-#: them -- it raises ``KeyError`` on the JSON keys. Every renderer in the
-#: codebase must go through this module so the two conventions cannot drift
-#: apart again.
+#: Yer tutucular ``{{name}}`` biçimindedir, asla ``{name}`` değil. Şablonlar
+#: tek küme parantezli literal JSON örnekleri gömer, bu yüzden onların
+#: üzerinde :meth:`str.format` kullanılamaz -- JSON anahtarlarında ``KeyError``
+#: fırlatır. Codebase'deki her renderer bu modülden geçmelidir, böylece iki
+#: kural birbirinden tekrar sapamaz.
 _PLACEHOLDER_PATTERN = re.compile(r"\{\{\s*(\w+)\s*\}\}")
 
 
-#: The declared ``{{placeholder}}`` set for every template this codebase ships.
-#: A template gaining a new placeholder with no corresponding update here (or an
-#: agent stopping supplying a declared one) is exactly the drift this contract
-#: catches -- see ``tests/unit/ai/test_prompt_templates.py``.
+#: Bu codebase'in ürettiği her şablon için beyan edilmiş ``{{placeholder}}``
+#: kümesi. Burada karşılık gelen bir güncelleme olmadan yeni bir yer tutucu
+#: kazanan bir şablon (veya beyan edilmiş birini sağlamayı bırakan bir agent),
+#: tam olarak bu sözleşmenin yakaladığı sapmadır -- bkz.
+#: ``tests/unit/ai/test_prompt_templates.py``.
 TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
     "assistant": frozenset(
         {
@@ -42,14 +43,15 @@ TEMPLATE_CONTRACTS: Dict[str, frozenset] = {
 
 
 def declared_placeholders(template: str) -> set:
-    """Return the ``{{name}}`` placeholders a template's text declares.
+    """Bir şablonun metninin beyan ettiği ``{{name}}`` yer tutucularını döndürür.
 
     Args:
-        template: Raw template text (not a template name -- callers that have
-            only a name should read it first via :meth:`PromptManager.get_template`).
+        template: Ham şablon metni (bir şablon adı değil -- yalnızca bir adı
+            olan çağıranlar önce onu :meth:`PromptManager.get_template`
+            aracılığıyla okumalıdır).
 
     Returns:
-        The set of distinct placeholder names found in the text.
+        Metinde bulunan farklı yer tutucu adlarının kümesi.
     """
     return set(_PLACEHOLDER_PATTERN.findall(template))
 
@@ -57,22 +59,24 @@ def declared_placeholders(template: str) -> set:
 def render_placeholders(
     template: str, context: Mapping[str, Any], *, strict: bool = False
 ) -> str:
-    """Substitute ``{{name}}`` placeholders in a template.
+    """Bir şablondaki ``{{name}}`` yer tutucularını değiştirir.
 
     Args:
-        template: Raw template text.
-        context: Values to substitute, keyed by placeholder name.
-        strict: When True, raise instead of logging when a placeholder has no
-            supplied value. Production rendering always leaves an unmatched
-            placeholder verbatim so a partially supplied context stays
-            readable instead of going blank; ``strict`` exists for tests that
-            want to assert every declared placeholder is actually supplied.
+        template: Ham şablon metni.
+        context: Yer tutucu adına göre anahtarlanmış, yerine konacak değerler.
+        strict: True olduğunda, bir yer tutucunun sağlanan değeri yoksa
+            loglamak yerine hata fırlatır. Üretim render'ı, eşleşmeyen bir
+            yer tutucuyu her zaman olduğu gibi bırakır, böylece kısmen
+            sağlanmış bir bağlam boş kalmak yerine okunabilir kalır;
+            ``strict``, beyan edilen her yer tutucunun gerçekten
+            sağlandığını doğrulamak isteyen testler için vardır.
 
     Returns:
-        The rendered text.
+        Render edilmiş metin.
 
     Raises:
-        KeyError: If ``strict`` is True and a placeholder has no matching key.
+        KeyError: ``strict`` True ise ve bir yer tutucunun eşleşen bir
+            anahtarı yoksa.
     """
 
     def _replace(match: re.Match[str]) -> str:
@@ -88,27 +92,27 @@ def render_placeholders(
 
 
 class PromptManager:
-    """Loads, caches and renders prompt templates from disk.
+    """Prompt şablonlarını diskten yükler, önbelleğe alır ve render eder.
 
-    Decouples prompt text from application code and keeps JSON examples inside
-    templates safe from brace-based formatting.
+    Prompt metnini uygulama kodundan ayırır ve şablonların içindeki JSON
+    örneklerini küme parantezi tabanlı biçimlendirmeye karşı güvenli tutar.
     """
 
     def __init__(self, templates_dir: Optional[str] = None):
-        """Initialize Prompt Manager.
+        """Prompt Manager'ı başlatır.
 
         Args:
-            templates_dir: Optional path to the templates folder. Defaults to the
-                ``templates`` folder next to this file.
+            templates_dir: Şablonlar klasörüne isteğe bağlı yol. Varsayılan
+                olarak bu dosyanın yanındaki ``templates`` klasörü kullanılır.
         """
         self.templates_dir = templates_dir or os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "templates"
         )
-        #: name -> (content, version). ``version`` is a short content hash,
-        #: not a mtime -- deterministic across machines/checkouts, and
-        #: identical for byte-identical templates, which is what
-        #: ``GuardrailEventModel.prompt_template_version`` actually wants to
-        #: know ("which revision produced this decision").
+        #: ad -> (içerik, sürüm). ``version``, bir mtime değil kısa bir
+        #: içerik hash'idir -- makineler/checkout'lar arasında deterministik
+        #: ve bayt bayt aynı şablonlar için özdeştir; bu da
+        #: ``GuardrailEventModel.prompt_template_version``'ın gerçekte bilmek
+        #: istediği şeydir ("bu kararı hangi revizyon üretti").
         self._cache: Dict[str, Tuple[str, str]] = {}
         logger.info("Initialized PromptManager with templates_dir: %s", self.templates_dir)
 
@@ -136,65 +140,66 @@ class PromptManager:
         return content, version
 
     def get_template(self, name: str) -> str:
-        """Read a prompt template from disk, or return the cached copy.
+        """Diskten bir prompt şablonu okur, ya da önbellekteki kopyayı döndürür.
 
         Args:
-            name: Template name, with or without the ``.md`` extension.
+            name: ``.md`` uzantılı veya uzantısız şablon adı.
 
         Returns:
-            The template text.
+            Şablon metni.
 
         Raises:
-            FileNotFoundError: If no such template exists.
+            FileNotFoundError: Böyle bir şablon yoksa.
         """
         base_name = name if name.endswith(".md") else f"{name}.md"
         content, _ = self._load(base_name)
         return content
 
     def get_template_version(self, name: str) -> str:
-        """Return the loaded template's content-hash version.
+        """Yüklenen şablonun içerik hash'i sürümünü döndürür.
 
         Args:
-            name: Template name, with or without the ``.md`` extension.
+            name: ``.md`` uzantılı veya uzantısız şablon adı.
 
         Returns:
-            A short, deterministic hash of the template's current content --
-            what ``GuardrailEventModel.prompt_template_version`` records
-            alongside a guardrail decision.
+            Şablonun güncel içeriğinin kısa, deterministik bir hash'i --
+            ``GuardrailEventModel.prompt_template_version``'ın bir guardrail
+            kararının yanına kaydettiği değer.
 
         Raises:
-            FileNotFoundError: If no such template exists.
+            FileNotFoundError: Böyle bir şablon yoksa.
         """
         base_name = name if name.endswith(".md") else f"{name}.md"
         _, version = self._load(base_name)
         return version
 
     def render(self, name: str, *, strict: bool = False, **kwargs: Any) -> str:
-        """Load a template and substitute its ``{{variable}}`` placeholders.
+        """Bir şablonu yükler ve ``{{variable}}`` yer tutucularını değiştirir.
 
         Args:
-            name: Template name.
-            strict: See :func:`render_placeholders`.
-            **kwargs: Placeholder values.
+            name: Şablon adı.
+            strict: Bkz. :func:`render_placeholders`.
+            **kwargs: Yer tutucu değerleri.
 
         Returns:
-            The rendered prompt.
+            Render edilmiş prompt.
         """
         return render_placeholders(self.get_template(name), kwargs, strict=strict)
 
     def clear_cache(self) -> None:
-        """Clear the template cache."""
+        """Şablon önbelleğini temizler."""
         self._cache.clear()
         logger.debug("PromptManager cache cleared.")
 
 
-#: Templates are read-only at runtime, so one manager per process is enough and
-#: saves every agent constructor a directory stat.
+#: Şablonlar çalışma zamanında salt okunurdur, bu yüzden süreç başına bir
+#: yönetici yeterlidir ve her agent constructor'ının bir dizin stat çağrısı
+#: yapmasını önler.
 _default_manager: Optional[PromptManager] = None
 
 
 def get_prompt_manager() -> PromptManager:
-    """Return the process-wide PromptManager."""
+    """Süreç genelindeki PromptManager'ı döndürür."""
     global _default_manager
     if _default_manager is None:
         _default_manager = PromptManager()

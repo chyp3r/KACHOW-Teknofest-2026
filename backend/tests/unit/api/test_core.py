@@ -133,7 +133,7 @@ def test_validation_exception_handling():
     assert json_data["error"]["code"] == "VALIDATION_ERROR"
     assert (
         json_data["error"]["message"]
-        == "Input validation failed."
+        == "Girdi doğrulaması başarısız oldu."
     )
     assert "validation_errors" in json_data["error"]["details"]
 
@@ -151,7 +151,7 @@ def test_generic_exception_handling():
     assert json_data["error"]["code"] == "INTERNAL_SERVER_ERROR"
     assert (
         json_data["error"]["message"]
-        == "An unexpected internal server error occurred."
+        == "Beklenmeyen bir dahili sunucu hatası oluştu."
     )
     assert json_data["error"]["details"]["error_type"] == "ValueError"
 

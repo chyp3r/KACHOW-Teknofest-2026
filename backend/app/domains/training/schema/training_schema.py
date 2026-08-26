@@ -5,7 +5,7 @@ from pydantic import BaseModel
 
 
 class TrainingSampleResponse(BaseModel):
-    """Pydantic schema for one compiled preference-pair sample."""
+    """Derlenmiş bir tercih-çifti örneği için Pydantic şeması."""
 
     model_config = {"from_attributes": True}
 
@@ -23,7 +23,7 @@ class TrainingSampleResponse(BaseModel):
 
 
 class TrainingSampleStatsResponse(BaseModel):
-    """Pydantic schema for `GET /companies/{id}/training-samples/stats`."""
+    """`GET /companies/{id}/training-samples/stats` için Pydantic şeması."""
 
     total: int
     by_source: dict[str, int]
@@ -32,7 +32,7 @@ class TrainingSampleStatsResponse(BaseModel):
 
 
 class TrainingRunResponse(BaseModel):
-    """Pydantic schema for one training run."""
+    """Bir eğitim çalıştırması için Pydantic şeması."""
 
     model_config = {"from_attributes": True}
 

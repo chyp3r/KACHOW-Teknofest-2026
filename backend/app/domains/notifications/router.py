@@ -17,8 +17,8 @@ from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 logger = logging.getLogger(__name__)
 
-# Authentication is mandatory (see require_auth_if_enabled) -- every route in
-# this router carries a real, tenant-bound current_user.
+# Kimlik doğrulama zorunludur (bkz. require_auth_if_enabled) -- bu router'daki
+# her rota gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/notifications", tags=["notifications"], dependencies=[Depends(require_auth_if_enabled)]
 )
@@ -35,7 +35,7 @@ async def list_notifications(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """The caller's own notifications, newest first."""
+    """Çağıranın kendi bildirimleri, en yeniden en eskiye."""
     service = _service(db)
     items, total = await service.list_for_user(
         current_user.company_id,
@@ -61,7 +61,7 @@ async def read_notification(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark one notification as read."""
+    """Tek bir bildirimi okundu olarak işaretler."""
     service = _service(db)
     notification = await service.mark_read(notification_id, current_user.company_id, current_user.id)
     return SuccessResponse(data=NotificationResponse.model_validate(notification).model_dump(mode="json"))
@@ -72,17 +72,19 @@ async def read_all_notifications(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark every unread notification of the caller as read."""
+    """Çağıranın okunmamış tüm bildirimlerini okundu olarak işaretler."""
     service = _service(db)
     count = await service.mark_all_read(current_user.company_id, current_user.id)
     return SuccessResponse(data={"marked_read": count})
 
 
-#: How long a single `get_message` poll blocks before the loop re-checks for
-#: client disconnect and sends a keep-alive comment -- long enough to not
-#: busy-loop, short enough that a dropped connection is noticed promptly and
-#: an idle proxy connection doesn't time out (mirrors `chat/router.py`'s own
-#: disconnect-polling cadence, just event-driven instead of generator-driven).
+#: Döngünün istemci bağlantısının kesilip kesilmediğini yeniden kontrol edip
+#: bir keep-alive yorumu göndermeden önce tek bir `get_message` sorgulamasının
+#: ne kadar bloke olacağı -- meşgul döngüye girmeyecek kadar uzun, kopan bir
+#: bağlantının hızlıca fark edilmesini ve boşta bekleyen bir proxy bağlantısının
+#: zaman aşımına uğramamasını sağlayacak kadar kısa (`chat/router.py`'nin kendi
+#: bağlantı kesme sorgulama ritmini yansıtır, sadece generator yerine olay
+#: tabanlıdır).
 _POLL_TIMEOUT_SECONDS = 20.0
 
 
@@ -91,17 +93,17 @@ async def stream_notifications(
     http_request: Request,
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Live-push notification stream over SSE.
+    """SSE üzerinden canlı bildirim akışı.
 
-    Backed by Redis pub/sub (`RedisCache.publish`/`NotificationService.
-    create`), not the process-wide in-memory `EventBus` alone -- a multi-
-    worker uvicorn deployment would otherwise drop any notification
-    published from a worker other than the one holding this connection (see
-    the tenancy plan's own risk note on this). A dropped or never-received
-    live push is never data loss: the notification row already exists by
-    the time it's published (see `NotificationService.create`), so
-    `GET /notifications` always has it regardless of whether this stream
-    was even connected.
+    Süreç geneli bellek içi `EventBus`'ın tek başına değil, Redis pub/sub
+    (`RedisCache.publish`/`NotificationService.create`) tarafından
+    desteklenir -- aksi halde çok işçili (multi-worker) bir uvicorn
+    dağıtımı, bu bağlantıyı tutan işçi dışındaki bir işçiden yayınlanan her
+    bildirimi kaybederdi (bkz. kiracılık planının bu konudaki risk notu).
+    Kaçırılan veya hiç alınmayan bir canlı bildirim asla veri kaybı değildir:
+    bildirim satırı yayınlandığı anda zaten mevcuttur (bkz.
+    `NotificationService.create`), bu yüzden bu akış bağlı olsa da olmasa da
+    `GET /notifications` her zaman bu bildirime sahiptir.
     """
     cache = get_cache()
     await cache.connect()

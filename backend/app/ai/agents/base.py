@@ -11,27 +11,28 @@ from app.observability.ai_metrics import LLM_DURATION, LLM_TOKENS, STRUCT_RETRIE
 
 logger = logging.getLogger(__name__)
 
-#: Two attempts, not three. Every retry re-runs a full local generation; on
-#: consumer hardware a third attempt costs more wall-clock time than the caller's
-#: whole latency budget and almost never succeeds where the second failed.
+#: İki deneme, üç değil. Her tekrar deneme yerelde tam bir üretimi baştan
+#: çalıştırır; tüketici donanımda üçüncü deneme, çağıranın toplam gecikme
+#: bütçesinden daha fazla duvar-saati harcar ve ikincisinin başarısız olduğu
+#: yerde neredeyse hiçbir zaman başarılı olmaz.
 DEFAULT_MAX_RETRIES = 2
 
 
 class BaseAgent(ABC):
-    """Base class for the specialized agents in the multi-agent system.
+    """Çoklu ajan sistemindeki uzmanlaşmış ajanlar için temel sınıf.
 
-    Responsibilities:
+    Sorumluluklar:
 
-    1. **Unified messaging** -- accepts a single prompt or a message history.
-    2. **Prompt rendering** -- substitutes ``{{variable}}`` placeholders. This is
-       deliberately *not* :meth:`str.format`: the prompt templates contain
-       literal JSON examples with single braces, so ``format`` raises ``KeyError``
-       on them and the previous implementation swallowed that error and silently
-       shipped an unrendered prompt.
-    3. **Guardrails** -- optional post-generation validators.
-    4. **Observability** -- per-call latency logging.
-    5. **Self-correction** -- bounded retry with error feedback when structured
-       output fails schema validation.
+    1. **Birleşik mesajlaşma** -- tek bir prompt veya bir mesaj geçmişi kabul eder.
+    2. **Prompt render etme** -- ``{{variable}}`` yer tutucularını yerine koyar.
+       Bu, bilinçli olarak :meth:`str.format` KULLANMAZ: prompt şablonları tek
+       süslü parantezli literal JSON örnekleri içerir, bu yüzden ``format`` bunlar
+       üzerinde ``KeyError`` fırlatır ve önceki uygulama bu hatayı yutup sessizce
+       render edilmemiş bir prompt'u gönderiyordu.
+    3. **Guardrail'ler** -- üretim sonrası opsiyonel doğrulayıcılar.
+    4. **Gözlemlenebilirlik** -- çağrı başına gecikme loglaması.
+    5. **Kendi kendini düzeltme** -- yapılandırılmış çıktı şema doğrulamasında
+       başarısız olduğunda hata geri bildirimiyle sınırlı tekrar deneme.
     """
 
     def __init__(
@@ -42,14 +43,14 @@ class BaseAgent(ABC):
         system_prompt: str,
         validators: Optional[List[Callable[[str], None]]] = None,
     ):
-        """Initialize the Base Agent.
+        """Temel Ajan'ı başlatır.
 
         Args:
-            llm_client: The LLM provider client conforming to BaseLLMClient.
-            name: Human-readable name of the agent (e.g., "ClassifierAgent").
-            description: Quick summary of what this agent does.
-            system_prompt: Base instructions, optionally with ``{{placeholders}}``.
-            validators: Optional post-generation validator functions.
+            llm_client: BaseLLMClient'a uyan LLM sağlayıcı istemcisi.
+            name: Ajanın insan tarafından okunabilir adı (örn. "ClassifierAgent").
+            description: Bu ajanın ne yaptığına dair kısa özet.
+            system_prompt: İsteğe bağlı ``{{placeholders}}`` içeren temel talimatlar.
+            validators: Opsiyonel üretim sonrası doğrulayıcı fonksiyonlar.
         """
         self.llm_client = llm_client
         self.name = name
@@ -59,15 +60,15 @@ class BaseAgent(ABC):
         logger.info("Initialized Agent [%s]: %s", self.name, self.description)
 
     def _render_system_prompt(self, context: Optional[Dict[str, Any]] = None) -> str:
-        """Substitute ``{{variable}}`` placeholders in the system prompt.
+        """Sistem prompt'undaki ``{{variable}}`` yer tutucularını yerine koyar.
 
         Args:
-            context: Values to inject. ``None`` returns the template untouched.
+            context: Enjekte edilecek değerler. ``None`` şablonu değiştirmeden döndürür.
 
         Returns:
-            The rendered prompt. Unknown placeholders are left in place rather
-            than raising, so a partially supplied context still produces a usable
-            prompt instead of a silently blank one.
+            Render edilmiş prompt. Bilinmeyen yer tutucular hata fırlatmak yerine
+            olduğu gibi bırakılır; böylece kısmen sağlanmış bir bağlam bile
+            sessizce boş bir prompt yerine kullanılabilir bir prompt üretir.
         """
         if not context:
             return self.system_prompt
@@ -78,21 +79,21 @@ class BaseAgent(ABC):
         messages: Union[str, List[Dict[str, str]]],
         context: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, str]]:
-        """Build the message list, prefixing the rendered system prompt.
+        """Render edilmiş sistem prompt'unu başa ekleyerek mesaj listesini oluşturur.
 
         Args:
-            messages: Prompt string or message history list.
-            context: Variables to inject into the system prompt template.
+            messages: Prompt string'i veya mesaj geçmişi listesi.
+            context: Sistem prompt şablonuna enjekte edilecek değişkenler.
 
         Returns:
-            A message list beginning with exactly one system message.
+            Tam olarak bir sistem mesajıyla başlayan bir mesaj listesi.
         """
         prepared = [{"role": "system", "content": self._render_system_prompt(context)}]
 
         if isinstance(messages, str):
             prepared.append({"role": "user", "content": messages})
         else:
-            # Drop any caller-supplied system turns; the agent owns that slot.
+            # Çağıranın sağladığı sistem turlarını at; bu slot ajana aittir.
             prepared.extend(
                 msg for msg in messages if msg.get("role") != "system"
             )
@@ -100,13 +101,13 @@ class BaseAgent(ABC):
         return prepared
 
     def _record_tokens(self, prepared: List[Dict[str, str]], output: str) -> None:
-        """Increment ``LLM_TOKENS`` for one completed call.
+        """Tamamlanan bir çağrı için ``LLM_TOKENS``'ı artırır.
 
         Args:
-            prepared: The exact message list sent to the provider (the
-                largest the prompt gets this call -- what a context-overflow
-                risk needs sizing against).
-            output: The generated text.
+            prepared: Sağlayıcıya gönderilen tam mesaj listesi (bu çağrıda
+                prompt'un ulaştığı en büyük boyut -- bir bağlam taşması
+                riskinin karşılaştırılması gereken değer).
+            output: Üretilen metin.
         """
         prompt_text = "\n".join(msg.get("content", "") for msg in prepared)
         LLM_TOKENS.labels(agent=self.name, kind="prompt").inc(
@@ -124,20 +125,20 @@ class BaseAgent(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any,
     ) -> str:
-        """Execute the agent run and return the text response.
+        """Ajan çalıştırmasını gerçekleştirir ve metin yanıtını döndürür.
 
         Args:
-            messages: Prompt string or message history list.
-            context: Variables to inject into the system prompt template.
-            temperature: Generation temperature.
-            max_tokens: Limit on maximum tokens.
-            **kwargs: Extra model/provider configurations.
+            messages: Prompt string'i veya mesaj geçmişi listesi.
+            context: Sistem prompt şablonuna enjekte edilecek değişkenler.
+            temperature: Üretim sıcaklığı.
+            max_tokens: Maksimum token sınırı.
+            **kwargs: Ek model/sağlayıcı yapılandırmaları.
 
         Returns:
-            The generated text.
+            Üretilen metin.
 
         Raises:
-            Exception: Whatever the provider or a validator raised.
+            Exception: Sağlayıcının veya bir doğrulayıcının fırlattığı her ne ise.
         """
         start_time = time.perf_counter()
         prepared = self._prepare_messages(messages, context)
@@ -178,28 +179,28 @@ class BaseAgent(ABC):
         max_retries: int = DEFAULT_MAX_RETRIES,
         **kwargs: Any,
     ) -> Any:
-        """Execute the agent and validate the output against a Pydantic model.
+        """Ajanı çalıştırır ve çıktıyı bir Pydantic modeline karşı doğrular.
 
-        On failure the agent retries with a correction note appended. The note
-        replaces the previous one instead of stacking: the original
-        implementation appended to the same list every round, so by the third
-        attempt the (potentially multi-thousand-token) source document was being
-        re-sent three times over.
+        Başarısızlıkta ajan, eklenen bir düzeltme notuyla tekrar dener. Not, üst
+        üste yığılmak yerine bir öncekinin yerine geçer: orijinal uygulama her
+        turda aynı listeye ekleme yapıyordu, bu yüzden üçüncü denemeye
+        gelindiğinde (potansiyel olarak binlerce token'lık) kaynak belge üç kez
+        yeniden gönderiliyordu.
 
         Args:
-            messages: Prompt string or message history list.
-            response_model: Pydantic model class to validate the output against.
-            context: Variables to inject into the system prompt template.
-            temperature: Generation temperature.
-            max_retries: Total number of attempts, including the first.
-            **kwargs: Extra model/provider configurations.
+            messages: Prompt string'i veya mesaj geçmişi listesi.
+            response_model: Çıktının doğrulanacağı Pydantic model sınıfı.
+            context: Sistem prompt şablonuna enjekte edilecek değişkenler.
+            temperature: Üretim sıcaklığı.
+            max_retries: İlki dahil toplam deneme sayısı.
+            **kwargs: Ek model/sağlayıcı yapılandırmaları.
 
         Returns:
-            A validated ``response_model`` instance.
+            Doğrulanmış bir ``response_model`` örneği.
 
         Raises:
-            Exception: The last provider or validation error, if every attempt
-                failed.
+            Exception: Her deneme başarısız olduysa, sağlayıcının veya
+                doğrulamanın verdiği son hata.
         """
         start_time = time.perf_counter()
         base_messages = self._prepare_messages(messages, context)
@@ -277,17 +278,17 @@ class BaseAgent(ABC):
         max_tokens: Optional[int] = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Stream the agent response chunk-by-chunk.
+        """Ajan yanıtını parça parça (chunk-by-chunk) stream eder.
 
         Args:
-            messages: Prompt string or message history list.
-            context: Variables to inject into the system prompt template.
-            temperature: Generation temperature.
-            max_tokens: Limit on maximum tokens.
-            **kwargs: Extra model/provider configurations.
+            messages: Prompt string'i veya mesaj geçmişi listesi.
+            context: Sistem prompt şablonuna enjekte edilecek değişkenler.
+            temperature: Üretim sıcaklığı.
+            max_tokens: Maksimum token sınırı.
+            **kwargs: Ek model/sağlayıcı yapılandırmaları.
 
         Returns:
-            An async iterator of text chunks.
+            Metin parçalarının async iterator'ü.
         """
         prepared = self._prepare_messages(messages, context)
         return self.llm_client.stream(

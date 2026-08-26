@@ -1,41 +1,44 @@
-"""The revision sub-graph: a real LangGraph workflow mirroring draft_graph's
-own verify/repair loop and observability, instead of the single hand-rolled
-function ``run_revise`` used to be.
+"""Revizyon alt-grafiği: eski tek parça el yapımı ``run_revise`` fonksiyonu
+yerine, draft_graph'ın kendi doğrulama/onarım döngüsünü ve gözlemlenebilirliğini
+yansıtan gerçek bir LangGraph iş akışı.
 
-Unlike ``draft_graph`` (classify -> write -> verify -> reflexion loop),
-revise never re-classifies -- it operates directly on
-``SessionFocus.active_draft``, the text the user already saw and is asking
-to change. It does now conditionally re-retrieve legislation (see
-``app.ai.revision.retrieval``) and now carries the same verification
-guarantees ``draft_graph.verify_node`` has always had (PII gate, fallback
-correspondence-type gate, few-shot leak detection, a bounded repair loop)
-that the old single-call implementation did not::
+``draft_graph``'tan (sınıflandır -> yaz -> doğrula -> refleksiyon döngüsü)
+farklı olarak, revize asla yeniden sınıflandırma yapmaz -- doğrudan
+``SessionFocus.active_draft`` üzerinde çalışır, yani kullanıcının zaten
+gördüğü ve değiştirilmesini istediği metin üzerinde. Artık koşullu olarak
+mevzuatı yeniden getirebilir (bkz. ``app.ai.revision.retrieval``) ve eski
+tek-çağrılı uygulamanın sahip olmadığı, ``draft_graph.verify_node``'un her
+zaman sahip olduğu aynı doğrulama garantilerini taşır (KVK kapısı, yedek
+yazışma-türü kapısı, few-shot sızıntı tespiti, sınırlı bir onarım döngüsü)::
 
-    START -> parse -> retrieve_context -> rewrite -+-> verify -+-> repair -> rewrite (bounded)
+    START -> parse -> retrieve_context -> rewrite -+-> verify -+-> repair -> rewrite (sınırlı)
                                                      \\-> end     |-> needs_input -> END
                                                                   \\-> audit -> END
 
-Two invariants this graph never violates:
+Bu grafiğin asla ihlal etmediği iki değişmez kural:
 
-1. **User instruction supremacy.** The instruction is applied verbatim in
-   ``rewrite`` before anything else runs. Nothing downstream (``verify``,
-   ``repair``, ``audit``) can revert or soften it -- ``repair`` only fixes
-   *deterministic/judge defects* (unsupported claims, missing structure),
-   never the user's own request, and ``audit`` only attaches warnings (see
-   ``app.ai.revision.conflict``'s ``applied_anyway`` invariant).
-2. **Structural no-drift guarantee.** When the instruction decomposes into
-   located spans, each rewrite is spliced back with ``_merge`` -- the
-   untouched surrounding text is never reproduced by the model, so it
-   cannot silently drift (see ``app.ai.revision.instruction`` module
-   docstring). Multiple spans are applied right-to-left against the
-   *original* draft so earlier (leftward) offsets are never invalidated by
-   a later (rightward) splice. The two paths that regenerate the *whole*
-   draft instead (no target span located; any repair-loop pass) have no
-   splice to fall back on, so they get a deterministic backstop instead --
-   ``verify`` runs ``app.ai.revision.elision.detect_content_loss`` against
-   the turn's true starting draft on every pass, catching a model that
-   elided real (already-filled-in) content with an ellipsis/shorthand
-   instead of reproducing it.
+1. **Kullanıcı talimatının üstünlüğü.** Talimat, başka hiçbir şey
+   çalışmadan önce ``rewrite`` içinde harfiyen uygulanır. Sonrasındaki hiçbir
+   adım (``verify``, ``repair``, ``audit``) bunu geri alamaz veya
+   yumuşatamaz -- ``repair`` yalnızca *deterministik/yargıç kusurlarını*
+   (desteklenmeyen iddialar, eksik yapı) düzeltir, asla kullanıcının kendi
+   talebini değil; ``audit`` ise yalnızca uyarılar ekler (bkz.
+   ``app.ai.revision.conflict`` modülünün ``applied_anyway`` değişmez
+   kuralı).
+2. **Yapısal kayma-yok garantisi.** Talimat, konumlandırılmış aralıklara
+   ayrıştığında, her yeniden yazım ``_merge`` ile geri eklenir -- model,
+   dokunulmamış çevre metni asla yeniden üretmez, dolayısıyla sessizce
+   kayamaz (bkz. ``app.ai.revision.instruction`` modül dokümantasyonu).
+   Birden fazla aralık, *orijinal* taslağa karşı sağdan sola uygulanır;
+   böylece daha soldaki (erken) uzaklıklar, daha sonraki (sağdaki) bir
+   eklemeyle asla geçersiz kılınmaz. Bunun yerine taslağın *tamamını*
+   yeniden üreten iki yol (hedef aralık bulunamadığında; herhangi bir
+   onarım-döngüsü geçişinde) geri dönecek bir eklemeye sahip değildir, bu
+   yüzden onun yerine deterministik bir yedek alırlar -- ``verify``, her
+   geçişte turun gerçek başlangıç taslağına karşı
+   ``app.ai.revision.elision.detect_content_loss``'u çalıştırır ve gerçek
+   (zaten doldurulmuş) içeriği bir üç nokta/kısaltma ile atlayan, onu
+   yeniden üretmek yerine silen bir modeli yakalar.
 """
 
 import asyncio
@@ -114,62 +117,68 @@ logger = logging.getLogger(__name__)
 
 
 class ReviseState(TypedDict, total=False):
-    """LangGraph state for the revision workflow."""
+    """Revizyon iş akışı için LangGraph durumu."""
 
-    #: Input, set once by the caller and never mutated by any node.
+    #: Girdi, çağıran tarafından bir kez ayarlanır ve hiçbir düğüm tarafından
+    #: değiştirilmez.
     active_draft: DraftVersion
     instructions: str
     reasoning_level: str
-    #: Which tenant this revision is for -- read by `rewrite_node` to resolve
-    #: this company's runtime style adapter (Faz C2, see `adapter_provider`
-    #: on `create_revise_graph`). Absent/empty behaves exactly like no
-    #: adapter configured, never an error.
+    #: Bu revizyonun hangi kiracı (tenant) için olduğu -- `rewrite_node`
+    #: tarafından bu şirketin çalışma zamanı üslup adaptörünü çözmek için
+    #: okunur (Faz C2, bkz. `create_revise_graph` üzerindeki
+    #: `adapter_provider`). Yok/boş, yapılandırılmış bir adaptör yokmuş gibi
+    #: davranır, asla hata vermez.
     company_id: str
-    #: Today's date (see app.ai.workflows.dates.today_tr), read by
-    #: `verify_node`'s date-placeholder backstop -- a revision keeps the
-    #: original draft's date unchanged by construction (see this module's
-    #: own anti-date-change rule), so this only ever fires if a rewrite
-    #: pass reintroduces a "Tarih:" placeholder.
+    #: Bugünün tarihi (bkz. app.ai.workflows.dates.today_tr),
+    #: `verify_node`'un tarih-yer tutucu yedek mekanizması tarafından okunur
+    #: -- bir revizyon, yapısı gereği orijinal taslağın tarihini değiştirmeden
+    #: korur (bkz. bu modülün kendi tarih-değiştirme-karşıtı kuralı), bu
+    #: yüzden bu yalnızca bir yeniden yazım geçişi bir "Tarih:" yer tutucusunu
+    #: yeniden getirdiğinde devreye girer.
     today: str
 
-    #: Set by `parse`.
+    #: `parse` tarafından ayarlanır.
     instruction: RevisionInstruction
     directives: list[EditDirective]
     targets: list[Optional[TargetSpan]]
-    #: Whether the multi-directive path is safe to use (every directive
-    #: located a span) -- False falls back to a single whole/first-directive
-    #: rewrite, the same safe default a single-clause instruction gets.
+    #: Çoklu-direktif yolunun kullanımının güvenli olup olmadığı (her
+    #: direktif bir aralık bulduysa) -- False, tek-cümlecik bir talimatın
+    #: aldığı aynı güvenli varsayılana, tek bir tüm/ilk-direktif yeniden
+    #: yazımına düşer.
     multi_directive_ok: bool
     correspondence_type: str
     correspondence_type_source: str
     correspondence_sub_genre: str
 
-    #: Set by `retrieve_context`.
+    #: `retrieve_context` tarafından ayarlanır.
     context: str
     retrieval_meta: dict[str, Any]
 
-    #: Set by `rewrite`.
+    #: `rewrite` tarafından ayarlanır.
     draft: str
     previous_draft: str
     attempts: int
     error: str
-    #: The resolved adapter (`CompanyAdapter.to_dict()`), carried forward so
-    #: `verify` can fold `preferred_examples` into the same
-    #: `ornek_sizintisi` leak check `style_examples` already goes through,
-    #: without re-resolving it a second time.
+    #: Çözümlenmiş adaptör (`CompanyAdapter.to_dict()`), `verify`'ın
+    #: `preferred_examples`'ı `style_examples`'ın zaten geçtiği aynı
+    #: `ornek_sizintisi` sızıntı kontrolüne katabilmesi için, ikinci kez
+    #: yeniden çözümlemeden taşınır.
     company_adapter: dict[str, Any]
-    #: The resolved mandatory rule set (`CompanyRuleSet.to_dict()`), carried
-    #: forward so `verify` can render the same rules block for the judge
-    #: without re-resolving. Absent/empty behaves like no rules configured.
+    #: Çözümlenmiş zorunlu kural seti (`CompanyRuleSet.to_dict()`),
+    #: `verify`'ın yargıç için aynı kurallar bloğunu yeniden çözümlemeden
+    #: render edebilmesi için taşınır. Yok/boş, yapılandırılmış kural yokmuş
+    #: gibi davranır.
     company_rules: dict[str, Any]
-    #: The resolved identity profile (`CompanyProfile.to_dict()`), set once
-    #: by `rewrite` and carried forward so `verify` can pass the same
-    #: values to `verify_draft` as `trusted_facts` without re-resolving --
-    #: mirrors draft_graph.DraftState's own field of the same name. Absent/
-    #: empty behaves like no profile configured, never an error.
+    #: Çözümlenmiş kimlik profili (`CompanyProfile.to_dict()`), `rewrite`
+    #: tarafından bir kez ayarlanır ve `verify`'ın aynı değerleri
+    #: `verify_draft`'a `trusted_facts` olarak yeniden çözümlemeden
+    #: geçirebilmesi için taşınır -- draft_graph.DraftState'in aynı isimli
+    #: kendi alanını yansıtır. Yok/boş, yapılandırılmış profil yokmuş gibi
+    #: davranır, asla hata vermez.
     company_profile: dict[str, Any]
 
-    #: Set by `verify`.
+    #: `verify` tarafından ayarlanır.
     confidence_score: float
     combined_score: float
     requires_human_approval: bool
@@ -182,15 +191,15 @@ class ReviseState(TypedDict, total=False):
     pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
-    #: See draft_graph.DraftState's own field of the same name.
+    #: draft_graph.DraftState'in aynı isimli kendi alanına bakın.
     applied_rules: list[dict[str, Any]]
-    #: See draft_graph.DraftState's own field of the same name (C2/C3, see
-    #: app.ai.workflows.attempt_tracking).
+    #: draft_graph.DraftState'in aynı isimli kendi alanına bakın (C2/C3,
+    #: bkz. app.ai.workflows.attempt_tracking).
     best_attempt: dict[str, Any]
-    #: See draft_graph.DraftState's own field of the same name (C3).
+    #: draft_graph.DraftState'in aynı isimli kendi alanına bakın (C3).
     restored_from_best_attempt: bool
 
-    #: Set by `audit`.
+    #: `audit` tarafından ayarlanır.
     conflicts: list[dict[str, Any]]
     conflict_notes: str
     changelog: dict[str, Any]
@@ -208,30 +217,30 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
 def _build_brief(
     active_draft: DraftVersion, context: str, profile: Optional[CompanyProfile] = None
 ) -> str:
-    """The grounding brief handed to every reviser/judge call this run.
+    """Bu turdaki her reviser/yargıç çağrısına verilen dayanak brief'i.
 
-    Rebuilt from ``context`` (not cached) so a conditional re-retrieval
-    (see ``app.ai.revision.retrieval``) is reflected in every downstream
-    prompt, not just the first one.
+    ``context``'ten (önbelleklenmeden) yeniden oluşturulur, böylece koşullu
+    bir yeniden getirim (bkz. ``app.ai.revision.retrieval``) yalnızca ilk
+    değil, sonraki her prompt'a da yansır.
 
     Args:
-        active_draft: The version being revised.
-        context: The (possibly re-retrieved) legislation context.
-        profile: The requesting company's identity profile (see
-            ``app.ai.identity.company_profile.CompanyProfile``), or None.
-            Rendered as its own section when non-empty (see
-            ``format_identity_brief_section``) -- mirrors
-            ``draft_graph._build_brief``'s identical section, since a
-            repair pass needing to add a missing antet/imza block deserves
-            the same system-verified identity the original draft had,
-            not silence on who "we" are.
+        active_draft: Revize edilen sürüm.
+        context: (Muhtemelen yeniden getirilmiş) mevzuat bağlamı.
+        profile: İsteği yapan şirketin kimlik profili (bkz.
+            ``app.ai.identity.company_profile.CompanyProfile``), veya None.
+            Boş değilse kendi bölümü olarak render edilir (bkz.
+            ``format_identity_brief_section``) -- ``draft_graph._build_brief``'in
+            aynı bölümünü yansıtır, çünkü eksik bir antet/imza bloğu eklemesi
+            gereken bir onarım geçişi, orijinal taslağın sahip olduğu aynı
+            sistem-doğrulanmış kimliği hak eder, "biz" kimiz konusunda
+            sessizlik değil.
     """
     fields = _coerce_fields(active_draft.classification)
-    # Mirrors draft_graph._build_brief's own section 3/4 "KARŞI TARAFA
-    # AİTTİR" framing -- without this, a repair pass asked to add a
-    # missing structural element (an antet, a signature block) had no
-    # party-model guidance at all, since _coerce_fields was defined here
-    # but never actually used until now.
+    # draft_graph._build_brief'in kendi 3/4. bölüm "KARŞI TARAFA AİTTİR"
+    # çerçevesini yansıtır -- bu olmadan, eksik bir yapısal öğe (bir antet,
+    # bir imza bloğu) eklemesi istenen bir onarım geçişinin hiçbir taraf
+    # modeli rehberliği olmazdı, çünkü _coerce_fields burada tanımlanmış
+    # ama şimdiye kadar hiç kullanılmamıştı.
     party_note = (
         "3. GELEN EVRAKIN KİMLİK BİLGİLERİ -- KARŞI TARAFA AİTTİR (bu alanlar bizim "
         "antet/imza bloğumuza veya gönderen kurum alanımıza ASLA yazılamaz, yalnızca "
@@ -243,13 +252,13 @@ def _build_brief(
     )
     rejection_note = ""
     if active_draft.status == "REJECTED" and active_draft.rejection_reason:
-        # `active_draft` can itself be a previously rejected version (see
-        # app.ai.session.focus's own docstring on _ARCHIVE_ONLY_DRAFT_STATUSES
-        # -- a reject no longer clears active_draft, it stays revisable).
-        # Surfacing why it was rejected keeps this revision targeted at that
-        # one complaint instead of treating the whole text as suspect, which
-        # is exactly what the reviser's own "yalnızca kusur listesindeki
-        # maddeleri gider" contract already expects of it.
+        # `active_draft` daha önce reddedilmiş bir sürüm olabilir (bkz.
+        # app.ai.session.focus'un _ARCHIVE_ONLY_DRAFT_STATUSES üzerindeki kendi
+        # dokümantasyonu -- bir ret artık active_draft'ı temizlemez, revize
+        # edilebilir kalır). Neden reddedildiğini göstermek, bu revizyonu tüm
+        # metni şüpheli saymak yerine tam o tek şikayete odaklı tutar; bu da
+        # reviser'ın kendi "yalnızca kusur listesindeki maddeleri gider"
+        # sözleşmesinin zaten ondan beklediği şeydir.
         rejection_note = (
             "6. Önceki Sürümün Reddedilme Gerekçesi (YALNIZCA bu noktaya "
             f"odaklan; metnin geri kalanındaki doğru bilgiyi koru): "
@@ -273,12 +282,13 @@ def _build_brief(
 
 
 def _format_style_examples_flat(texts: tuple[str, ...]) -> str:
-    """Render the draft's own style examples as a prompt block.
+    """Taslağın kendi üslup örneklerini bir prompt bloğu olarak render eder.
 
-    Flat text only (unlike draft_graph's richer per-example metadata
-    block) -- DraftVersion carries just the texts (see
-    ``app.ai.session.focus``), which is all ``verify_draft``'s leak
-    detection needs and all a revision's much shorter prompts need too.
+    Yalnızca düz metin (draft_graph'ın daha zengin, örnek-başına metadata
+    bloğunun aksine) -- DraftVersion yalnızca metinleri taşır (bkz.
+    ``app.ai.session.focus``), bu da ``verify_draft``'ın sızıntı tespitinin
+    ihtiyaç duyduğu ve bir revizyonun çok daha kısa prompt'larının da
+    ihtiyaç duyduğu tek şeydir.
     """
     if not texts:
         return ""
@@ -296,8 +306,8 @@ def _build_directive_prompt(
     brief: str, correspondence_type: str, sub_genre: str, style_examples: tuple[str, ...],
     adapter_block: str = "", rules_block: str = "",
 ) -> str:
-    """Compose the reviser's prompt for one directive, scoped to its target
-    span when one was found."""
+    """Reviser'ın bir direktif için prompt'unu oluşturur; bir hedef aralık
+    bulunmuşsa ona göre kapsamlandırılır."""
     if target is not None:
         scope_rule = (
             f"### DEĞİŞTİRİLECEK BÖLÜM (yalnızca bunu yeniden yaz):\n{target.text}\n\n"
@@ -343,8 +353,9 @@ def _build_repair_prompt(
     repair_items: list[dict[str, Any]], style_examples: tuple[str, ...],
     adapter_block: str = "", rules_block: str = "",
 ) -> str:
-    """Compose the repair prompt for a second-plus attempt, after `verify`
-    found deterministic/judge defects. Mirrors draft_graph._build_repair_prompt."""
+    """`verify` deterministik/yargıç kusurları bulduktan sonra, ikinci ve
+    sonraki denemeler için onarım prompt'unu oluşturur.
+    draft_graph._build_repair_prompt'u yansıtır."""
     numbered = "\n".join(
         f"{index}. [{item.get('kind')}] {item.get('detail')}"
         + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
@@ -386,51 +397,54 @@ def create_revise_graph(
     rules_provider: Optional[RulesProvider] = None,
     profile_provider: Optional[ProfileProvider] = None,
 ):
-    """Create and compile the revision workflow.
+    """Revizyon iş akışını oluşturur ve derler.
 
     Args:
-        llm_client: The quality-tier LLM used by the reviser and judge.
-        fast_llm_client: Optional fast-tier client for the fast reasoning
-            level, the judge and the conflict auditor. Falls back to
-            ``llm_client`` when omitted, same as ``draft_graph``.
-        mevzuat_retriever: Optional retriever for conditional legislation
-            re-retrieval (see ``app.ai.revision.retrieval``). None always
-            skips re-retrieval, reproducing pre-feature behaviour exactly.
-        adapter_provider: Optional async callable resolving a company's
-            runtime style adapter (Faz C2, see
+        llm_client: Reviser ve yargıç tarafından kullanılan kalite katmanı LLM.
+        fast_llm_client: Hızlı akıl yürütme seviyesi, yargıç ve çelişki
+            denetçisi için isteğe bağlı hızlı katman istemcisi. Belirtilmezse
+            ``draft_graph`` ile aynı şekilde ``llm_client``'a düşer.
+        mevzuat_retriever: Koşullu mevzuat yeniden getirimi için isteğe bağlı
+            retriever (bkz. ``app.ai.revision.retrieval``). None her zaman
+            yeniden getirimi atlar, özellik-öncesi davranışı birebir yeniden
+            üretir.
+        adapter_provider: Bir şirketin çalışma zamanı üslup adaptörünü
+            çözümleyen isteğe bağlı async çağrılabilir (Faz C2, bkz.
             ``app.domains.companies.provider.get_company_adapter``) --
-            injected the same way ``draft_graph``'s own ``adapter_provider``
-            is. None reproduces pre-feature behaviour exactly (no adapter
-            block, ever).
-        rules_provider: Optional async callable resolving a company's
-            mandatory drafting rules (see
+            ``draft_graph``'ın kendi ``adapter_provider``'ı ile aynı şekilde
+            enjekte edilir. None, özellik-öncesi davranışı birebir yeniden
+            üretir (asla adaptör bloğu yok).
+        rules_provider: Bir şirketin zorunlu yazım kurallarını çözümleyen
+            isteğe bağlı async çağrılabilir (bkz.
             ``app.domains.companies.provider.get_company_rules``) --
-            injected the same way ``draft_graph``'s own ``rules_provider``
-            is. None reproduces pre-feature behaviour exactly (no rules
-            block, ever).
-        profile_provider: Optional async callable resolving a company's
-            identity profile (see
+            ``draft_graph``'ın kendi ``rules_provider``'ı ile aynı şekilde
+            enjekte edilir. None, özellik-öncesi davranışı birebir yeniden
+            üretir (asla kurallar bloğu yok).
+        profile_provider: Bir şirketin kimlik profilini çözümleyen isteğe
+            bağlı async çağrılabilir (bkz.
             ``app.domains.companies.provider.get_company_profile``) --
-            injected the same way ``draft_graph``'s own ``profile_provider``
-            is (Faz 6). Before this, a revision had no access to the
-            company's identity at all, so a repair pass asked to add a
-            missing antet/imza block had nothing telling it who "we" are,
-            and the company's own name/letterhead scored as an ungrounded
-            claim on every single revision instead of a trusted fact.
-            None reproduces pre-feature behaviour exactly (no identity
-            section, no trusted_facts, ever).
+            ``draft_graph``'ın kendi ``profile_provider``'ı ile aynı şekilde
+            enjekte edilir (Faz 6). Bundan önce, bir revizyonun şirketin
+            kimliğine hiç erişimi yoktu, bu yüzden eksik bir antet/imza
+            bloğu eklemesi istenen bir onarım geçişine "biz" kimiz diyen
+            hiçbir şey söylenmiyordu ve şirketin kendi adı/antetli kağıdı
+            güvenilir bir olgu yerine her tek revizyonda dayanaksız bir
+            iddia olarak puanlanıyordu. None, özellik-öncesi davranışı
+            birebir yeniden üretir (asla kimlik bölümü, asla trusted_facts
+            yok).
 
     Returns:
-        The compiled LangGraph workflow.
+        Derlenmiş LangGraph iş akışı.
     """
     judge_agent = JudgeAgent(fast_llm_client or llm_client)
     conflict_agent = ConflictAuditorAgent(fast_llm_client or llm_client)
 
     async def _resolve_adapter(state: ReviseState) -> CompanyAdapter:
-        """This company's runtime style adapter, or an empty one when no
-        ``adapter_provider`` was configured, no ``company_id`` is on this
-        turn's state, or resolution itself fails -- see
-        ``draft_graph``'s identical helper for the same rationale."""
+        """Bu şirketin çalışma zamanı üslup adaptörü, ya da hiçbir
+        ``adapter_provider`` yapılandırılmamışsa, bu turun durumunda
+        ``company_id`` yoksa ya da çözümlemenin kendisi başarısız olursa boş
+        bir adaptör -- aynı gerekçe için ``draft_graph``'ın özdeş yardımcı
+        fonksiyonuna bakın."""
         company_id = state.get("company_id") or ""
         if not company_id or adapter_provider is None:
             return CompanyAdapter.empty(company_id)
@@ -441,10 +455,11 @@ def create_revise_graph(
             return CompanyAdapter.empty(company_id)
 
     async def _resolve_rules(state: ReviseState) -> CompanyRuleSet:
-        """This company's mandatory drafting rules, or an empty set when no
-        ``rules_provider`` was configured, no ``company_id`` is on this
-        turn's state, or resolution itself fails -- see
-        ``draft_graph``'s identical helper for the same rationale."""
+        """Bu şirketin zorunlu yazım kuralları, ya da hiçbir
+        ``rules_provider`` yapılandırılmamışsa, bu turun durumunda
+        ``company_id`` yoksa ya da çözümlemenin kendisi başarısız olursa boş
+        bir küme -- aynı gerekçe için ``draft_graph``'ın özdeş yardımcı
+        fonksiyonuna bakın."""
         company_id = state.get("company_id") or ""
         if not company_id or rules_provider is None:
             return CompanyRuleSet.empty(company_id)
@@ -455,10 +470,10 @@ def create_revise_graph(
             return CompanyRuleSet.empty(company_id)
 
     async def _resolve_profile(state: ReviseState) -> CompanyProfile:
-        """This company's identity profile, or an empty one when no
-        ``profile_provider`` was configured, no ``company_id`` is on this
-        turn's state, or resolution itself fails -- mirrors
-        ``draft_graph``'s identical helper (Faz 6)."""
+        """Bu şirketin kimlik profili, ya da hiçbir ``profile_provider``
+        yapılandırılmamışsa, bu turun durumunda ``company_id`` yoksa ya da
+        çözümlemenin kendisi başarısız olursa boş bir profil --
+        ``draft_graph``'ın özdeş yardımcı fonksiyonunu yansıtır (Faz 6)."""
         company_id = state.get("company_id") or ""
         if not company_id or profile_provider is None:
             return CompanyProfile.empty(company_id)
@@ -477,13 +492,13 @@ def create_revise_graph(
         )
 
         if not instructions.strip():
-            # C21: decompose_instruction("") resolves to a single
-            # scope="whole" directive carrying an *empty* raw instruction --
-            # a whole-draft rewrite with nothing telling the model what to
-            # change is the single most dangerous directive this parser can
-            # produce, not a safe default. Short-circuits to a no-op
-            # instead: the active draft is returned completely unchanged,
-            # never reaching rewrite/verify at all.
+            # C21: decompose_instruction(""), *boş* bir ham talimat taşıyan
+            # tek bir scope="whole" direktifine çözümlenir -- modele neyi
+            # değiştireceğini söyleyen hiçbir şey olmayan bir tüm-taslak
+            # yeniden yazımı, bu ayrıştırıcının üretebileceği en tehlikeli
+            # direktiftir, güvenli bir varsayılan değil. Bunun yerine no-op'a
+            # kısa devre yapar: aktif taslak tamamen değiştirilmeden döner,
+            # rewrite/verify'a hiç ulaşmaz.
             await emit_node_end(
                 config, "revise_parse", "Talimat Ayrıştırma",
                 "Talimat boş; taslak değiştirilmeden bırakıldı.", {},
@@ -511,13 +526,13 @@ def create_revise_graph(
             and all(t is not None for t in targets)
             and spans_overlap(targets)
         ):
-            # C5: two directives resolved to overlapping (not merely
-            # adjacent) spans -- splicing both via the right-to-left merge
-            # would corrupt one span's offsets with the other's. Falls back
-            # to the same safe whole-draft rewrite an unlocatable clause
-            # already gets (see decompose_instruction's own docstring),
-            # carrying the complete original instruction so neither
-            # directive's own request is silently dropped.
+            # C5: iki direktif çakışan (yalnızca bitişik değil) aralıklara
+            # çözümlendi -- her ikisini de sağdan sola birleştirme ile
+            # eklemek, bir aralığın uzaklıklarını diğerininkiyle bozardı.
+            # Bulunamayan bir cümleciğin zaten aldığı aynı güvenli
+            # tüm-taslak yeniden yazımına düşer (bkz. decompose_instruction'ın
+            # kendi dokümantasyonu), böylece hiçbir direktifin kendi isteği
+            # sessizce düşürülmez diye tam orijinal talimatı taşır.
             directives = [
                 EditDirective(
                     scope="whole", operation="content", section_hint=None,
@@ -554,9 +569,10 @@ def create_revise_graph(
         }
 
     def route_after_parse(state: ReviseState) -> str:
-        # C21: parse_node's own blank-instruction short-circuit already set
-        # status=COMPLETED and the unchanged draft -- nothing downstream
-        # (retrieval, rewrite, verify) needs to run for a no-op.
+        # C21: parse_node'un kendi boş-talimat kısa devresi zaten
+        # status=COMPLETED ve değiştirilmemiş taslağı ayarladı -- bir no-op
+        # için sonrasındaki hiçbir şeyin (retrieval, rewrite, verify)
+        # çalışması gerekmiyor.
         return "end" if state.get("status") == StepStatus.COMPLETED else "retrieve_context"
 
     async def retrieve_context_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
@@ -593,27 +609,27 @@ def create_revise_graph(
     async def _generate_validated(
         agent: ReviserAgent, prompt: str, preset: ReasoningLevelPreset
     ) -> str:
-        """Run one reviser call, fully buffered, validated before anything
-        reaches the client.
+        """Bir reviser çağrısını tamamen tamponlanmış olarak çalıştırır,
+        istemciye herhangi bir şey ulaşmadan önce doğrular.
 
-        Nothing is emitted to the "revise" SSE node here -- see
-        ``rewrite_node``'s own docstring for why. A single reviser call can
-        run several times per turn (once per directive in the
-        multi-directive path, again on every repair round), and the old
-        per-chunk ``emit_token`` streamed each of those raw completions
-        live, unvalidated, straight into the chat: a completion that echoed
-        its own numbered brief scaffold (a known failure mode of smaller
-        local models given a heavily-structured prompt like this one) or
-        that simply ran twice in the same turn showed up in the chat as
-        literal "1. ... 2. ..." garbage concatenated across rounds with no
-        boundary between them. Buffering here and validating before
-        ``rewrite_node`` emits anything makes both impossible structurally,
-        not just less likely.
+        Burada "revise" SSE düğümüne hiçbir şey yayınlanmaz -- nedeni için
+        ``rewrite_node``'un kendi dokümantasyonuna bakın. Tek bir reviser
+        çağrısı, tur başına birkaç kez çalışabilir (çoklu-direktif yolunda
+        direktif başına bir kez, her onarım turunda tekrar), ve eski
+        chunk-başına ``emit_token``, bu ham tamamlanmaların her birini
+        canlı, doğrulanmamış olarak doğrudan sohbete akıtıyordu: kendi
+        numaralı brief iskeletini yansıtan bir tamamlanma (böyle yoğun
+        yapılandırılmış bir prompt verilen küçük yerel modellerin bilinen
+        bir hata modu) ya da aynı turda basitçe iki kez çalışan bir çağrı,
+        sohbette turlar arasında birleştirilmiş, aralarında sınır olmayan
+        gerçek "1. ... 2. ..." çöpü olarak görünüyordu. Burada tamponlamak
+        ve ``rewrite_node`` bir şey yayınlamadan önce doğrulamak, ikisini de
+        yalnızca daha az olası değil, yapısal olarak imkansız kılar.
 
         Raises:
-            ValueError: Empty completion.
-            GuardrailViolation: A prompt-injection or scaffold-echo pattern
-                was detected (see ``app.ai.guardrails.injection``).
+            ValueError: Boş tamamlanma.
+            GuardrailViolation: Bir prompt enjeksiyonu veya iskelet-yansıması
+                deseni tespit edildi (bkz. ``app.ai.guardrails.injection``).
         """
         chunks: list[str] = []
         async for chunk in agent.stream(
@@ -629,20 +645,21 @@ def create_revise_graph(
         return rewritten
 
     async def rewrite_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
-        """Rewrite (or repair) the draft, buffering the model's output until
-        it has passed validation before anything is shown to the user.
+        """Taslağı yeniden yazar (veya onarır); modelin çıktısını, kullanıcıya
+        herhangi bir şey gösterilmeden önce doğrulamadan geçene kadar
+        tamponlar.
 
-        The reviser's own prompts (``_build_brief``, ``_build_directive_
-        prompt``, ``_build_repair_prompt``) are dense, numbered scaffolding
-        by necessity -- a smaller local model asked to continue that shape
-        sometimes imitates it in its completion instead of producing plain
-        draft prose. Streaming that live, chunk by chunk, as the old
-        implementation did, put the leak on screen before any check could
-        run. Buffering through ``_generate_validated`` and only then
-        emitting the *validated* text (once, as a single token event just
-        before ``emit_node_end``) closes that gap without touching what the
-        user ultimately sees on a clean run -- the final draft text is
-        identical either way.
+        Reviser'ın kendi prompt'ları (``_build_brief``, ``_build_directive_
+        prompt``, ``_build_repair_prompt``) zorunlu olarak yoğun, numaralı
+        iskeletlerdir -- bu şekli devam ettirmesi istenen daha küçük bir
+        yerel model, bazen düz taslak nesri üretmek yerine bunu
+        tamamlanmasında taklit eder. Eski uygulamanın yaptığı gibi bunu
+        canlı, chunk chunk akıtmak, sızıntıyı herhangi bir kontrol
+        çalışmadan önce ekrana koyardı. ``_generate_validated`` üzerinden
+        tamponlamak ve ancak sonra *doğrulanmış* metni yayınlamak (bir kez,
+        ``emit_node_end``'den hemen önce tek bir token olayı olarak), bu
+        boşluğu, temiz bir çalışmada kullanıcının nihayetinde gördüğüne
+        dokunmadan kapatır -- son taslak metni her iki durumda da aynıdır.
         """
         active_draft = state["active_draft"]
         attempt_number = state.get("attempts", 0) + 1
@@ -654,9 +671,9 @@ def create_revise_graph(
             active_draft, "correspondence_sub_genre", ""
         )
         style_examples = active_draft.style_examples
-        # Resolved once per attempt (Redis-cached in the real provider, see
-        # app.domains.companies.provider.get_company_adapter), same as
-        # draft_graph.writer_node's identical call.
+        # Deneme başına bir kez çözümlenir (gerçek provider'da Redis'te
+        # önbelleklenir, bkz. app.domains.companies.provider.get_company_adapter),
+        # draft_graph.writer_node'un özdeş çağrısıyla aynı.
         adapter = await _resolve_adapter(state)
         adapter_block = format_adapter_block(adapter)
         company_ruleset = await _resolve_rules(state)
@@ -692,12 +709,12 @@ def create_revise_graph(
                     agent = ReviserAgent(client)
 
                     if multi_directive_ok:
-                        # Right-to-left: spans were computed against the
-                        # original draft, so processing the rightmost span
-                        # first means every not-yet-processed (leftward)
-                        # span's offsets stay valid against the
-                        # progressively-spliced working draft (see module
-                        # docstring).
+                        # Sağdan sola: aralıklar orijinal taslağa karşı
+                        # hesaplandı, bu yüzden en sağdaki aralığı önce
+                        # işlemek, henüz işlenmemiş (soldaki) her aralığın
+                        # uzaklıklarının, kademeli olarak eklenen çalışma
+                        # taslağına karşı geçerli kalması anlamına gelir
+                        # (bkz. modül dokümantasyonu).
                         order = sorted(
                             range(len(directives)), key=lambda i: targets[i].start, reverse=True
                         )
@@ -714,16 +731,15 @@ def create_revise_graph(
                             )
                             rewritten = await _generate_validated(agent, prompt, preset)
                             if resolve_merge_target(targets[i], rewritten, active_draft.text) is None:
-                                # C22, multi-directive case: unlike the
-                                # single-directive path below, falling back
-                                # to a whole-draft replacement here would
-                                # discard every other directive's splice
-                                # already applied earlier in this same
-                                # right-to-left pass. Skip this one
-                                # directive's risky rewrite instead --
-                                # its own span is left as it was, and the
-                                # other, correctly-scoped directives still
-                                # land.
+                                # C22, çoklu-direktif durumu: aşağıdaki
+                                # tek-direktif yolunun aksine, burada
+                                # tüm-taslak değişimine düşmek, aynı
+                                # sağdan-sola geçişte daha önce uygulanmış
+                                # her diğer direktifin eklemesini atardı.
+                                # Bunun yerine yalnızca bu direktifin riskli
+                                # yeniden yazımını atla -- kendi aralığı
+                                # olduğu gibi bırakılır, diğer, doğru
+                                # kapsamlı direktifler yine de uygulanır.
                                 logger.warning(
                                     "Directive %d's rewrite looked like a scope overrun; "
                                     "leaving its target span unchanged.", i,
@@ -732,10 +748,10 @@ def create_revise_graph(
                             working_draft = _merge(working_draft, targets[i], rewritten)
                         merged_draft = working_draft
                     else:
-                        # Single clause (the common case) or a multi-clause
-                        # instruction that could not locate every span --
-                        # falls back to the same safe whole/first-directive
-                        # rewrite a single-clause instruction always got.
+                        # Tek cümlecik (yaygın durum) ya da her aralığı
+                        # bulamayan çoklu-cümlecik bir talimat -- tek-cümlecik
+                        # bir talimatın her zaman aldığı aynı güvenli
+                        # tüm/ilk-direktif yeniden yazımına düşer.
                         directive = directives[0]
                         target = targets[0]
                         prompt = _build_directive_prompt(
@@ -796,10 +812,11 @@ def create_revise_graph(
                 "error": f"Revizyon üretilemedi: {exc}",
             }
 
-        # No token is emitted here -- see _generate_validated's docstring.
-        # The validated text is only ever streamed to the client once, from
-        # chat_service._enqueue_terminal_event, after the whole turn (verify,
-        # any repair pass, guardrails) has settled on its final reply.
+        # Burada hiçbir token yayınlanmaz -- bkz. _generate_validated'ın
+        # dokümantasyonu. Doğrulanmış metin, tüm tur (verify, herhangi bir
+        # onarım geçişi, guardrail'ler) nihai yanıtına karar verdikten sonra,
+        # yalnızca bir kez chat_service._enqueue_terminal_event'ten
+        # istemciye akıtılır.
         await emit_node_end(
             config, "revise", "Taslak Revizyonu", "Revizyon tamamlandı.", {"draft": merged_draft},
         )
@@ -815,41 +832,42 @@ def create_revise_graph(
     def route_after_rewrite(state: ReviseState) -> str:
         if state.get("status") == StepStatus.FAILED:
             return "end"
-        # restored_from_best_attempt (C3): a repair pass crashed and
-        # rewrite_node already fell back to a previous, fully-verified
-        # attempt -- re-entering "verify" would re-check text that was
-        # already checked and could itself crash again. Goes to "audit"
-        # rather than straight to "end" (unlike draft_graph, which has no
-        # audit-equivalent step): parse_node's own `instruction`/`directives`
-        # are already in state, so the changelog/conflict audit can still
-        # run against the restored draft -- audit_node's own broad
-        # try/except (see its docstring) already degrades this to an empty,
-        # advisory-only result if anything about the restored state doesn't
-        # fit its expectations.
+        # restored_from_best_attempt (C3): bir onarım geçişi çöktü ve
+        # rewrite_node zaten önceki, tamamen doğrulanmış bir denemeye düştü
+        # -- "verify"e yeniden girmek, zaten kontrol edilmiş metni tekrar
+        # kontrol eder ve kendisi de yeniden çökebilir. Doğrudan "end"
+        # yerine "audit"e gider (audit'e denk bir adımı olmayan
+        # draft_graph'ın aksine): parse_node'un kendi `instruction`/
+        # `directives`'i zaten durumda, bu yüzden changelog/çelişki denetimi
+        # geri yüklenen taslağa karşı yine de çalışabilir -- audit_node'un
+        # kendi geniş try/except'i (bkz. kendi dokümantasyonu), geri
+        # yüklenen durumla ilgili bir şey beklentilerine uymuyorsa bunu
+        # zaten boş, yalnızca danışma niteliğinde bir sonuca indirger.
         if state.get("restored_from_best_attempt"):
             return "audit"
         return "verify"
 
     async def verify_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
         active_draft = state["active_draft"]
-        # Same backstop as draft_graph.verify_node -- a repair/rewrite pass
-        # can leave the same literal "bulunamadı"/"yok" marker the original
-        # writer could, and revise never re-runs the original writer's
-        # prompt to begin with.
+        # draft_graph.verify_node ile aynı yedek mekanizma -- bir onarım/
+        # yeniden yazım geçişi, orijinal yazarın bırakabileceği aynı gerçek
+        # "bulunamadı"/"yok" işaretini bırakabilir, ve revize zaten hiçbir
+        # zaman orijinal yazarın prompt'unu yeniden çalıştırmaz.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
         draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
         )
-        # Same backstop as draft_graph.verify_node -- see its own note.
+        # draft_graph.verify_node ile aynı yedek mekanizma -- kendi notuna
+        # bakın.
         draft_text, _ = normalize_role_placeholders(
             draft_text, is_individual_petition="dilekçe" in sub_genre.lower()
         )
-        # C16: mirrors draft_graph.verify_node's identical guard -- a
-        # strict sub-genre (see is_strict_sub_genre) keeps forcing human
-        # approval on an unsupported claim even though its type resolves
-        # to other_official.
+        # C16: draft_graph.verify_node'un özdeş korumasını yansıtır -- katı
+        # bir alt tür (bkz. is_strict_sub_genre), türü other_official'a
+        # çözümlense bile desteklenmeyen bir iddia üzerinde insan onayını
+        # zorlamaya devam eder.
         strict = correspondence_type != "other_official" or is_strict_sub_genre(sub_genre)
         preset = get_reasoning_level_preset(state.get("reasoning_level"))
 
@@ -858,17 +876,18 @@ def create_revise_graph(
             "[Doğrulayıcı] Revize taslak kaynak evrak ve mevzuata karşı denetleniyor...",
         )
 
-        # Same fold-in as draft_graph.verify_node -- the adapter's own
-        # preferred_examples get the exact same ornek_sizintisi leak check
-        # as every other style example (see CompanyAdapter's docstring).
+        # draft_graph.verify_node ile aynı katma -- adaptörün kendi
+        # preferred_examples'ı, diğer her üslup örneğinin aldığı tam olarak
+        # aynı ornek_sizintisi sızıntı kontrolünü alır (bkz. CompanyAdapter'ın
+        # dokümantasyonu).
         adapter = CompanyAdapter.from_dict(
             state.get("company_id") or "", state.get("company_adapter")
         )
-        # Faz 6: mirrors draft_graph.verify_node's identical trusted_facts
-        # fold-in -- without this, the company's own name/letterhead
-        # scored as an ungrounded dayanaksiz_iddia on every single
-        # revision, even though the exact same draft's *original*
-        # verify_draft call (in draft_graph) never flagged it.
+        # Faz 6: draft_graph.verify_node'un özdeş trusted_facts katmasını
+        # yansıtır -- bu olmadan, aynı taslağın *orijinal* verify_draft
+        # çağrısı (draft_graph'ta) hiç işaretlemese bile, şirketin kendi
+        # adı/antetli kağıdı her tek revizyonda dayanaksız bir
+        # dayanaksiz_iddia olarak puanlanıyordu.
         profile = CompanyProfile.from_dict(
             state.get("company_id") or "", state.get("company_profile")
         )
@@ -894,10 +913,11 @@ def create_revise_graph(
             is_individual_petition="dilekçe" in sub_genre.lower(),
             today=state.get("today", ""),
             trusted_facts=trusted_facts,
-            # Same fold-in as draft_graph.verify_node -- without this, a
-            # fact the original draft legitimately copied from a retrieved
-            # document chunk had strictly weaker grounding on every revision
-            # than it did on the draft that first wrote it.
+            # draft_graph.verify_node ile aynı katma -- bu olmadan,
+            # orijinal taslağın getirilen bir belge parçasından meşru
+            # olarak kopyaladığı bir olgu, onu ilk yazan taslakta olduğundan
+            # her revizyonda kesinlikle daha zayıf bir dayanağa sahip
+            # olurdu.
             source_chunks=active_draft.source_chunks,
         )
 
@@ -945,35 +965,36 @@ def create_revise_graph(
                 draft_text, report, active_draft.classification
             )
 
-        # Neither of the two paths that can produce `draft_text` without
-        # splicing through `_merge` (a whole-draft rewrite with no located
-        # target, or any repair-loop pass -- see rewrite_node) had anything
-        # checking that the model actually reproduced what it wasn't asked
-        # to change. Compared against `active_draft.text` specifically (the
-        # turn's true starting point, not a possibly-already-elided repair
-        # attempt) so a loss introduced on attempt 1 is still caught on
-        # attempt 2's check, not laundered away as "no further loss".
+        # `_merge` üzerinden ekleme yapmadan `draft_text` üretebilen iki
+        # yoldan (hedefi bulunamayan bir tüm-taslak yeniden yazımı, ya da
+        # herhangi bir onarım-döngüsü geçişi -- bkz. rewrite_node) hiçbiri,
+        # modelin değiştirmesi istenmeyen şeyi gerçekten yeniden ürettiğini
+        # kontrol eden hiçbir şeye sahip değildi. Özellikle `active_draft.text`'e
+        # karşı karşılaştırılır (turun gerçek başlangıç noktası, muhtemelen
+        # zaten kayıp içeriği olan bir onarım denemesi değil), böylece
+        # deneme 1'de tanıtılan bir kayıp, deneme 2'nin kontrolünde hâlâ
+        # yakalanır, "daha fazla kayıp yok" olarak temizlenmez.
         content_loss = detect_content_loss(
             active_draft.text, draft_text, state.get("instructions", "")
         )
         if content_loss is not None:
             logger.warning("Revise rewrite dropped content: %s", content_loss.detail)
 
-        # Parity with draft_graph.verify_node: a revision that introduces
-        # PII, or that inherited a guessed (fallback) correspondence type,
-        # or that has no legislation grounding at all, needs a human's
-        # eyes -- the old single-call run_revise checked none of these.
+        # draft_graph.verify_node ile eşdeğerlik: KVK içeren, ya da tahmin
+        # edilmiş (yedek) bir yazışma türünü devralan, ya da hiç mevzuat
+        # dayanağı olmayan bir revizyon bir insanın gözüne ihtiyaç duyar --
+        # eski tek-çağrılı run_revise bunların hiçbirini kontrol etmiyordu.
         pii_findings = [
             finding
             for finding in find_pii(draft_text)
             if finding.confidence >= get_policy().guardrail.pii_confidence_floor
         ]
 
-        # Faz 6: style_checks findings, fed into the same repair loop the
-        # way draft_graph.verify_node's identical block already does (Faz
-        # 4) -- a repair pass fixing one defect and introducing a person/
-        # filler/signature-block one of its own deserves the same check a
-        # fresh draft gets.
+        # Faz 6: style_checks bulguları, draft_graph.verify_node'un özdeş
+        # bloğunun zaten yaptığı gibi (Faz 4) aynı onarım döngüsüne
+        # beslenir -- bir kusuru düzelten ve kendi kişi/dolgu/imza-bloğu
+        # kusurunu tanıtan bir onarım geçişi, taze bir taslağın aldığı aynı
+        # kontrolü hak eder.
         style_findings = [
             *check_person_consistency(draft_text),
             *check_filler_sentences(draft_text),
@@ -1043,11 +1064,11 @@ def create_revise_graph(
             "applied_rules": [rule.model_dump() for rule in combined.applied_rules],
         }
 
-        # C2: mirrors draft_graph.verify_node's identical bookkeeping (see
-        # app.ai.workflows.attempt_tracking) -- track the best-scoring
-        # attempt across this turn's repair loop, and ship it instead of
-        # whichever attempt happened to run last if the loop is about to
-        # exhaust its attempt budget with defects still open.
+        # C2: draft_graph.verify_node'un özdeş kayıt tutmasını yansıtır
+        # (bkz. app.ai.workflows.attempt_tracking) -- bu turun onarım
+        # döngüsü boyunca en yüksek puanlı denemeyi takip et, ve döngü
+        # kusurlar hâlâ açıkken deneme bütçesini tüketmek üzereyse, son
+        # çalışan hangi deneme olursa olsun onun yerine bunu gönder.
         snapshot = snapshot_attempt(update, draft_text)
         best_attempt = best_of(snapshot, state.get("best_attempt"))
         update["best_attempt"] = best_attempt
@@ -1077,9 +1098,9 @@ def create_revise_graph(
         return "audit"
 
     async def repair_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
-        """Prep the next rewrite pass. Pure and LLM-free, same role as
-        draft_graph.revise_node -- the loop's only generation cost is the
-        rewrite call, never a second one here."""
+        """Bir sonraki yeniden yazım geçişini hazırlar. Saf ve LLM'siz,
+        draft_graph.revise_node ile aynı rol -- döngünün tek üretim maliyeti
+        rewrite çağrısıdır, burada asla ikinci bir çağrı olmaz."""
         repair_items = state.get("repair_items") or []
         trigger = (
             "deterministic"
@@ -1099,25 +1120,27 @@ def create_revise_graph(
         return update
 
     async def audit_node(state: ReviseState, config: RunnableConfig) -> dict[str, Any]:
-        """Instruction-vs-mevzuat/source conflict audit and change log.
+        """Talimat-vs-mevzuat/kaynak çelişki denetimi ve değişiklik günlüğü.
 
-        Runs only on a settled, non-missing-information outcome -- there is
-        no point auditing a draft the user is about to be asked more
-        questions about (see route_after_verify's `needs_input` shortcut,
-        which skips this node entirely).
+        Yalnızca yerleşmiş, eksik-bilgi-olmayan bir sonuçta çalışır --
+        kullanıcıya daha fazla soru sorulmak üzere olan bir taslağı
+        denetlemenin bir anlamı yok (bkz. route_after_verify'ın bu düğümü
+        tamamen atlayan `needs_input` kısayolu).
 
-        A conflict finding here is advisory, never a gate: ``ConflictReport.
-        applied_anyway`` (see ``app.ai.revision.conflict``'s module
-        docstring) is a hard invariant, so this node must not turn a finding
-        into a reason the turn pauses for a human. It used to -- escalating
-        ``status`` to ``NEEDS_HUMAN_APPROVAL`` whenever
-        ``conflict_report.requires_human_approval`` was set -- which is what
-        put "Talimatınız uygulandı, ancak..." behind the same blocking
-        approval popup a genuine low-quality draft gets, indistinguishable
-        from an actual decision the run needed from the user. A conflict
-        now only ever produces a non-blocking ``notice`` event (see
-        ``emit_notice``) rendered as its own chat message; ``status`` here
-        reflects only what ``verify_node`` already decided.
+        Buradaki bir çelişki bulgusu danışma niteliğindedir, asla bir kapı
+        değildir: ``ConflictReport.applied_anyway`` (bkz.
+        ``app.ai.revision.conflict``'in modül dokümantasyonu) katı bir
+        değişmez kuraldır, bu yüzden bu düğüm bir bulguyu, turun bir insan
+        için duraklama nedenine dönüştürmemelidir. Eskiden dönüştürüyordu --
+        ``conflict_report.requires_human_approval`` ayarlandığında
+        ``status``'ü ``NEEDS_HUMAN_APPROVAL``'a yükseltiyordu -- bu da
+        "Talimatınız uygulandı, ancak..." mesajını, gerçek bir düşük-kaliteli
+        taslağın aldığı aynı engelleyici onay popup'ının arkasına koyan, run'ın
+        kullanıcıdan ihtiyaç duyduğu gerçek bir karardan ayırt edilemeyen
+        şeydi. Bir çelişki artık yalnızca kendi sohbet mesajı olarak render
+        edilen, engellemeyen bir ``notice`` olayı üretir (bkz.
+        ``emit_notice``); buradaki ``status`` yalnızca ``verify_node``'un
+        zaten karar verdiği şeyi yansıtır.
         """
         active_draft = state["active_draft"]
         instruction = state["instruction"]
@@ -1129,19 +1152,20 @@ def create_revise_graph(
             "Talimat mevzuat ve kaynak evrakla karşılaştırılıyor...",
         )
 
-        # This node's own docstring is explicit that a finding here is
-        # advisory, never a gate -- so a failure to *produce* one must be
-        # advisory too. Before this guard, any exception here (a malformed
-        # `verification` dict, a `ConflictFinding`/`ChangeEntry` field
-        # exceeding its own `max_length` on a long instruction or a chain of
-        # institution names, ...) propagated out of the node, out of
-        # `graph.ainvoke`, and into `run_revise`'s outer `except Exception`
-        # (see `revise.py`), which discards the whole revision -- text,
-        # verification, everything -- and reports `FAILED` even though
-        # `rewrite_node`/`verify_node` already produced and verified a good
-        # draft two nodes ago. Degrading to an empty, non-blocking report
-        # is exactly this node's own stated contract for a *conflict*
-        # finding; it must be the contract for a *failure to audit* too.
+        # Bu düğümün kendi dokümantasyonu, buradaki bir bulgunun danışma
+        # niteliğinde olduğunu, asla bir kapı olmadığını açıkça belirtir --
+        # bu yüzden bir bulgu *üretememe* de danışma niteliğinde olmalıdır.
+        # Bu koruma olmadan, buradaki herhangi bir istisna (bozuk bir
+        # `verification` sözlüğü, uzun bir talimatta veya kurum adları
+        # zincirinde kendi `max_length`ini aşan bir `ConflictFinding`/
+        # `ChangeEntry` alanı, ...) düğümün dışına, `graph.ainvoke`'un
+        # dışına ve `run_revise`'ın dış `except Exception`'ına (bkz.
+        # `revise.py`) yayılıyordu; bu da tüm revizyonu -- metin,
+        # doğrulama, her şeyi -- atıyor ve `rewrite_node`/`verify_node` iki
+        # düğüm önce iyi bir taslağı zaten üretip doğrulamış olsa bile
+        # `FAILED` bildiriyordu. Boş, engellemeyen bir rapora indirgemek,
+        # bu düğümün *çelişki* bulgusu için ifade ettiği tam sözleşmedir;
+        # *denetleyememe* için de aynı sözleşme olmalıdır.
         try:
             report = VerificationReport(**state.get("verification", {}))
             deterministic = detect_conflicts_deterministic(
@@ -1172,9 +1196,10 @@ def create_revise_graph(
                 entries=[], summary="Değişiklik özeti oluşturulamadı."
             )
 
-        # Advisory only -- see this node's own docstring. Whether the turn
-        # pauses for a human is entirely verify_node's call; a conflict
-        # finding never adds to it.
+        # Yalnızca danışma niteliğinde -- bu düğümün kendi dokümantasyonuna
+        # bakın. Turun bir insan için duraklayıp duraklamayacağı tamamen
+        # verify_node'un kararıdır; bir çelişki bulgusu buna asla katkıda
+        # bulunmaz.
         requires_approval = bool(state.get("requires_human_approval"))
         status = state.get("status")
 

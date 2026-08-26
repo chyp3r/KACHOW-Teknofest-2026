@@ -1,6 +1,6 @@
-"""Redis-backed sliding window rate limiter as a FastAPI dependency.
+"""FastAPI bağımlılığı olarak Redis destekli kayan pencere (sliding window) hız sınırlayıcı.
 
-Usage example:
+Kullanım örneği:
     from app.api.rate_limit import rate_limit
 
     @router.post("/login")
@@ -29,22 +29,23 @@ def rate_limit(
     window_seconds: int = 60,
     key_prefix: str = "rate_limit",
 ) -> Callable:
-    """Factory returning a FastAPI dependency that enforces a sliding window rate limit.
+    """Kayan pencere hız sınırını zorunlu kılan bir FastAPI bağımlılığı döndüren fabrika.
 
     Args:
-        max_requests: Maximum allowed requests within the time window.
-        window_seconds: Duration of the sliding window in seconds.
-        key_prefix: Redis key prefix to namespace different limits.
+        max_requests: Zaman penceresi içinde izin verilen maksimum istek sayısı.
+        window_seconds: Kayan pencerenin saniye cinsinden süresi.
+        key_prefix: Farklı limitleri ad alanına ayırmak için Redis anahtar öneki.
 
     Returns:
-        An async FastAPI dependency function.
+        Asenkron bir FastAPI bağımlılık fonksiyonu.
     """
 
     async def _check_rate_limit(request: Request) -> None:
-        # X-Forwarded-For is only meaningful -- and only safe -- behind a proxy
-        # that overwrites rather than appends to it. Trusting it unconditionally
-        # let a client set a fresh header per request and never accumulate a
-        # count at all; see TRUST_PROXY_HEADERS' docstring in core/config.py.
+        # X-Forwarded-For yalnızca ekleme yerine üzerine yazan bir proxy'nin
+        # arkasında anlamlıdır -- ve yalnızca o zaman güvenlidir. Koşulsuz
+        # güvenmek, bir istemcinin istek başına yeni bir başlık ayarlamasına
+        # ve hiçbir zaman bir sayaç biriktirmemesine izin verirdi; bkz.
+        # core/config.py içindeki TRUST_PROXY_HEADERS'ın docstring'i.
         if settings.TRUST_PROXY_HEADERS and "X-Forwarded-For" in request.headers:
             client_ip = request.headers["X-Forwarded-For"].split(",")[0].strip()
         else:
@@ -54,39 +55,42 @@ def rate_limit(
         redis_key = f"{key_prefix}:{client_ip}"
         now = int(time.time())
         window_start = now - window_seconds
-        # The ZSET member must be unique per request, not per second. Redis
-        # ZADD on an existing member updates its score rather than adding a
-        # second entry, so using the bare timestamp as the member collapsed
-        # every request within the same second into one: N requests sent
-        # inside one second scored ZCARD=1, and the "5 requests per 60
-        # seconds" limit could never see more than `window_seconds` distinct
-        # entries no matter how many requests actually arrived. Appending a
-        # random suffix keeps the score (used for the window trim below)
-        # while making every member distinct.
+        # ZSET üyesi saniye başına değil, istek başına benzersiz olmalıdır.
+        # Mevcut bir üye üzerinde Redis ZADD, ikinci bir giriş eklemek yerine
+        # skorunu günceller; bu yüzden çıplak zaman damgasını üye olarak
+        # kullanmak aynı saniye içindeki her isteği tek bir isteğe
+        # düşürüyordu: bir saniye içinde gönderilen N istek ZCARD=1 olarak
+        # skorlanıyordu ve "60 saniyede 5 istek" limiti, fiilen kaç istek
+        # geldiğine bakılmaksızın `window_seconds`'tan fazla farklı giriş
+        # göremiyordu. Rastgele bir sonek eklemek, skoru (aşağıdaki pencere
+        # kırpma işlemi için kullanılır) korurken her üyeyi farklı kılar.
         member = f"{now}:{uuid4().hex}"
 
-        # Fail open, not closed. Rate limiting is a protection mechanism, not a
-        # correctness requirement: if the counter is unreachable we cannot know
-        # whether this request is over the limit, and the safe answer is to serve
-        # it. Failing closed meant a Redis restart returned 500 from /auth/login,
-        # /auth/refresh, /chat/stream, /chat/resume and /documents/analyze -- an
-        # unavailable cache locked every user out of the system.
+        # Kapalı değil, açık yönde başarısız ol (fail open). Hız sınırlama bir
+        # koruma mekanizmasıdır, bir doğruluk gereksinimi değil: sayaca
+        # erişilemiyorsa bu isteğin limiti aşıp aşmadığını bilemeyiz ve güvenli
+        # cevap isteği sunmaktır. Kapalı yönde başarısız olmak, bir Redis
+        # yeniden başlatmasının /auth/login, /auth/refresh, /chat/stream,
+        # /chat/resume ve /documents/analyze'den 500 döndürmesi anlamına
+        # gelirdi -- kullanılamayan bir önbellek her kullanıcıyı sistemin
+        # dışında kilitlerdi.
         #
-        # The tradeoff is real and worst for auth:login, whose 5/60s limit is a
-        # brute-force defence. It is still the right side to fail on. An attacker
-        # cannot cause this branch (they would have to take Redis down first, and
-        # if they can do that the limiter is not the exposure), whereas an
-        # operator restarting Redis triggers it every time.
+        # Bu ödünleşim gerçektir ve 5/60sn limiti bir kaba kuvvet (brute-force)
+        # savunması olan auth:login için en kötüsüdür. Yine de başarısız
+        # olunacak doğru taraf budur. Bir saldırgan bu dalı tetikleyemez
+        # (önce Redis'i çökertmesi gerekirdi, ve bunu yapabiliyorsa zaten
+        # sınırlayıcı açık kapı değildir), oysa Redis'i yeniden başlatan bir
+        # operatör bunu her seferinde tetikler.
         try:
             await cache.connect()
             pipe = cache.client.pipeline()
-            # Remove counts outside the current window
+            # Mevcut pencerenin dışındaki sayıları kaldır
             pipe.zremrangebyscore(redis_key, "-inf", window_start)
-            # Record this request under its own unique member (see above)
+            # Bu isteği kendi benzersiz üyesi altında kaydet (yukarıya bakın)
             pipe.zadd(redis_key, {member: now})
-            # Count requests in window
+            # Pencere içindeki istekleri say
             pipe.zcard(redis_key)
-            # Reset TTL so key expires after inactivity
+            # Anahtarın hareketsizlik sonrası sona ermesi için TTL'yi sıfırla
             pipe.expire(redis_key, window_seconds)
             results = await pipe.execute()
         except Exception:

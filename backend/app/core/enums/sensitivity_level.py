@@ -2,18 +2,21 @@ from enum import StrEnum
 
 
 class SensitivityLevel(StrEnum):
-    """Official Turkish document confidentiality grades (``gizlilik derecesi``).
+    """Resmi Türkçe belge gizlilik dereceleri (``gizlilik derecesi``).
 
-    Ordered from least to most restrictive so callers can compare levels
-    directly (``level >= SensitivityLevel.GIZLI``). ``UNMARKED`` sits below
-    ``TASNIF_DISI`` (the explicit "unclassified" grade) -- a document that
-    never stated a grade at all is not the same fact as one that was
-    positively marked unclassified, but neither blocks anything on its own.
+    Çağıranların seviyeleri doğrudan karşılaştırabilmesi için en az
+    kısıtlayıcıdan en çok kısıtlayıcıya sıralanmıştır
+    (``level >= SensitivityLevel.GIZLI``). ``UNMARKED``, ``TASNIF_DISI``'nin
+    (açık "tasnif dışı" derecesi) altında yer alır -- hiç derece
+    belirtmeyen bir belge, olumlu olarak tasnif dışı işaretlenmiş bir
+    belgeyle aynı gerçek değildir, ama ikisi de kendi başına hiçbir şeyi
+    engellemez.
 
-    ``rank`` is the same ordering as an int, because Qdrant payload filters
-    compare numbers, not enum members: chunk/document metadata stores
-    ``sensitivity_rank`` alongside this value's string for exactly that
-    reason (see ``app.ai.retrieval`` range-filter wiring).
+    ``rank``, bir int ile aynı sıralamadır, çünkü Qdrant payload
+    filtreleri enum üyelerini değil sayıları karşılaştırır: parça/belge
+    metadatası tam olarak bu nedenle bu değerin dizesiyle birlikte
+    ``sensitivity_rank``'i saklar (bkz. ``app.ai.retrieval`` aralık-filtre
+    bağlantısı).
     """
 
     UNMARKED = "unmarked"
@@ -25,7 +28,7 @@ class SensitivityLevel(StrEnum):
 
     @property
     def rank(self) -> int:
-        """This level's position in the ordering, lowest to highest."""
+        """Bu seviyenin sıralamadaki konumu, en düşükten en yükseğe."""
         return _RANK[self]
 
     def __ge__(self, other: "SensitivityLevel") -> bool:
@@ -50,9 +53,10 @@ _RANK: dict[SensitivityLevel, int] = {
     SensitivityLevel.COK_GIZLI: 5,
 }
 
-#: Turkish label variants -> canonical level, matched against diacritic-folded,
-#: lowercased text (see ``app.ai.guardrails.sensitivity._fold``). Free-text
-#: ``gizlilik_derecesi`` values from a document rarely match one spelling.
+#: Türkçe etiket varyantları -> kanonik seviye, aksan-katlanmış, küçük
+#: harfli metne karşı eşleştirilir (bkz.
+#: ``app.ai.guardrails.sensitivity._fold``). Bir belgenin serbest metin
+#: ``gizlilik_derecesi`` değerleri nadiren tek bir yazımla eşleşir.
 LABEL_ALIASES: dict[str, SensitivityLevel] = {
     "tasnif disi": SensitivityLevel.TASNIF_DISI,
     "tasnifdisi": SensitivityLevel.TASNIF_DISI,

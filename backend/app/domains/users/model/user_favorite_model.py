@@ -8,14 +8,14 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class UserFavoriteModel(Base, TimestampMixin):
-    """One user marking another as a favorite -- not symmetric.
+    """Bir kullanıcının bir diğerini favori olarak işaretlemesi -- simetrik değildir.
 
-    `owner_user_id` favoriting `favorite_user_id` does not imply the
-    reverse; each direction is its own row (or absent). This is the gate
-    the AI-assisted artifact transfer flow (Faz 4) requires before it may
-    send anything to someone the user hasn't explicitly named a favorite --
-    see the plan's policy section for why that requirement is scoped to the
-    AI channel only, not manual chat/REST sends.
+    `owner_user_id`'nin `favorite_user_id`'yi favorilemesi tersini
+    gerektirmez; her yön kendi satırıdır (veya yoktur). Bu, AI destekli
+    belge/evrak transfer akışının (Faz 4) kullanıcının açıkça favori olarak
+    adlandırmadığı birine herhangi bir şey göndermeden önce gerektirdiği
+    geçittir -- bu gerekliliğin neden sadece AI kanalına özel olduğu, manuel
+    sohbet/REST gönderimlerine değil, için planın politika bölümüne bakınız.
     """
 
     __tablename__ = "user_favorites"

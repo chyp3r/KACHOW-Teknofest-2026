@@ -22,15 +22,15 @@ from app.domains.users.model.user_model import UserModel
 from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
-# Authentication is mandatory (see require_auth_if_enabled) -- every route in
-# this router carries a real, tenant-bound current_user.
+# Kimlik doğrulama zorunludur (bkz. require_auth_if_enabled) -- bu router'daki
+# her rota gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/feedback", tags=["feedback"], dependencies=[Depends(require_auth_if_enabled)]
 )
 
-#: Registered here (not under /feedback) since it reads like every other
-#: `/companies/{id}/...` admin surface -- same shape as
-#: `app.domains.analytics.router`'s own `/companies/{id}/analytics/*`.
+#: Diğer tüm `/companies/{id}/...` yönetici yüzeyleri gibi okunduğu için
+#: burada (/feedback altında değil) kayıtlıdır -- `app.domains.analytics.router`'ın
+#: kendi `/companies/{id}/analytics/*`'i ile aynı biçimde.
 company_router = APIRouter(prefix="/companies", tags=["feedback"])
 
 
@@ -43,11 +43,11 @@ def _audit_service(db: AsyncSession) -> AuditService:
 
 
 def _require_company_access(current_user: UserModel, company_id: str) -> None:
-    """Root reaches any company; Admin/Manager only their own.
+    """Root herhangi bir şirkete erişebilir; Admin/Manager yalnızca kendi şirketine.
 
-    Same rule as `app.domains.analytics.router._require_company_access` --
-    duplicated rather than imported since that helper is private to its own
-    module and this is a one-line check.
+    `app.domains.analytics.router._require_company_access` ile aynı kural --
+    içe aktarmak yerine tekrarlanmıştır, çünkü o yardımcı fonksiyon kendi
+    modülüne özeldir ve bu tek satırlık bir kontroldür.
     """
     if current_user.role == UserRole.ROOT.value:
         return
@@ -65,11 +65,11 @@ async def submit_feedback(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Cast (or re-cast) a 👍/👎 vote on a piece of AI-generated output.
+    """Yapay zeka tarafından üretilmiş bir çıktıya 👍/👎 oyu verir (veya yeniden verir).
 
-    Any authenticated user may vote, scoped to their own company -- this is
-    the one write path in the RLHF-style data-collection layer every user
-    reaches, not just admins.
+    Kimliği doğrulanmış her kullanıcı, yalnızca kendi şirketiyle sınırlı
+    olarak oy verebilir -- bu, RLHF tarzı veri toplama katmanında sadece
+    yöneticilerin değil her kullanıcının eriştiği tek yazma yoludur.
     """
     service = _service(db)
     feedback = await service.submit(
@@ -103,7 +103,7 @@ async def delete_feedback(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Withdraw a vote. The voter, or Admin/Manager/Root company-wide."""
+    """Bir oyu geri çeker. Oyu veren kişi veya şirket genelinde Admin/Manager/Root."""
     service = _service(db)
     feedback = await service.repository.get_by_id(feedback_id, current_user.company_id)
     if feedback is None:
@@ -131,7 +131,7 @@ async def list_feedback(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List the caller's own company's feedback, newest first. Admin/Manager/Root only."""
+    """Çağıranın kendi şirketinin geri bildirimlerini en yeniden en eskiye listeler. Yalnızca Admin/Manager/Root."""
     service = _service(db)
     entries = await service.list_entries(
         current_user.company_id, user_id, target_kind, signal,
@@ -155,7 +155,7 @@ async def feedback_stats(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Vote counts by signal and by target kind, for one company."""
+    """Bir şirket için sinyale ve hedef türe göre oy sayıları."""
     _require_company_access(current_user, company_id)
     service = _service(db)
     stats = await service.stats(company_id)

@@ -3,28 +3,29 @@ import re
 
 from app.core.config import settings
 
-#: Matches exactly what DocumentService._store() produces:
+#: DocumentService._store()'un ürettiği tam biçimle eşleşir:
 #: f"{UPLOAD_PATH_PREFIX}/{uuid4().hex}{extension}" -- "uploads/<32 hex><.ext>".
 _STORAGE_PATH_PATTERN = re.compile(r"^uploads/[0-9a-f]{32}\.[A-Za-z0-9]{1,10}$")
 
 
 def validate_storage_path(value: str) -> str:
-    """Validate a storage_path is a well-formed, non-traversing upload key.
+    """Bir storage_path'in iyi biçimli, dizin gezinmesine izin vermeyen bir yükleme anahtarı olduğunu doğrular.
 
-    A client-supplied ``storage_path`` reaches ``storage.get_file(...)`` on an
-    unauthenticated endpoint with nothing else standing between it and the
-    filesystem for the local backend -- a permissive check here is a
-    path-traversal read primitive, not a formality.
+    İstemcinin gönderdiği ``storage_path``, kimlik doğrulaması gerektirmeyen
+    bir uç noktada, yerel backend için dosya sistemiyle arasında başka hiçbir
+    engel olmadan ``storage.get_file(...)``'a ulaşır -- buradaki gevşek bir
+    kontrol bir biçimsellik değil, path-traversal (dizin gezinmesi) okuma
+    ilkelidir.
 
     Args:
-        value: The client-supplied storage_path.
+        value: İstemcinin gönderdiği storage_path.
 
     Returns:
-        The validated value, unchanged.
+        Doğrulanmış değer, değiştirilmeden.
 
     Raises:
-        ValueError: If the value doesn't match the shape ``_store()`` produces,
-            or (for the local backend) resolves outside the storage directory.
+        ValueError: Değer ``_store()``'un ürettiği biçimle eşleşmiyorsa
+            veya (yerel backend için) depolama dizini dışına çözümleniyorsa.
     """
     if not value or "\x00" in value or ".." in value or value.startswith("/"):
         raise ValueError("Geçersiz storage_path.")

@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 RETRIEVAL_LIMIT = 4
 
-#: Words that carry no retrieval signal but dominate a naive query. Removing
-#: them lets the BM25 half of the hybrid retriever score on the terms that
-#: actually appear in the regulation.
+#: Naif bir sorguya hakim olan ama alım (retrieval) için hiçbir sinyal
+#: taşımayan kelimeler. Bunları çıkarmak, hibrit retriever'ın BM25 yarısının
+#: mevzuatta gerçekten geçen terimler üzerinden skorlama yapmasını sağlar.
 TURKISH_STOPWORDS = frozenset(
     {
         "acaba", "ama", "ancak", "bana", "bazı", "belki", "ben", "beni", "benim",
@@ -28,28 +28,30 @@ TURKISH_STOPWORDS = frozenset(
     }
 )
 
-#: Terms worth appending to a bare question so the sparse retriever has literal
-#: regulation vocabulary to match on.
+#: Yalın bir soruya eklenmeye değer terimler; böylece sparse retriever'ın
+#: eşleştirebileceği gerçek mevzuat kelime dağarcığı olur.
 DOMAIN_EXPANSION = "mevzuat yönetmelik madde hüküm resmî yazışma"
 
-#: Python's own `str.lower()` maps "İ" (U+0130, dotted capital I) to "i" + a
-#: combining dot above (U+0307) -- a two-codepoint string that never equals the
-#: single-codepoint "i" every stopword below is written with, so "İçin".lower()
-#: != "için" and the capitalised form of every stopword silently escaped the
-#: filter. Translated explicitly before folding, same single-entry fix as every
-#: other Turkish-aware lowercasing in this codebase (see
-#: app.ai.compliance.checker.normalize_value) -- ASCII "I" is deliberately left
-#: alone since Python's default .lower() already maps it to "i" correctly.
+#: Python'ın kendi `str.lower()` metodu "İ" (U+0130, noktalı büyük I) harfini
+#: "i" + birleşen üst nokta (U+0307) şeklinde eşler -- yani aşağıdaki her
+#: stopword'ün yazıldığı tek code point'lik "i" ile asla eşleşmeyen iki code
+#: point'lik bir string üretir. Bu yüzden "İçin".lower() != "için" olur ve her
+#: stopword'ün büyük harfli hali filtreden sessizce kaçardı. Küçültmeden önce
+#: açıkça çevriliyor; bu kod tabanındaki diğer Türkçe'ye duyarlı küçük harfe
+#: çevirme işlemleriyle (bkz. app.ai.compliance.checker.normalize_value) aynı
+#: tek satırlık düzeltme -- ASCII "I" kasıtlı olarak dokunulmadan bırakıldı,
+#: çünkü Python'ın varsayılan .lower() metodu bunu zaten doğru şekilde "i"ye
+#: eşliyor.
 _TURKISH_CASEFOLD = str.maketrans({"İ": "i"})
 
 
 def _turkish_lower(token: str) -> str:
-    """Lowercase a token the way Turkish stopwords are actually spelled."""
+    """Bir token'ı, Türkçe stopword'lerin gerçekte yazıldığı şekilde küçük harfe çevirir."""
     return token.translate(_TURKISH_CASEFOLD).lower()
 
 
 class RAGState(TypedDict, total=False):
-    """LangGraph state for the retrieval workflow."""
+    """Alım (retrieval) workflow'u için LangGraph state'i."""
 
     original_query: str
     search_query: str
@@ -59,18 +61,19 @@ class RAGState(TypedDict, total=False):
 
 
 def build_search_query(query: str) -> str:
-    """Turn a user question into a retrieval query without calling a model.
+    """Bir kullanıcı sorusunu, model çağırmadan bir alım (retrieval) sorgusuna dönüştürür.
 
-    The analysis graph already established (see ``_build_mevzuat_query``) that
-    deterministic query construction beats a model rewrite against this corpus,
-    because the retriever's sparse half matches literal regulation tokens. The
-    rewrite node this replaces spent a full generation to reach a worse query.
+    Analiz grafiği zaten şunu ortaya koymuştu (bkz. ``_build_mevzuat_query``):
+    deterministik sorgu oluşturma, bu korpusa karşı bir model yeniden
+    yazımından daha iyi sonuç verir; çünkü retriever'ın sparse yarısı literal
+    mevzuat token'larıyla eşleşir. Bunun yerine geçtiği rewrite node'u, daha
+    kötü bir sorguya ulaşmak için tam bir üretim (generation) harcıyordu.
 
     Args:
-        query: The user's question or the document summary.
+        query: Kullanıcının sorusu veya doküman özeti.
 
     Returns:
-        A keyword-dense query string.
+        Anahtar kelime yoğunluklu bir sorgu string'i.
     """
     cleaned = re.sub(r"[^\w\sçğıöşüÇĞİÖŞÜ]", " ", query or "").strip()
     if not cleaned:
@@ -84,23 +87,23 @@ def build_search_query(query: str) -> str:
     if not terms:
         terms = cleaned.split()
 
-    # Keep the query bounded: past roughly a dozen terms BM25 scoring flattens
-    # out and the dense half starts averaging unrelated topics together.
+    # Sorguyu sınırlı tut: yaklaşık bir düzine terimden sonra BM25 skorlaması
+    # düzleşir ve dense yarı, birbiriyle ilgisiz konuları ortalamaya başlar.
     return " ".join(terms[:12] + [DOMAIN_EXPANSION])
 
 
 def create_rag_graph(llm_client: BaseLLMClient, hybrid_retriever: HybridRetriever):
-    """Create and compile the retrieval workflow.
+    """Alım (retrieval) workflow'unu oluşturur ve derler.
 
-    Flow: START -> prepare_query -> retrieve -> END
+    Akış: START -> prepare_query -> retrieve -> END
 
     Args:
-        llm_client: Retained for interface compatibility; retrieval no longer
-            needs a model.
-        hybrid_retriever: Dense + sparse retriever over the legislation corpus.
+        llm_client: Arayüz uyumluluğu için korunuyor; alım (retrieval) artık
+            bir modele ihtiyaç duymuyor.
+        hybrid_retriever: Mevzuat korpusu üzerinde dense + sparse retriever.
 
     Returns:
-        The compiled LangGraph workflow.
+        Derlenmiş LangGraph workflow'u.
     """
 
     async def prepare_query_node(state: RAGState) -> Dict[str, Any]:

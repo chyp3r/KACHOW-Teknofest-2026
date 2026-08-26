@@ -1,12 +1,12 @@
-"""Server-resolved "today", for the one field a draft must never ask about.
+"""Bir taslağın asla sormaması gereken tek alan için sunucu tarafından çözülen "bugün".
 
-A generated draft's own "Tarih:" line is the date it is written on, not a
-fact extracted from a document or supplied by the user -- asking the user
-for it (see Görev's bug report item 3) makes as little sense as asking them
-what day it is. This module is the single place that date comes from, so
-every caller (the writer's brief, the deterministic placeholder backstop,
-the verifier's groundedness check) agrees on the same value for the same
-turn.
+Üretilen bir taslağın kendi "Tarih:" satırı, bir belgeden çıkarılan veya
+kullanıcı tarafından sağlanan bir bilgi değil, yazıldığı tarihtir --
+kullanıcıya bunu sormak (bkz. Görev'in hata raporu 3. maddesi), ona hangi gün
+olduğunu sormak kadar anlamsızdır. Bu modül, bu tarihin geldiği tek yerdir;
+böylece her çağıran (yazarın brief'i, deterministik yer tutucu güvence
+mekanizması, doğrulayıcının dayanaklandırma kontrolü) aynı tur için aynı
+değer üzerinde anlaşır.
 """
 
 from datetime import datetime
@@ -16,11 +16,11 @@ from app.core.config import settings
 
 
 def today_tr() -> str:
-    """The current date in the app's configured timezone, Turkish format.
+    """Uygulamanın yapılandırılmış saat diliminde güncel tarih, Türkçe format.
 
     Returns:
-        ``"DD.MM.YYYY"``, matching the format real Turkish official
-        correspondence and this codebase's own examples already use (see
-        ``datasets/resmi_yazisma``).
+        ``"GG.AA.YYYY"``, gerçek Türkçe resmi yazışmaların ve bu kod
+        tabanının kendi örneklerinin zaten kullandığı formatla eşleşir
+        (bkz. ``datasets/resmi_yazisma``).
     """
     return datetime.now(ZoneInfo(settings.APP_TIMEZONE)).strftime("%d.%m.%Y")

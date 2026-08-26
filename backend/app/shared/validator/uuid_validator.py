@@ -1,9 +1,9 @@
 import uuid
 
 def validate_uuid(value: str) -> str:
-    """Validate that value string is a valid UUID version 4.
-    
-    Raises ValueError if format is invalid.
+    """Verilen değerin geçerli bir UUID versiyon 4 olduğunu doğrular.
+
+    Biçim geçersizse ValueError fırlatır.
     """
     try:
         val = uuid.UUID(value, version=4)

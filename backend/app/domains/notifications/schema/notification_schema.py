@@ -5,8 +5,8 @@ from pydantic import BaseModel
 
 
 class NotificationResponse(BaseModel):
-    """Pydantic schema for one `notifications` row -- also the exact JSON
-    payload published to Redis for the SSE stream (see
+    """Tek bir `notifications` satırı için Pydantic şeması -- ayrıca SSE
+    akışı için Redis'e yayınlanan tam JSON payload'ı (bkz.
     `app.domains.notifications.service.NotificationService.create`)."""
 
     model_config = {"from_attributes": True}

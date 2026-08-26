@@ -13,26 +13,26 @@ from app.domains.training.model.training_sample_model import TrainingSampleModel
 
 
 class TrainingRepository:
-    """Repository for `training_samples`/`training_runs` (Faz C3, #187).
+    """`training_samples`/`training_runs` için repository (Faz C3, #187).
 
-    Every method takes an explicit `company_id`, same convention as
-    `FeedbackRepository` -- RLS backs this up, it does not replace it.
+    Her metod açık bir `company_id` alır, `FeedbackRepository` ile aynı
+    kural -- RLS bunu destekler, yerini almaz.
     """
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
     # ------------------------------------------------------------------
-    # Reading raw signal to compile from
+    # Derlenecek ham sinyali okuma
     # ------------------------------------------------------------------
     async def resolvable_feedback(self, company_id: str) -> List[FeedbackRecord]:
-        """Every undeleted vote in `company_id` whose rated text could be
-        resolved back to a `drafts` row via `feedback.draft_id` (see
-        `FeedbackModel`'s docstring on why that is the only durable text
-        store a vote can point back to). No FK backs `draft_id` -- the
-        join condition here is the only place that relationship is
-        expressed, same looseness `FeedbackModel.draft_id` itself
-        documents.
+        """`company_id`'deki, derecelendirilen metni `feedback.draft_id`
+        üzerinden bir `drafts` satırına geri çözülebilen, silinmemiş her
+        oy (bunun bir oyun geri işaret edebileceği tek kalıcı metin
+        deposu olma sebebi için `FeedbackModel`'ın docstring'ine bakın).
+        `draft_id`'yi destekleyen bir FK yok -- buradaki join koşulu o
+        ilişkinin ifade edildiği tek yerdir, `FeedbackModel.draft_id`'nin
+        kendisinin belgelediği aynı gevşeklik.
         """
         query = (
             select(
@@ -81,10 +81,10 @@ class TrainingRepository:
     async def upsert_sample(
         self, company_id: str, pair: PreferencePair, training_run_id: Optional[str] = None
     ) -> TrainingSampleModel:
-        """Insert a fresh row, or refresh an existing one in place (the
-        content changes if the underlying vote flipped signal, see
-        `dataset.pair_hash`'s docstring) -- a re-compile is always
-        idempotent per pair identity."""
+        """Yeni bir satır ekle veya mevcut bir satırı yerinde tazele
+        (altındaki oy sinyali değiştiyse içerik değişir, bkz.
+        `dataset.pair_hash`'in docstring'i) -- yeniden derleme her zaman
+        çift kimliği başına idempotenttir."""
         existing = await self.get_sample_by_pair_hash(company_id, pair.pair_hash)
         if existing is not None:
             existing.prompt_context = pair.prompt_context
@@ -148,10 +148,10 @@ class TrainingRepository:
         return result.scalar_one()
 
     async def list_all_active_samples(self, company_id: str) -> List[TrainingSampleModel]:
-        """Every undeleted sample, no pagination -- what a training run
-        actually reads, and what `.../training-samples/export` streams:
-        deliberately the same query, so shown data and trained data can
-        never drift apart."""
+        """Sayfalama olmadan silinmemiş her örnek -- bir eğitim
+        çalıştırmasının fiilen okuduğu ve `.../training-samples/export`'un
+        akıttığı şey: bilerek aynı sorgu, böylece gösterilen veri ile
+        eğitilen veri asla birbirinden sapamaz."""
         result = await self.db.execute(
             select(TrainingSampleModel)
             .where(TrainingSampleModel.company_id == company_id, TrainingSampleModel.is_deleted.is_(False))
@@ -192,13 +192,14 @@ class TrainingRepository:
         trigger: str = "manual",
         status: str = "running",
     ) -> TrainingRunModel:
-        """`status="running"` (the default) fits the synchronous
-        style-adapter path, which starts working the instant the row
-        exists. A queued LoRA run (#191) passes `status="queued"` instead
-        -- `started_at` only gets stamped for the immediately-running case;
-        the worker itself has no "I've started" checkpoint to update it
-        from, so a queued run's actual start time is only ever visible as
-        "somewhere between created_at and finished_at."""
+        """`status="running"` (varsayılan), satır var olduğu anda çalışmaya
+        başlayan senkron stil-adaptörü yoluna uyar. Kuyruğa alınmış bir
+        LoRA çalıştırması (#191) bunun yerine `status="queued"` geçirir --
+        `started_at` yalnızca hemen çalışan durum için damgalanır; worker'ın
+        kendisinin bunu güncelleyeceği bir "başladım" kontrol noktası
+        yoktur, bu yüzden kuyruğa alınmış bir çalıştırmanın gerçek başlangıç
+        zamanı yalnızca "created_at ile finished_at arasında bir yerde"
+        olarak görünür."""
         run = TrainingRunModel(
             id=uuid4().hex,
             company_id=company_id,
@@ -213,10 +214,11 @@ class TrainingRepository:
         return run
 
     async def start_run(self, run: TrainingRunModel) -> TrainingRunModel:
-        """A queued run's transition to actually running -- called by
-        `app.workers.training.run_lora_training_job` once it has picked
-        the job up, not by `create_run` (which already stamps this for
-        the synchronous `status="running"` case)."""
+        """Kuyruğa alınmış bir çalıştırmanın fiilen çalışmaya geçişi --
+        işi devraldıktan sonra `app.workers.training.
+        run_lora_training_job` tarafından çağrılır, `create_run`
+        tarafından değil (o zaten senkron `status="running"` durumu için
+        bunu damgalar)."""
         run.status = "running"
         run.started_at = datetime.now(timezone.utc)
         await self.db.flush()

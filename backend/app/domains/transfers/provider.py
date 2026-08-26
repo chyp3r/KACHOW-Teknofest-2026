@@ -1,10 +1,10 @@
-"""Builds a fully-wired `ArtifactTransferService` for a request-scoped session.
+"""İstek kapsamlı bir oturum için tam bağlı bir `ArtifactTransferService` oluşturur.
 
-Shared by every router that needs to call `ArtifactTransferService.execute`
--- `transfers/router.py` itself and `drafts/router.py` (`DraftShareService.
-send` delegates to it) -- so the dependency graph (policy, messaging,
-pools, audit, quotas) is assembled in exactly one place rather than
-duplicated per call site.
+`ArtifactTransferService.execute`'u çağırması gereken her router tarafından
+paylaşılır -- `transfers/router.py`'nin kendisi ve `drafts/router.py`
+(`DraftShareService.send` buna delege eder) -- böylece bağımlılık grafiği
+(politika, mesajlaşma, havuzlar, denetim, kotalar) her çağrı noktasında
+tekrarlanmak yerine tam olarak tek bir yerde bir araya getirilir.
 """
 
 from dataclasses import dataclass
@@ -74,9 +74,10 @@ def build_transfer_service(db: AsyncSession) -> ArtifactTransferService:
 
 
 def _build_intent_service(db: AsyncSession) -> TransferIntentService:
-    """Wire a `TransferIntentService` sharing the same collaborators
-    `build_transfer_service` already assembles -- `execute()` delegates to
-    the exact same `ArtifactTransferService` every other channel uses."""
+    """`build_transfer_service`'in zaten bir araya getirdiği aynı işbirlikçileri
+    paylaşan bir `TransferIntentService` bağlar -- `execute()`, diğer her
+    kanalın kullandığı tam olarak aynı `ArtifactTransferService`'e delege
+    eder."""
     policy = TransferPolicy(
         unit_membership_repository=UnitMembershipRepository(db),
         favorite_repository=UserFavoriteRepository(db),
@@ -92,13 +93,13 @@ def _build_intent_service(db: AsyncSession) -> TransferIntentService:
 
 
 # ---------------------------------------------------------------------------
-# Faz 4 -- the AI graph's transfer_provider. Every method below opens its own
-# `tenant_session` and returns plain, already-detached data (dataclasses/
-# dicts), never an ORM instance -- the same discipline
-# `app.domains.units.provider.get_active_units_for_routing` documents for the
-# same reason: the graph is compiled once per process, outside any
-# request-scoped session, and an ORM object handed back after its session
-# closed would raise on the next attribute access.
+# Faz 4 -- AI grafiğinin transfer_provider'ı. Aşağıdaki her metot kendi
+# `tenant_session`'ını açar ve asla bir ORM örneği değil, düz, zaten
+# bağlantısı kesilmiş veri (dataclass/dict) döndürür -- aynı gerekçeyle
+# `app.domains.units.provider.get_active_units_for_routing`'in belgelediği
+# aynı disiplin: grafik, herhangi bir istek kapsamlı oturumun dışında,
+# süreç başına bir kez derlenir ve oturumu kapandıktan sonra geri verilen
+# bir ORM nesnesi sonraki özellik erişiminde hata fırlatır.
 # ---------------------------------------------------------------------------
 
 
@@ -119,8 +120,8 @@ class DocumentCandidate:
 
 @dataclass(frozen=True)
 class ArtifactResolutionSnapshot:
-    """Plain-data mirror of `ArtifactResolution`, safe to carry in
-    `PlanningState` (which must stay JSON-serialisable)."""
+    """`ArtifactResolution`'ın düz veri yansıması, `PlanningState` içinde
+    taşınması güvenli (JSON serileştirilebilir kalmak zorunda)."""
 
     status: str
     artifact_kind: str
@@ -130,17 +131,18 @@ class ArtifactResolutionSnapshot:
 
 @dataclass(frozen=True)
 class IntentSnapshot:
-    """Plain-data mirror of `ArtifactTransferIntentModel`.
+    """`ArtifactTransferIntentModel`'in düz veri yansıması.
 
-    `error_reason`/`error_message` are set instead of raising
-    `TransferIntentError` across the provider boundary -- `app.ai.*` never
-    imports `app.domains.*` (see `TransferGraphProvider`'s own docstring),
-    so a domain-specific exception type cannot cross into
-    `planning_graph.py`. Every provider method that could hit a stale/
-    expired/TOCTOU-failed transition catches it here and reports it as
-    plain data instead; a non-`None` `error_reason` is what the graph node
-    checks, exactly the way it already checks `status == StepStatus.FAILED`
-    for any other step.
+    Provider sınırı boyunca `TransferIntentError` fırlatmak yerine
+    `error_reason`/`error_message` ayarlanır -- `app.ai.*` asla
+    `app.domains.*`'ı import etmez (bkz. `TransferGraphProvider`'ın kendi
+    docstring'i), dolayısıyla alan (domain) özel bir istisna tipi
+    `planning_graph.py`'ye geçemez. Eskimiş/süresi dolmuş/TOCTOU
+    başarısızlığı olan bir geçişe rastlayabilecek her provider metodu
+    bunu burada yakalar ve bunun yerine düz veri olarak rapor eder;
+    graf düğümünün kontrol ettiği şey `None` olmayan bir `error_reason`'dır,
+    tıpkı diğer her adım için zaten `status == StepStatus.FAILED`'i
+    kontrol ettiği gibi.
     """
 
     id: str = ""
@@ -159,10 +161,10 @@ class IntentSnapshot:
 
 @dataclass(frozen=True)
 class TransferOutcome:
-    """Plain-data mirror of the `ArtifactTransferModel` `execute()` produces.
+    """`execute()`'un ürettiği `ArtifactTransferModel`'in düz veri yansıması.
 
-    See `IntentSnapshot`'s docstring for why errors are fields, not a raised
-    exception.
+    Hataların neden fırlatılan bir istisna değil de alan olduğu için
+    `IntentSnapshot`'ın docstring'ine bakın.
     """
 
     id: str = ""
@@ -204,19 +206,21 @@ def _snapshot_transfer(transfer: ArtifactTransferModel) -> TransferOutcome:
 
 
 class TransferGraphProvider:
-    """Everything the `propose_transfer` tool (`app.ai.tools.transfer_tools`)
-    and `planning_graph.py`'s `transfer_gate`/`transfer_execute` need from
-    the transfers domain, injected the same way `units_provider`/
-    `adapter_provider` are (see `create_planning_graph`'s own docstring) --
-    `app.ai.*` never imports `app.domains.*` directly.
+    """`propose_transfer` aracının (`app.ai.tools.transfer_tools`) ve
+    `planning_graph.py`'nin `transfer_gate`/`transfer_execute`'ının
+    transfers alanından ihtiyaç duyduğu her şey, `units_provider`/
+    `adapter_provider`'ın enjekte edildiği aynı şekilde enjekte edilir
+    (bkz. `create_planning_graph`'ın kendi docstring'i) --
+    `app.ai.*` asla `app.domains.*`'ı doğrudan import etmez.
     """
 
     async def resolve_recipient(
         self, *, company_id: str, name: str, requester_id: str
     ) -> tuple:
-        """Returns `(status, candidates)` -- `status` is
-        `"resolved"|"ambiguous"|"not_found"`, `candidates` a tuple of
-        `RecipientCandidate` (already a plain dataclass, safe as-is)."""
+        """`(status, candidates)` döndürür -- `status`,
+        `"resolved"|"ambiguous"|"not_found"`, `candidates` ise
+        `RecipientCandidate`'lardan (zaten düz bir dataclass, olduğu gibi
+        güvenli) oluşan bir tuple'dır."""
         async with tenant_session(company_id) as session:
             service = RecipientResolutionService(UserRepository(session), UserFavoriteRepository(session))
             resolution = await service.resolve(name=name, company_id=company_id, requester_id=requester_id)
@@ -382,6 +386,6 @@ class TransferGraphProvider:
 
 
 def build_transfer_graph_provider() -> TransferGraphProvider:
-    """Built once per process, like `PrototypeMatcher` -- stateless, every
-    method opens its own session per call."""
+    """`PrototypeMatcher` gibi süreç başına bir kez oluşturulur -- durumsuz
+    (stateless), her metot her çağrıda kendi oturumunu açar."""
     return TransferGraphProvider()

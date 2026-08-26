@@ -4,15 +4,15 @@ from pydantic import BaseModel, Field
 
 
 class APIErrorDetail(BaseModel):
-    """Pydantic model representing structured error information in APIResponse."""
+    """APIResponse içindeki yapılandırılmış hata bilgisini temsil eden Pydantic modeli."""
 
     code: str = Field(
-        description="Application-specific unique error code (e.g. NOT_FOUND, AI_EXECUTION_ERROR)."
+        description="Uygulamaya özgü benzersiz hata kodu (örn. NOT_FOUND, AI_EXECUTION_ERROR)."
     )
     message: str = Field(
-        description="Human-readable error message for the user or developer."
+        description="Kullanıcı veya geliştirici için okunabilir hata mesajı."
     )
     details: Optional[Dict[str, Any]] = Field(
         default=None,
-        description="Additional technical details or validation errors.",
+        description="Ek teknik detaylar veya doğrulama hataları.",
     )

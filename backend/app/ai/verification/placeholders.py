@@ -1,15 +1,16 @@
-"""Deterministic backstop for a generated draft's own "not found" markers.
+"""Üretilen bir taslağın kendi "bulunamadı" işaretleri için deterministik
+yedek mekanizma.
 
-The brief instructs the writer to leave a ``[...]`` placeholder for anything
-missing (see ``app.ai.workflows.draft_graph._build_brief``), but a prompt
-instruction is not a guarantee -- a smaller local model can still write a
-header field's own line with a literal "bulunamadı"/"belirtilmemiş"/"yok"
-value instead of the placeholder it was told to use. Left as plain text,
-this silently bypasses the whole missing-information gate:
-``PLACEHOLDER_PATTERN`` never matches it, so ``build_missing_info_request``
-never asks the human for that field's value, and the draft ships as if the
-field were genuinely, if concisely, filled in -- which is exactly the "no
-question is ever asked" bug this module exists to close.
+Brief, yazara eksik olan her şey için bir ``[...]`` yer tutucusu bırakmasını
+talimat verir (bkz. ``app.ai.workflows.draft_graph._build_brief``), ama bir
+prompt talimatı bir garanti değildir -- daha küçük bir yerel model, kendisine
+söylenen yer tutucu yerine bir başlık alanının satırına düz "bulunamadı" /
+"belirtilmemiş" / "yok" değerini yazabilir. Düz metin olarak bırakıldığında,
+bu sessizce tüm eksik-bilgi kapısını atlar: ``PLACEHOLDER_PATTERN`` buna asla
+eşleşmez, bu yüzden ``build_missing_info_request`` insana o alanın değerini
+asla sormaz ve taslak, alan sanki gerçekten -- kısaca da olsa -- doldurulmuş
+gibi gönderilir -- ki bu tam olarak bu modülün kapatmak için var olduğu "hiç
+soru sorulmuyor" hatasıdır.
 """
 
 import re
@@ -17,12 +18,13 @@ from typing import NamedTuple
 
 from app.ai.verification.draft_verifier import PLACEHOLDER_PATTERN, _fold
 
-#: Header line labels this backstop recognises, mapped to the bracket name
-#: the field becomes when its value turns out to be an unfilled marker.
-#: Matches the placeholder names ``writer.md`` itself already uses for these
-#: fields (``[Belge Sayısı]``, ``[Tarih]``, ``[Konu]``, ``[Muhatap]``), so a
-#: substitution here and one the writer left on its own are indistinguishable
-#: to everything downstream (``build_missing_info_request``, the human gate).
+#: Bu yedek mekanizmanın tanıdığı başlık satırı etiketleri, değeri
+#: doldurulmamış bir işaret olduğunda alanın dönüştüğü köşeli parantez
+#: adına eşlenmiş. ``writer.md``'nin bu alanlar için zaten kullandığı yer
+#: tutucu adlarıyla eşleşir (``[Belge Sayısı]``, ``[Tarih]``, ``[Konu]``,
+#: ``[Muhatap]``), böylece buradaki bir ikame ile yazarın kendi başına
+#: bıraktığı bir ikame, akış aşağısındaki her şey için (``build_missing_info_request``,
+#: insan kapısı) ayırt edilemez.
 _FIELD_PLACEHOLDERS: dict[str, str] = {
     "sayı": "Belge Sayısı",
     "sayi": "Belge Sayısı",
@@ -31,14 +33,15 @@ _FIELD_PLACEHOLDERS: dict[str, str] = {
     "muhatap": "Muhatap",
 }
 
-#: Folded (ASCII, lowercase) values that mean "this field was not actually
-#: filled in" -- a model writing one of these as a header line's value
-#: instead of a `[...]` placeholder leaves the same information gap, just
-#: not one `PLACEHOLDER_PATTERN` can see as written. The empty string is
-#: included deliberately: folding strips all punctuation, so a value of
-#: "---", "___" or "N/A" (which folds to "n a") already collapses to it or
-#: to an explicit entry below -- and a value that is bare whitespace after
-#: stripping is the same "nothing here" gap by construction.
+#: "Bu alan aslında doldurulmadı" anlamına gelen katlanmış (ASCII, küçük
+#: harf) değerler -- bir modelin bunlardan birini bir `[...]` yer tutucusu
+#: yerine bir başlık satırının değeri olarak yazması, aynı bilgi boşluğunu
+#: bırakır, sadece `PLACEHOLDER_PATTERN`'in yazılı olarak göremeyeceği bir
+#: biçimde. Boş dize kasıtlı olarak eklenmiştir: katlama tüm noktalama
+#: işaretlerini kaldırır, bu yüzden "---", "___" veya "N/A" (ki "n a"ya
+#: katlanır) gibi bir değer zaten buna veya aşağıdaki açık bir girdiye
+#: çöker -- ve kırpıldıktan sonra çıplak boşluk olan bir değer, yapı gereği
+#: aynı "burada hiçbir şey yok" boşluğudur.
 _UNFILLED_MARKERS = frozenset(
     {
         "", "bulunamadi", "bulunamamistir", "belirtilmemis", "belirtilmemistir",
@@ -47,11 +50,11 @@ _UNFILLED_MARKERS = frozenset(
     }
 )
 
-#: A recognised field label at the start of a line, colon, then its value.
-#: Anchored to line start the same way ``STRUCTURE_CHECKS``'s own field
-#: patterns are, so this only ever matches the draft's own header line for
-#: that field -- never, say, an "İlgi:" line quoting another document's
-#: number, which has its own label.
+#: Bir satırın başında tanınan bir alan etiketi, iki nokta üst üste, sonra
+#: değeri. ``STRUCTURE_CHECKS``'in kendi alan kalıplarının yaptığı gibi
+#: satır başına sabitlenmiştir, böylece bu sadece taslağın o alan için
+#: kendi başlık satırıyla eşleşir -- asla, mesela, kendi etiketi olan başka
+#: bir belgenin numarasını alıntılayan bir "İlgi:" satırıyla değil.
 _HEADER_LINE_PATTERN = re.compile(
     r"^([ \t]*)(Sayı|Sayi|Tarih|Konu|Muhatap)([ \t]*:[ \t]*)(.+)$",
     re.MULTILINE | re.IGNORECASE,
@@ -64,16 +67,16 @@ class NormalizedDraft(NamedTuple):
 
 
 def normalize_unfilled_markers(draft: str) -> NormalizedDraft:
-    """Rewrite a recognised header line's "not found" value into a placeholder.
+    """Tanınan bir başlık satırının "bulunamadı" değerini bir yer tutucuya çevir.
 
     Args:
-        draft: The generated draft text.
+        draft: Üretilen taslak metni.
 
     Returns:
-        The (possibly rewritten) draft, and how many lines were substituted
-        -- callers that only care about the text can ignore the count, but
-        it lets a caller log/observe how often the model actually needed
-        this backstop.
+        (Muhtemelen yeniden yazılmış) taslak ve kaç satırın ikame edildiği
+        -- sadece metinle ilgilenen çağıranlar sayıyı görmezden gelebilir,
+        ama bu, bir çağıranın modelin bu yedek mekanizmaya gerçekte ne
+        sıklıkla ihtiyaç duyduğunu loglamasına/gözlemlemesine olanak tanır.
     """
     count = 0
 
@@ -90,14 +93,15 @@ def normalize_unfilled_markers(draft: str) -> NormalizedDraft:
     return NormalizedDraft(text=normalized, substitutions=count)
 
 
-#: The draft's own "Tarih:" header line, with a bracketed placeholder as its
-#: value -- e.g. "Tarih: [Tarih]" or "Tarih: [Tarih Eksik - Lütfen
-#: Doldurun]" (see writer.md and draft_graph.writer_node's own rule).
-#: Anchored to a line starting with the "Tarih" label specifically, not any
-#: `[...]` span mentioning a date anywhere in the draft -- the incoming
-#: document's own date, when referenced at all, sits in the "İlgi:" line,
-#: never behind this label, so this can never mistake it for the response's
-#: own field and overwrite it with today's date.
+#: Taslağın kendi "Tarih:" başlık satırı, değeri olarak köşeli parantezli
+#: bir yer tutucuyla -- örn. "Tarih: [Tarih]" veya "Tarih: [Tarih Eksik -
+#: Lütfen Doldurun]" (bkz. writer.md ve draft_graph.writer_node'un kendi
+#: kuralı). Taslakta herhangi bir yerde tarihten bahseden herhangi bir
+#: `[...]` aralığına değil, özellikle "Tarih" etiketiyle başlayan bir
+#: satıra sabitlenmiştir -- gelen belgenin kendi tarihi, hiç referans
+#: verildiğinde, "İlgi:" satırında oturur, asla bu etiketin arkasında
+#: değil, bu yüzden bu, onu asla yanıtın kendi alanıyla karıştırıp bugünün
+#: tarihiyle üzerine yazamaz.
 _DATE_LINE_PATTERN = re.compile(
     r"^([ \t]*)(Tarih)([ \t]*:[ \t]*)\[[^\]]*\][ \t]*$",
     re.MULTILINE | re.IGNORECASE,
@@ -105,26 +109,27 @@ _DATE_LINE_PATTERN = re.compile(
 
 
 def fill_date_placeholders(draft: str, today: str) -> NormalizedDraft:
-    """Fill the draft's own "Tarih:" placeholder with the server-resolved date.
+    """Taslağın kendi "Tarih:" yer tutucusunu sunucu tarafında çözülen
+    tarihle doldur.
 
-    A generated draft must never leave its own date for the human to supply
-    (see app.ai.workflows.dates.today_tr and the bug report item this
-    closes) -- the writer is told to copy `today` verbatim into this line
-    (see draft_graph._build_brief's section 0), but a prompt instruction is
-    not a guarantee, so this is the deterministic backstop, run right after
-    ``normalize_unfilled_markers`` so a model that wrote "belirtilmemiş"
-    instead of a placeholder is caught first and this still finds a
-    placeholder to fill.
+    Üretilen bir taslak, kendi tarihini insanın sağlaması için asla
+    bırakmamalıdır (bkz. app.ai.workflows.dates.today_tr ve bunun kapattığı
+    hata raporu kalemi) -- yazara `today`'i olduğu gibi bu satıra kopyalaması
+    söylenir (bkz. draft_graph._build_brief'in 0. bölümü), ama bir prompt
+    talimatı bir garanti değildir, bu yüzden bu deterministik yedek
+    mekanizmadır; "belirtilmemiş" yazan bir modelin önce yakalanması ve
+    bunun hâlâ doldurulacak bir yer tutucu bulması için
+    ``normalize_unfilled_markers``'dan hemen sonra çalıştırılır.
 
     Args:
-        draft: The generated draft text.
-        today: The date to substitute (see app.ai.workflows.dates.today_tr).
+        draft: Üretilen taslak metni.
+        today: İkame edilecek tarih (bkz. app.ai.workflows.dates.today_tr).
 
     Returns:
-        The (possibly rewritten) draft, and how many "Tarih:" lines were
-        filled. When ``today`` is empty, the draft is returned unchanged --
-        there is nothing to fill with, and leaving the placeholder in place
-        is safer than writing an empty value into it.
+        (Muhtemelen yeniden yazılmış) taslak ve kaç "Tarih:" satırının
+        dolduruldu. ``today`` boşsa, taslak değiştirilmeden döndürülür --
+        doldurulacak bir şey yoktur ve yer tutucuyu olduğu gibi bırakmak,
+        içine boş bir değer yazmaktan daha güvenlidir.
     """
     if not today:
         return NormalizedDraft(text=draft, substitutions=0)
@@ -141,14 +146,15 @@ def fill_date_placeholders(draft: str, today: str) -> NormalizedDraft:
     return NormalizedDraft(text=filled, substitutions=count)
 
 
-#: A bare, role-less placeholder the writer left, mapped to the version
-#: that states whose it is -- for the ordinary (institutional) draft. Keyed
-#: on the folded ("ünvan"/"Ünvan"/"UNVAN" all collapse to "unvan") form so
-#: this catches every casing/accent variant the model might emit, matching
-#: how `writer.md` itself now names these fields (see its own "İmza Bloğu"
-#: rule) -- this is the deterministic backstop for when a prompt
-#: instruction alone wasn't enough, same role `normalize_unfilled_markers`
-#: plays for the header block's own fields.
+#: Yazarın bıraktığı çıplak, rolsüz bir yer tutucu, kime ait olduğunu
+#: belirten sürüme eşlenmiş -- olağan (kurumsal) taslak için. Katlanmış
+#: ("ünvan"/"Ünvan"/"UNVAN" hepsi "unvan"a çöker) biçim üzerinden
+#: anahtarlanmıştır, böylece bu, modelin yayabileceği her büyük/küçük
+#: harf/aksan varyantını yakalar; `writer.md`'nin bu alanları artık nasıl
+#: adlandırdığıyla eşleşir (bkz. kendi "İmza Bloğu" kuralı) -- bu, tek
+#: başına bir prompt talimatının yetmediği durumlar için deterministik
+#: yedek mekanizmadır; `normalize_unfilled_markers`'ın başlık bloğunun
+#: kendi alanları için oynadığı rolün aynısı.
 _SIGNATURE_PLACEHOLDERS: dict[str, str] = {
     _fold("Ad Soyad"): "İmzalayacak yetkilinin adı ve soyadı",
     _fold("Ad, Soyad"): "İmzalayacak yetkilinin adı ve soyadı",
@@ -156,20 +162,20 @@ _SIGNATURE_PLACEHOLDERS: dict[str, str] = {
     _fold("Soyad"): "İmzalayacak yetkilinin adı ve soyadı",
     _fold("Unvan"): "İmzalayacak yetkilinin unvanı",
     _fold("İmza"): "İmzalayacak yetkilinin adı ve soyadı",
-    # Corpus-derived anonymisation placeholders (see
-    # datasets/resmi_yazisma/anonimlestirme-manifesti.jsonl) -- a style
-    # example carrying one of these verbatim used to pass through
-    # unattributed and unasked (neither this map nor _INSTITUTION_
-    # PLACEHOLDERS recognised them), the exact unattributed-question bug
-    # this module exists to close, just for a corpus-shaped placeholder
-    # instead of a model-written one.
+    # Korpüsten türetilen anonimleştirme yer tutucuları (bkz.
+    # datasets/resmi_yazisma/anonimlestirme-manifesti.jsonl) -- bunlardan
+    # birini kelimesi kelimesine taşıyan bir üslup örneği, eskiden
+    # atıfsız ve sorulmadan geçiyordu (ne bu harita ne de
+    # _INSTITUTION_PLACEHOLDERS bunları tanıyordu); bu, bu modülün
+    # kapatmak için var olduğu tam olarak atıfsız-soru hatasıdır, sadece
+    # model tarafından yazılan yerine korpüs-şekilli bir yer tutucu için.
     _fold("İmza Sahibi"): "İmzalayacak yetkilinin adı ve soyadı",
     _fold("Kişi Adı"): "İmzalayacak yetkilinin adı ve soyadı",
 }
 
-#: Same placeholders, for an individual dilekçe (see `writer.md`'s own
-#: "Yapı İstisnaları" section) -- there is no "yetkili" signing on behalf of
-#: an institution, only the petitioner themselves.
+#: Aynı yer tutucular, bireysel bir dilekçe için (bkz. `writer.md`'nin
+#: kendi "Yapı İstisnaları" bölümü) -- bir kurum adına imzalayan bir
+#: "yetkili" yoktur, sadece dilekçe sahibinin kendisi vardır.
 _SIGNATURE_PLACEHOLDERS_PETITION: dict[str, str] = {
     _fold("Ad Soyad"): "Dilekçe sahibinin adı ve soyadı",
     _fold("Ad, Soyad"): "Dilekçe sahibinin adı ve soyadı",
@@ -181,10 +187,11 @@ _SIGNATURE_PLACEHOLDERS_PETITION: dict[str, str] = {
     _fold("Kişi Adı"): "Dilekçe sahibinin adı ve soyadı",
 }
 
-#: A bare institution placeholder -- always the sender's own institution
-#: (see `writer.md`'s "1. Başlık / Kurum Adı" rule): the only "Kurum Adı"
-#: a draft's own antet ever refers to is whoever is sending it, never the
-#: addressee (that name lives behind "Muhatap", not this label).
+#: Çıplak bir kurum yer tutucusu -- her zaman gönderenin kendi kurumu
+#: (bkz. `writer.md`'nin "1. Başlık / Kurum Adı" kuralı): bir taslağın
+#: kendi antetinin atıfta bulunduğu tek "Kurum Adı" onu gönderen kim ise
+#: odur, asla muhatap değil (o ad "Muhatap"ın arkasında oturur, bu
+#: etiketin değil).
 _INSTITUTION_PLACEHOLDERS: dict[str, str] = {
     _fold("Kurum Adı"): "Gönderen kurumun adı",
 }
@@ -193,33 +200,34 @@ _INSTITUTION_PLACEHOLDERS: dict[str, str] = {
 def normalize_role_placeholders(
     draft: str, *, is_individual_petition: bool = False
 ) -> NormalizedDraft:
-    """Rewrite an ambiguous, role-less placeholder into one that states whose it is.
+    """Belirsiz, rolsüz bir yer tutucuyu, kime ait olduğunu belirten bir
+    yer tutucuya çevir.
 
-    The bug this closes: a bare ``[Ad Soyad]``/``[Unvan]`` placeholder gives
-    the human gate nothing to ask *about* -- ``missing_info.
-    InfoQuestion.to_prompt_question`` renders whatever text sits inside the
-    brackets verbatim as the question's own label, so an unattributed
-    placeholder becomes an unattributed question ("'Ad Soyad' bilgisi
-    nedir?" -- whose?).
+    Bunun kapattığı hata: çıplak bir ``[Ad Soyad]``/``[Unvan]`` yer
+    tutucusu, insan kapısına *hakkında* soracak hiçbir şey vermez --
+    ``missing_info.InfoQuestion.to_prompt_question``, köşeli parantezler
+    içindeki her ne metin varsa onu olduğu gibi sorunun kendi etiketi
+    olarak render eder, bu yüzden atıfsız bir yer tutucu atıfsız bir soru
+    haline gelir ("'Ad Soyad' bilgisi nedir?" -- kimin?).
 
-    Deliberately position-independent (unlike, say, ``_DATE_LINE_PATTERN``,
-    which is anchored to the draft's own "Tarih:" line specifically): a
-    bare "Ad Soyad"/"Unvan"/"İmza" placeholder is, in this domain, always
-    about who is signing, and a bare "Kurum Adı" is always about who is
-    sending, regardless of where in the draft the writer happened to leave
-    it -- there is no second, different thing either phrase could
-    plausibly mean here.
+    Kasıtlı olarak konumdan bağımsızdır (mesela, özellikle taslağın kendi
+    "Tarih:" satırına sabitlenen ``_DATE_LINE_PATTERN``'in aksine): çıplak
+    bir "Ad Soyad"/"Unvan"/"İmza" yer tutucusu, bu alanda her zaman kimin
+    imzaladığıyla ilgilidir ve çıplak bir "Kurum Adı" her zaman kimin
+    gönderdiğiyle ilgilidir, yazarın taslağın neresinde bıraktığından
+    bağımsız olarak -- burada her iki ifadenin de makul olarak anlamına
+    gelebileceği ikinci, farklı bir şey yoktur.
 
     Args:
-        draft: The generated draft text.
-        is_individual_petition: True for a personal dilekçe-shaped sub-genre
-            (see ``draft_verifier.verify_draft``'s own parameter of the same
-            name) -- selects "Dilekçe sahibinin..." over "İmzalayacak
-            yetkilinin...".
+        draft: Üretilen taslak metni.
+        is_individual_petition: Kişisel dilekçe-şeklindeki bir alt-tür için
+            True (bkz. ``draft_verifier.verify_draft``'ın aynı adlı kendi
+            parametresi) -- "İmzalayacak yetkilinin..." yerine "Dilekçe
+            sahibinin..."i seçer.
 
     Returns:
-        The (possibly rewritten) draft, and how many placeholders were
-        renamed.
+        (Muhtemelen yeniden yazılmış) taslak ve kaç yer tutucunun yeniden
+        adlandırıldığı.
     """
     signature_map = _SIGNATURE_PLACEHOLDERS_PETITION if is_individual_petition else _SIGNATURE_PLACEHOLDERS
     count = 0

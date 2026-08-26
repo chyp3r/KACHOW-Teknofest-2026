@@ -11,7 +11,7 @@ def SuccessResponse(
     status_code: int = 200,
     meta: Optional[Dict[str, Any]] = None,
 ) -> JSONResponse:
-    """Helper to return a standardized unified successful JSONResponse."""
+    """Standartlaştırılmış, birleşik bir başarılı JSONResponse'u döndürmek için yardımcı fonksiyon."""
     meta_info = meta or {}
     if "timestamp" not in meta_info:
         meta_info["timestamp"] = datetime.now(timezone.utc).isoformat()

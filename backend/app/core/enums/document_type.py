@@ -2,13 +2,13 @@ from enum import StrEnum
 
 
 class DocumentType(StrEnum):
-    """Types of incoming official documents (evrak) recognised at intake.
+    """Girişte tanınan gelen resmi belge (evrak) türleri.
 
-    This taxonomy describes the document the institution *receives*. It is the
-    counterpart of `CorrespondenceType`, which describes the official reply the
-    institution *produces*. Keeping the two separate lets the intake pipeline
-    classify an inbound petition while the drafting pipeline independently
-    decides that the answer should be a response letter.
+    Bu taksonomi kurumun *aldığı* belgeyi tanımlar. Kurumun *ürettiği*
+    resmi yanıtı tanımlayan `CorrespondenceType`'ın karşılığıdır. İkisini
+    ayrı tutmak, giriş boru hattının gelen bir dilekçeyi sınıflandırmasına
+    izin verirken taslak boru hattının bağımsız olarak yanıtın bir yanıt
+    mektubu olması gerektiğine karar vermesini sağlar.
     """
 
     OFFICIAL_LETTER = "official_letter"

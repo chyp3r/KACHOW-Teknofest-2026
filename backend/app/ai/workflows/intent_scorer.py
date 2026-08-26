@@ -1,22 +1,23 @@
-"""Scores a message against the evidence rules and decides by margin.
+"""Bir mesajı kanıt kurallarına (evidence rules) göre puanlar ve marja göre karar verir.
 
-The decision is the *margin* between the top two intents, not the top score.
-That single choice is what makes the failures the baseline measured fixable:
+Karar, en yüksek skor değil, en yüksek iki intent arasındaki *marjdır*.
+Baseline'ın ölçtüğü hataları düzeltilebilir kılan tek seçim budur:
 
-* A message carrying both a drafting phrase and an analysis phrase produces two
-  close scores. A small margin is not a tie to be broken arbitrarily -- it is
-  information, and it routes to a compound plan or an escalation rather than to
-  whichever rule the old cascade happened to check first.
-* A message carrying a domain noun plus a definitional counter-signal
-  ("Üst yazı ne demek?") produces a *negative* contribution to draft and a
-  positive one to assist, so it resolves to assist without weakening the
-  drafting phrases that every genuine request depends on.
+* Hem bir yazım (drafting) ifadesi hem de bir analiz ifadesi taşıyan bir
+  mesaj, iki yakın skor üretir. Küçük bir marj, keyfi olarak çözülecek bir
+  berabelik değildir -- bilgidir ve eski kademenin (cascade) o an ilk hangi
+  kuralı kontrol ettiğine değil, bir bileşik plana veya bir yükseltmeye
+  (escalation) yönlendirir.
+* Bir alan (domain) ismi artı tanımlayıcı bir karşıt-sinyal ("Üst yazı ne
+  demek?") taşıyan bir mesaj, draft'a *negatif* bir katkı ve assist'e
+  pozitif bir katkı üretir; böylece her gerçek isteğin dayandığı yazım
+  ifadelerini zayıflatmadan assist'e çözümlenir.
 
-Everything here is arithmetic over a table -- no model call, sub-millisecond,
-and reproducible. Where the previous resolver escalated every message it could
-not pattern-match, this one escalates only where the evidence is genuinely
-balanced or genuinely absent, which is why the escalation rate falls even as
-accuracy rises.
+Buradaki her şey bir tablo üzerinde aritmetiktir -- model çağrısı yok,
+milisaniyenin altında ve tekrarlanabilir. Önceki çözümleyici, örüntü
+eşleştiremediği her mesajı yükseltirken, bu yalnızca kanıtın gerçekten
+dengeli veya gerçekten yok olduğu yerlerde yükseltiyor; doğruluk artarken
+yükseltme oranının düşmesinin nedeni de bu.
 """
 
 import logging
@@ -42,21 +43,24 @@ logger = logging.getLogger(__name__)
 
 _INTENT_POLICY = get_policy().intent
 
-#: Minimum lead the top intent needs over the runner-up to be decisive.
+#: En üstteki intent'in kararlı sayılması için ikinci sıradakine karşı ihtiyaç duyduğu minimum fark.
 DECISIVE_MARGIN = _INTENT_POLICY.decisive_margin
 
-#: Minimum score for an intent to count as genuinely present at all. Below this
-#: an intent is noise, not a candidate -- without a floor, two rules scoring
-#: 0.1 and 0.0 would read as a confident decision.
+#: Bir intent'in gerçekten mevcut sayılması için minimum skor. Bunun
+#: altında bir intent, bir aday değil gürültüdür -- bir taban değeri
+#: olmadan, 0.1 ve 0.0 puanlayan iki kural, güvenli bir karar gibi
+#: okunurdu.
 PRESENCE_FLOOR = _INTENT_POLICY.presence_floor
 
-#: With the margin below `DECISIVE_MARGIN`, both intents at or above this are
-#: treated as a compound request rather than an ambiguity to escalate.
+#: Marj `DECISIVE_MARGIN`'in altındayken, bu değere eşit veya üstünde olan
+#: her iki intent de yükseltilecek bir belirsizlik yerine bileşik bir
+#: istek olarak ele alınır.
 COMPOUND_FLOOR = _INTENT_POLICY.compound_floor
 
-#: Score used to convert a margin into a [0, 1] confidence. A lead of this much
-#: reads as full confidence; the value is the observed spread between a clean
-#: single-rule hit and a contested one.
+#: Bir marjı [0, 1] aralığında bir confidence'a dönüştürmek için kullanılan
+#: skor. Bu kadar bir fark tam confidence olarak okunur; değer, temiz
+#: tek-kural isabeti ile tartışmalı bir isabet arasında gözlemlenen
+#: farktır.
 CONFIDENCE_SCALE = _INTENT_POLICY.confidence_scale
 
 _TURKISH_MAP = str.maketrans(
@@ -69,12 +73,12 @@ _TURKISH_MAP = str.maketrans(
 
 @dataclass
 class IntentScores:
-    """The full scoring outcome for one message.
+    """Tek bir mesaj için tam puanlama sonucu.
 
     Attributes:
-        scores: Intent -> accumulated weight.
-        evidence: Rule ids that fired, in rule-table order.
-        ranked: Intents sorted by score, highest first.
+        scores: Intent -> birikmiş ağırlık.
+        evidence: Ateşlenen kural id'leri, kural-tablosu sırasında.
+        ranked: Skora göre sıralanmış intent'ler.
     """
 
     scores: dict[str, float] = field(default_factory=dict)
@@ -82,12 +86,12 @@ class IntentScores:
 
     @property
     def ranked(self) -> list[tuple[str, float]]:
-        """Intents by score, highest first, ties broken by name for stability."""
+        """En yüksekten başlayarak intent'ler; berabelikler kararlılık için isme göre çözülür."""
         return sorted(self.scores.items(), key=lambda item: (-item[1], item[0]))
 
     @property
     def margin(self) -> float:
-        """Lead of the top intent over the runner-up. 0.0 when fewer than two."""
+        """En üstteki intent'in ikinci sıradakine göre farkı. İkiden azsa 0.0."""
         ranked = self.ranked
         if len(ranked) < 2:
             return ranked[0][1] if ranked else 0.0
@@ -95,18 +99,18 @@ class IntentScores:
 
     @property
     def confidence(self) -> float:
-        """Margin mapped into [0, 1]."""
+        """[0, 1] aralığına eşlenmiş marj."""
         return max(0.0, min(1.0, self.margin / CONFIDENCE_SCALE))
 
 
 def normalize(text: str) -> str:
-    """Fold Turkish text to lowercase ASCII for phrase matching.
+    """İfade eşleştirme için Türkçe metni küçük harfli ASCII'ye indirger.
 
     Args:
-        text: Raw user text.
+        text: Ham kullanıcı metni.
 
     Returns:
-        Lowercase ASCII with punctuation collapsed to single spaces.
+        Noktalama işaretleri tek boşluklara indirgenmiş küçük harfli ASCII.
     """
     folded = (text or "").translate(_TURKISH_MAP)
     folded = unicodedata.normalize("NFKD", folded)
@@ -115,21 +119,22 @@ def normalize(text: str) -> str:
 
 
 def _compile_surface(surface: str) -> re.Pattern:
-    """Compile one rule surface with a left word boundary, no right boundary.
+    """Bir kural surface'ini sol kelime sınırıyla, sağ sınır olmadan derler.
 
-    A left boundary alone fixes the concrete false positive ("uzat" inside
-    "uzatma") without pretending to Turkish morphology: the language is
-    agglutinative, so a legitimate hit routinely continues past the bare
-    surface ("kısaltır mısın" for "kisalt", "revize edelim" for "revize et"
-    only if the rule surface itself ends where the suffix begins). The right
-    side stays open on purpose.
+    Yalnızca sol sınır, Türkçe morfolojisine özenmeden somut yanlış pozitifi
+    ("uzatma" içindeki "uzat") düzeltir: dil sondan eklemelidir, bu yüzden
+    meşru bir isabet genellikle yalın surface'in ötesine devam eder
+    ("kisalt" için "kısaltır mısın", ama yalnızca kural surface'inin
+  kendisi ekin başladığı yerde bitiyorsa "revize et" için "revize edelim").
+    Sağ taraf kasıtlı olarak açık bırakıldı.
     """
     return re.compile(r"(?<![a-z0-9])" + re.escape(surface))
 
 
-#: One compiled pattern per surface, keyed by rule id and built once at
-#: import time rather than per call -- `ALL_RULES` is a fixed module-level
-#: tuple, so there is nothing to invalidate.
+#: Surface başına derlenmiş bir örüntü, kural id'sine göre anahtarlanmış ve
+#: her çağrıda değil import zamanında bir kez inşa edilmiş -- `ALL_RULES`
+#: sabit bir modül seviyesi tuple, dolayısıyla geçersiz kılınacak bir şey
+#: yok.
 _SURFACE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
     rule.id: tuple(_compile_surface(surface) for surface in rule.surfaces)
     for rule in ALL_RULES
@@ -139,7 +144,7 @@ _SURFACE_PATTERNS: dict[str, tuple[re.Pattern, ...]] = {
 def _fires(
     rule: EvidenceRule, normalized: str, has_document: bool, has_active_draft: bool
 ) -> bool:
-    """Report whether a rule applies to this message."""
+    """Bir kuralın bu mesaja uygulanıp uygulanmadığını bildirir."""
     if rule.requires_document is not None and rule.requires_document is not has_document:
         return False
     if (
@@ -151,11 +156,11 @@ def _fires(
 
 
 def looks_like_question(raw: str, normalized: str) -> bool:
-    """Heuristically decide whether the message asks something.
+    """Mesajın bir şey sorup sormadığına sezgisel (heuristic) olarak karar verir.
 
-    Public (not `_`-prefixed): reused by `router_features.extract_features`
-    as one of the fusion layer's structural signals, not just internally by
-    `score_intents`.
+    Public (`_` ön eki yok): yalnızca `score_intents` içinde değil,
+    `router_features.extract_features` tarafından da fusion katmanının
+    yapısal sinyallerinden biri olarak yeniden kullanılıyor.
     """
     if "?" in raw:
         return True
@@ -169,18 +174,19 @@ def score_intents(
     previous_intent: Optional[str] = None,
     has_active_draft: bool = False,
 ) -> IntentScores:
-    """Accumulate evidence for every intent.
+    """Her intent için kanıtı biriktirir.
 
     Args:
-        message: The user's message.
-        document_id: Storage path of an attached document, when present.
-        previous_intent: The intent resolved for the previous turn, when known.
-        has_active_draft: Whether `SessionFocus.active_draft` is set --
-            gates `revise`'s rules the same way `document_id` gates a
-            document-only rule (see `EvidenceRule.requires_active_draft`).
+        message: Kullanıcının mesajı.
+        document_id: Varsa, eklenmiş bir dokümanın depolama yolu.
+        previous_intent: Biliniyorsa, önceki tur için çözümlenen intent.
+        has_active_draft: `SessionFocus.active_draft`'ın ayarlı olup
+            olmadığı -- `document_id`'nin yalnızca-doküman kuralını
+            kapılaması gibi (bkz. `EvidenceRule.requires_active_draft`)
+            `revise`'in kurallarını kapılar.
 
     Returns:
-        The accumulated scores and the ids of every rule that fired.
+        Birikmiş skorlar ve ateşlenen her kuralın id'leri.
     """
     normalized = normalize(message)
     has_document = document_id is not None
@@ -200,10 +206,10 @@ def score_intents(
         if rule.id == "assist.definitional_question":
             definitional = True
 
-    # A definitional question is *about* a concept, so the domain noun that
-    # triggered draft/analyze is describing the topic rather than requesting
-    # the action. Subtracting here rather than lowering the noun's own weight
-    # keeps every genuine request at full strength.
+    # Tanımlayıcı bir soru bir kavram *hakkındadır*, dolayısıyla draft/analyze'i
+    # tetikleyen alan ismi, eylemi talep etmek yerine konuyu tarif ediyordur.
+    # İsmin kendi ağırlığını düşürmek yerine burada çıkarma yapmak, her
+    # gerçek isteği tam güçte tutar.
     if definitional:
         for intent in ("draft", "analyze"):
             if intent in result.scores:
@@ -212,34 +218,37 @@ def score_intents(
 
     words = normalized.split()
 
-    # A short affirmative continues the previous turn's intent. Bounded by
-    # length so "evet, ama önce şunu incele" is scored on its content instead.
+    # Kısa bir onaylama, önceki turun intent'ini devam ettirir. Uzunlukla
+    # sınırlandırıldı, böylece "evet, ama önce şunu incele" bunun yerine
+    # içeriğine göre puanlanır.
     #
-    # Suppressed when the message is a greeting, a courtesy, or a farewell:
-    # "İyi akşamlar, yarın devam ederiz" after a draft turn contains "devam"
-    # but is a sign-off, and reading it as consent produced a whole drafting
-    # run on the old resolver. A sign-off is the one place "devam" means the
-    # opposite of "continue now".
+    # Mesaj bir selamlama, nezaket ifadesi veya vedaysa bastırılır: bir
+    # draft turundan sonra gelen "İyi akşamlar, yarın devam ederiz" "devam"
+    # içerir ama bir vedadır ve bunu onay olarak okumak eski çözümleyicide
+    # tam bir yazım (drafting) çalışması üretiyordu. Bir veda, "devam"ın
+    # "şimdi devam et"in tam tersi anlama geldiği tek yerdir.
     #
-    # Also suppressed when the message is itself a question: "Peki sence bu
-    # yeterli mi" after a draft turn contains "peki" (a continuation surface)
-    # but is asking the assistant's opinion, not confirming the next action --
-    # scoring it as draft continuation ran a whole second drafting pipeline
-    # off a question the user expected a conversational answer to.
+    # Mesajın kendisi bir soruysa da bastırılır: bir draft turundan sonra
+    # gelen "Peki sence bu yeterli mi" "peki" içerir (bir devam surface'i)
+    # ama asistanın görüşünü soruyordur, bir sonraki eylemi onaylamıyordur --
+    # bunu draft devamı olarak puanlamak, kullanıcının sohbet tarzı bir
+    # cevap beklediği bir sorudan tüm ikinci bir yazım pipeline'ı
+    # çalıştırıyordu.
     #
-    # Also suppressed when a REVISE_RULES rule already fired for a *different*
-    # intent than `previous_intent`: "Kapanışı 'Saygılarımızla arz ederiz.'
-    # yap." after a draft turn names a concrete target ("kapanış") and is five
-    # words long, so it both fires `revise.explicit_request` (the message
-    # names a field to edit -- see REVISE_RULES's own docstring: gated on an
-    # active draft, there is nothing else that could plausibly mean) *and*
-    # matches this rule's own bare "yap" surface -- "yap" here is the
-    # sentence's actual verb, not a bare "go ahead" confirmation, but nothing
-    # above could tell the difference. Left unsuppressed, the continuation
-    # bonus stacked WEIGHT_HINT * 3 onto `draft` and out-scored the message's
-    # own, more specific `revise` evidence -- the "sayıyı siliyor"-adjacent
-    # report's actual router-level cause: a targeted revise instruction
-    # silently re-ran as a fresh draft instead.
+    # Bir REVISE_RULES kuralı zaten `previous_intent`'ten *farklı* bir
+    # intent için ateşlenmişse de bastırılır: bir draft turundan sonra gelen
+    # "Kapanışı 'Saygılarımızla arz ederiz.' yap." somut bir hedef adlandırır
+    # ("kapanış") ve beş kelimedir, dolayısıyla hem `revise.explicit_request`'i
+    # ateşler (mesaj düzenlenecek bir alan adlandırıyor -- bkz. REVISE_RULES'in
+    # kendi docstring'i: aktif bir draft'a kapılanmış olduğundan, makul olarak
+    # başka bir anlamı olamaz) *hem de* bu kuralın kendi yalın "yap"
+    # surface'iyle eşleşir -- buradaki "yap" cümlenin gerçek fiilidir, yalın
+    # bir "devam et" onayı değildir, ama yukarıdaki hiçbir şey farkı
+    # anlayamazdı. Bastırılmadan bırakıldığında, devam bonusu `draft`'ın
+    # üzerine WEIGHT_HINT * 3 yığıyordu ve mesajın kendi, daha spesifik olan
+    # `revise` kanıtından daha yüksek puan alıyordu -- "sayıyı siliyor"a
+    # yakın raporun gerçek router seviyesindeki nedeni buydu: hedeflenmiş bir
+    # revize talimatı sessizce yeni bir draft olarak yeniden çalışıyordu.
     fired_intents = {evidence_id.split(".", 1)[0] for evidence_id in result.evidence}
     contested_by_other_intent = bool(fired_intents - {previous_intent})
     signing_off = {"assist.greeting", "assist.courtesy", "assist.farewell"}.intersection(
@@ -258,58 +267,64 @@ def score_intents(
         )
         result.evidence.append(f"{previous_intent}.continuation")
 
-    # A question with a document attached leans toward `assist` -- a hint, not
-    # a gate. The old resolver made this a branch, which is why "Sen neler
-    # yapabilirsin?" with a document attached became a document question.
+    # Eklenmiş bir dokümanla gelen bir soru `assist`'e meyleder -- bu bir
+    # ipucudur, bir kapı değil. Eski çözümleyici bunu bir dal (branch) haline
+    # getiriyordu, bu yüzden dokümanı eklenmiş "Sen neler yapabilirsin?" bir
+    # doküman sorusu haline geliyordu.
     #
-    # Weighted at DOMAIN rather than HINT so it clears the presence floor on its
-    # own: "Evrakın konusu nedir?" carries no other document phrase, and a hint
-    # too weak to be a candidate would send every such question to the model.
+    # HINT yerine DOMAIN ile ağırlıklandırıldı, böylece tek başına presence
+    # floor'unu geçebiliyor: "Evrakın konusu nedir?" başka hiçbir doküman
+    # ifadesi taşımıyor ve aday olamayacak kadar zayıf bir ipucu, bu tür her
+    # soruyu modele gönderirdi.
     #
-    # Before `chat` and `document_qa` merged into one `assist` bucket, this
-    # rule's positive signal for document_qa had to be defended against two
-    # counter-signals below (a memory-recall question, a politely-phrased
-    # request) that argued the message was really `chat`. Both readings now
-    # land on the same intent, so there is nothing left to arbitrate -- the
-    # softener and memory-recall counters that used to run here are gone, not
-    # renamed, because their sole purpose was resolving a tension this merge
-    # eliminated.
+    # `chat` ve `document_qa` tek bir `assist` kovasında birleşmeden önce, bu
+    # kuralın document_qa için pozitif sinyalinin, mesajın aslında `chat`
+    # olduğunu savunan aşağıdaki iki karşıt sinyale (bir hafıza-hatırlatma
+    # sorusu, kibarca ifade edilmiş bir istek) karşı savunulması
+    # gerekiyordu. Her iki okuma da artık aynı intent'e düşüyor, dolayısıyla
+    # hakemlik edilecek bir şey kalmadı -- burada eskiden çalışan yumuşatıcı
+    # (softener) ve hafıza-hatırlatma karşıtları yeniden adlandırılmadı,
+    # kaldırıldı, çünkü tek amaçları bu birleşmenin ortadan kaldırdığı bir
+    # gerilimi çözmekti.
     if has_document and looks_like_question(message, normalized):
         result.scores["assist"] = (
             result.scores.get("assist", 0.0) + WEIGHT_DOMAIN
         )
         result.evidence.append("assist.question_with_document")
 
-    # A very short message with nothing attached is conversational filler --
-    # unless it is a continuation, in which case brevity is the *same* evidence
-    # counted twice. "evet, hazırla" is short precisely because it is an
-    # affirmative, and letting both signals fire left the two scores close
-    # enough to escalate a message whose meaning is not in doubt.
+    # Hiçbir şey eklenmemiş çok kısa bir mesaj sohbet dolgusudur (filler) --
+    # bir devam mesajı olması dışında; o durumda kısalık, iki kez sayılan
+    # *aynı* kanıttır. "evet, hazırla" tam olarak bir onaylama olduğu için
+    # kısadır ve her iki sinyalin de ateşlenmesine izin vermek, anlamı şüphe
+    # götürmeyen bir mesajı yükseltecek kadar iki skoru birbirine yakın
+    # bırakıyordu.
     #
-    # Also withheld while a draft is open: with nothing else attached, a short
-    # message is ordinarily filler, but with an active draft it is the single
-    # most common shape a targeted revision instruction takes ("giriş kısmını
-    # yumuşat" is four words). Padding `assist` here let that brevity alone
-    # outscore `revise`'s own explicit rules; `REVISE_RULES` already gates on
-    # `requires_active_draft`, so there is nothing left for this hint to
-    # arbitrate once a draft is open.
+    # Bir draft açıkken de tutuluyor: başka hiçbir şey eklenmemişken kısa
+    # bir mesaj normalde dolgudur, ama aktif bir draft'la, hedeflenmiş bir
+    # revizyon talimatının aldığı en yaygın tek biçimdir ("giriş kısmını
+    # yumuşat" dört kelimedir). Burada `assist`'i doldurmak, o kısalığın tek
+    # başına `revise`'in kendi açık kurallarından daha yüksek puan almasına
+    # izin veriyordu; `REVISE_RULES` zaten `requires_active_draft` üzerinden
+    # kapılanıyor, dolayısıyla bir draft açıldığında bu ipucunun hakemlik
+    # edecek bir şeyi kalmıyor.
     continued = f"{previous_intent}.continuation" in result.evidence
     if not has_document and not has_active_draft and not continued and len(words) <= 4:
         result.scores["assist"] = result.scores.get("assist", 0.0) + WEIGHT_HINT * 2
         result.evidence.append("assist.short_message")
 
-    # A statement naming the draft's muhatap ("Muhatap Ankara Valiliği
-    # olsun.") with no revise verb at all scores nothing today -- every
-    # REVISE_RULES surface is an explicit verb ("değiştir", "yap" alongside a
-    # tone/length cue), and "muhatap" alone names none of them. Without this,
-    # the message that supplies exactly the missing-information gate's own
-    # answer ("bilgi kısmı hiçbir yere yazılmıyor" -- see intent_rules.py's
-    # module docstring) has no evidence for anything and falls to whatever
-    # weak filler happens to be lying around. Gated the same way
-    # REVISE_RULES itself is (has_active_draft) and excluded when it's a
-    # question ("Muhatap kim?" asks about the current value, not a request
-    # to change it) -- with both conditions met, nothing else this message
-    # could plausibly mean once a draft is already open for revision.
+    # Hiçbir revise fiili içermeyen, draft'ın muhatabını adlandıran bir
+    # ifade ("Muhatap Ankara Valiliği olsun.") bugün hiçbir şey puanlamıyor
+    # -- her REVISE_RULES surface'i açık bir fiildir ("değiştir", bir
+    # ton/uzunluk ipucuyla birlikte "yap"), ve yalnızca "muhatap" bunlardan
+    # hiçbirini adlandırmaz. Bu olmadan, tam olarak eksik-bilgi kapısının
+    # kendi cevabını sağlayan mesaj ("bilgi kısmı hiçbir yere yazılmıyor" --
+    # bkz. intent_rules.py'ın modül docstring'i) hiçbir şey için kanıt
+    # taşımaz ve ortada bulunan zayıf her ne dolgu varsa ona düşer.
+    # REVISE_RULES'in kendisiyle aynı şekilde kapılanmış (has_active_draft)
+    # ve bir soru olduğunda hariç tutuluyor ("Muhatap kim?" değiştirme
+    # isteği değil, mevcut değeri soruyor) -- her iki koşul da
+    # sağlandığında, bir draft zaten revizyon için açıkken bu mesajın makul
+    # olarak başka bir anlamı olamaz.
     if (
         has_active_draft
         and not looks_like_question(message, normalized)

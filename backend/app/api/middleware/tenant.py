@@ -1,22 +1,23 @@
-"""Resolve the caller's tenant identity before any DB session is opened.
+"""Herhangi bir DB oturumu açılmadan önce çağıranın tenant kimliğini çözer.
 
-``app.infrastructure.database.session.get_db`` needs to know the request's
-``company_id``/root-ness the moment it opens a session, so it can set the
-Postgres GUCs the RLS policies (migration ``0013_rls``) key off of -- but
-``get_db`` itself has no access to the request, and ``Depends(get_current_user)``
-cannot run first to hand it one: that dependency needs a DB session of its
-own to look the user up, which is exactly the session this is trying to
-scope. This middleware breaks that cycle by decoding the JWT directly (the
-token already carries the ``company_id``/``role`` claims -- see
-``AuthService.authenticate_user``) and publishing them to a ``ContextVar``
-before the request reaches any dependency at all.
+``app.infrastructure.database.session.get_db``, bir oturum açtığı anda
+isteğin ``company_id``/root olup olmadığını bilmek zorundadır, çünkü RLS
+politikalarının (migration ``0013_rls``) dayandığı Postgres GUC'lerini
+ayarlaması gerekir -- ancak ``get_db``'nin kendisinin isteğe erişimi yoktur
+ve ``Depends(get_current_user)`` bunu ona vermek için önce çalışamaz: o
+bağımlılık kullanıcıyı bulmak için kendi DB oturumuna ihtiyaç duyar; bu da
+tam olarak kapsamlandırılmaya çalışılan oturumdur. Bu middleware, JWT'yi
+doğrudan çözerek (token zaten ``company_id``/``role`` claim'lerini taşır --
+bkz. ``AuthService.authenticate_user``) ve istek herhangi bir bağımlılığa
+ulaşmadan önce bunları bir ``ContextVar``'a yayınlayarak bu döngüyü kırar.
 
-Best-effort and silent on failure by design: a missing or invalid token is
-completely normal here (an anonymous request, `/auth/login` itself, or a
-request whose real authentication check hasn't run yet) and must not raise
--- that is `get_current_user`/`require_auth_if_enabled`'s job, downstream.
-This middleware only ever narrows what a request *can* see; it is never the
-thing that decides whether a request is authenticated at all.
+Tasarım gereği en iyi çaba (best-effort) ile çalışır ve hata durumunda
+sessiz kalır: eksik veya geçersiz bir token burada tamamen normaldir
+(anonim bir istek, `/auth/login`'in kendisi veya gerçek kimlik doğrulama
+kontrolü henüz çalışmamış bir istek) ve hata fırlatmamalıdır -- bu iş,
+sonrasında `get_current_user`/`require_auth_if_enabled`'a aittir. Bu
+middleware yalnızca bir isteğin *görebileceklerini* daraltır; bir isteğin
+kimlik doğrulaması yapılıp yapılmadığına asla karar vermez.
 """
 
 import logging
@@ -35,11 +36,11 @@ _BEARER_PREFIX = "Bearer "
 
 
 class TenantContextMiddleware(BaseHTTPMiddleware):
-    """Publish the JWT's ``company_id``/``role`` claims to ``current_tenant_var``.
+    """JWT'nin ``company_id``/``role`` claim'lerini ``current_tenant_var``'a yayınlar.
 
-    Registered alongside ``CorrelationIdMiddleware`` (see ``app.main``) --
-    same ``ContextVar``-token-and-reset shape, so the value is always
-    cleared at the end of the request regardless of how it finished.
+    ``CorrelationIdMiddleware`` ile birlikte kayıtlıdır (bkz. ``app.main``) --
+    aynı ``ContextVar``-token-ve-reset şekli kullanılır, böylece değer istek
+    nasıl sonlanırsa sonlansın, isteğin sonunda her zaman temizlenir.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
@@ -50,10 +51,11 @@ class TenantContextMiddleware(BaseHTTPMiddleware):
             try:
                 payload = decode_token(raw_token)
             except Exception:
-                # Expired/malformed/missing -- not this middleware's problem
-                # to report. The request proceeds with no tenant context,
-                # which the request-auth dependencies will reject on their
-                # own terms if the route actually requires authentication.
+                # Süresi dolmuş/bozuk/eksik -- bunu raporlamak bu
+                # middleware'in işi değil. İstek tenant context'i olmadan
+                # devam eder; route gerçekten kimlik doğrulama gerektiriyorsa
+                # bunu kendi kurallarına göre request-auth bağımlılıkları
+                # reddedecektir.
                 payload = None
             if payload is not None:
                 token = current_tenant_var.set(

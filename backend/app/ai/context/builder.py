@@ -1,13 +1,13 @@
-"""Bounded, observable prompt assembly.
+"""Sınırlı ve gözlemlenebilir prompt derlemesi.
 
-Context used to be built inline in three separate places (the assist step,
-the draft brief, the analysis prompt), each with its own ad-hoc truncation
-and none of them measuring anything against the model's real context
-window -- see ``app/ai/llms/base.py``'s ``count_tokens``. This module
-replaces "concatenate strings and hope" with an explicit budget: required
-pieces are never dropped, optional pieces are kept in priority order until
-the budget runs out, and whatever didn't fit is reported on the result
-instead of silently truncated.
+Bağlam eskiden üç ayrı yerde (assist adımı, taslak brief'i, analiz prompt'u)
+satır içi olarak inşa ediliyordu; her birinin kendi rastgele kırpma yöntemi
+vardı ve hiçbiri modelin gerçek bağlam penceresine karşı bir şey ölçmüyordu --
+bkz. ``app/ai/llms/base.py``'deki ``count_tokens``. Bu modül "string'leri
+birleştir ve umut et" yaklaşımının yerine açık bir bütçe koyar: zorunlu
+parçalar asla düşürülmez, isteğe bağlı parçalar bütçe tükenene kadar öncelik
+sırasına göre tutulur ve sığmayan her şey sessizce kırpılmak yerine sonuçta
+raporlanır.
 """
 
 import logging
@@ -19,40 +19,44 @@ from app.ai.llms.base import BaseLLMClient
 
 logger = logging.getLogger(__name__)
 
-#: Shrinks `text` to fit `budget_tokens`, returning the (possibly still
-#: too-large) result. Tried before a block is dropped outright.
+#: `text`'i `budget_tokens`'a sığacak şekilde küçültür, (hâlâ çok büyük
+#: olabilecek) sonucu döndürür. Bir blok tamamen düşürülmeden önce denenir.
 Compressor = Callable[[str, int], str]
 
 
 class ContextBudgetExceeded(Exception):
-    """The context's ``required`` blocks alone exceed the available budget.
+    """Bağlamın ``required`` blokları tek başına mevcut bütçeyi aşıyor.
 
-    Raised rather than silently overflowing the model's context window --
-    the previous behaviour (concatenate everything, let Ollama truncate from
-    the beginning) is exactly the failure mode this module exists to end.
+    Modelin bağlam penceresini sessizce taşırmak yerine fırlatılır --
+    önceki davranış (her şeyi birleştir, Ollama baştan kırpsın) tam olarak
+    bu modülün ortadan kaldırmak için var olduğu hata modudur.
     """
 
 
 @dataclass(frozen=True)
 class ContextBlock:
-    """One named, independently sizeable piece of a prompt.
+    """Bir prompt'un tek başına boyutlandırılabilen, adlandırılmış bir parçası.
 
     Attributes:
-        id: Stable name. Used for observability (``AssembledContext.dropped``
-            / ``.compressed``) and to look the rendered text back up by name.
-        priority: Drop order when the budget is tight -- lower is dropped
-            first. Blocks sharing a priority are dropped in the order they
-            were passed to ``ContextBuilder.build``. Irrelevant for
-            ``required`` blocks.
-        render: Produces the block's text. Deferred (an async callable
-            rather than a plain string) so a block the caller decides not to
-            include for this turn never pays its own formatting cost.
-        compressor: Optional fallback tried before dropping an optional block,
-            or before a required block that doesn't fit raises
-            ``ContextBudgetExceeded``: ``compressor(text, budget_tokens) -> str``.
-        required: Never dropped. Still passed through ``compressor`` first if
-            it doesn't fit on its own -- "required" means this content must
-            be represented, not that this exact text must be sent verbatim.
+        id: Sabit ad. Gözlemlenebilirlik için (``AssembledContext.dropped``
+            / ``.compressed``) ve render edilmiş metni ada göre geri bulmak
+            için kullanılır.
+        priority: Bütçe darken düşürülme sırası -- daha düşük olan önce
+            düşürülür. Aynı önceliği paylaşan bloklar ``ContextBuilder.build``'e
+            geçirildikleri sırayla düşürülür. ``required`` bloklar için
+            önemsizdir.
+        render: Bloğun metnini üretir. Düz bir string yerine ertelenmiş
+            (async bir çağrılabilir) olması, çağıranın bu tur için dahil
+            etmemeye karar verdiği bir bloğun kendi biçimlendirme maliyetini
+            hiç ödememesini sağlar.
+        compressor: İsteğe bağlı bir blok düşürülmeden önce, ya da tek
+            başına sığmayan zorunlu bir blok ``ContextBudgetExceeded``
+            fırlatmadan önce denenen isteğe bağlı geri dönüş:
+            ``compressor(text, budget_tokens) -> str``.
+        required: Asla düşürülmez. Tek başına sığmıyorsa yine de önce
+            ``compressor``'dan geçirilir -- "required" bu içeriğin temsil
+            edilmesi gerektiği anlamına gelir, tam olarak bu metnin
+            değiştirilmeden gönderilmesi gerektiği anlamına gelmez.
     """
 
     id: str
@@ -64,13 +68,15 @@ class ContextBlock:
 
 @dataclass(frozen=True)
 class AssembledContext:
-    """The rendered result of one ``ContextBuilder.build`` call.
+    """Bir ``ContextBuilder.build`` çağrısının render edilmiş sonucu.
 
     Attributes:
-        texts: Final text per included block id (dropped blocks are absent).
-        dropped: Block ids that did not fit, even after compression.
-        compressed: Block ids kept only after their compressor ran.
-        total_tokens: Combined size of every block in ``texts``.
+        texts: Dahil edilen her blok id'si için son metin (düşürülen bloklar
+            burada yer almaz).
+        dropped: Sıkıştırmadan sonra bile sığmayan blok id'leri.
+        compressed: Yalnızca kendi compressor'ı çalıştıktan sonra tutulan
+            blok id'leri.
+        total_tokens: ``texts`` içindeki her bloğun toplam boyutu.
     """
 
     texts: dict[str, str]
@@ -79,44 +85,44 @@ class AssembledContext:
     total_tokens: int
 
     def get(self, block_id: str, default: str = "") -> str:
-        """Return a block's text, or ``default`` when it was dropped/absent."""
+        """Bir bloğun metnini, ya da düşürülmüş/mevcut değilse ``default``'u döndürür."""
         return self.texts.get(block_id, default)
 
 
 class ContextBuilder:
-    """Assembles a bounded prompt from independently-sized blocks.
+    """Bağımsız boyutlandırılmış bloklardan sınırlı bir prompt derler.
 
-    Renders every block, keeps ``required`` ones unconditionally, then keeps
-    optional ones in ascending ``priority`` order until the budget runs
-    out -- compressing (when a compressor is configured) or dropping the
-    rest. Nothing is silently truncated: what didn't fit is reported on the
-    result, not swallowed.
+    Her bloğu render eder, ``required`` olanları koşulsuz tutar, ardından
+    isteğe bağlı olanları bütçe tükenene kadar artan ``priority`` sırasına
+    göre tutar -- geri kalanları (bir compressor tanımlıysa) sıkıştırır ya da
+    düşürür. Hiçbir şey sessizce kırpılmaz: sığmayan şey yutulmak yerine
+    sonuçta raporlanır.
     """
 
     def __init__(self, llm_client: BaseLLMClient):
-        """Initialize the builder.
+        """Builder'ı başlatır.
 
         Args:
-            llm_client: Supplies ``count_tokens`` -- the same estimator the
-                actual generation call will be sized against, so the budget
-                this builder enforces matches what the provider sees.
+            llm_client: ``count_tokens``'ı sağlar -- gerçek üretim çağrısının
+                boyutlandırılacağı aynı tahmin edici, böylece bu builder'ın
+                uyguladığı bütçe sağlayıcının gördüğüyle eşleşir.
         """
         self._llm_client = llm_client
 
     async def build(
         self, blocks: list[ContextBlock], budget: TokenBudget
     ) -> AssembledContext:
-        """Render and fit ``blocks`` into ``budget``.
+        """``blocks``'u render edip ``budget``'a sığdırır.
 
         Args:
-            blocks: The candidate blocks for this prompt.
-            budget: The token budget to fit them into.
+            blocks: Bu prompt için aday bloklar.
+            budget: İçine sığdırılacak token bütçesi.
 
         Returns:
-            The assembled context.
+            Derlenmiş bağlam.
 
         Raises:
-            ContextBudgetExceeded: The required blocks alone don't fit.
+            ContextBudgetExceeded: Zorunlu bloklar tek başına sığmıyor.
         """
         rendered: dict[str, str] = {}
         for block in blocks:
@@ -129,10 +135,10 @@ class ContextBuilder:
 
         count_tokens = self._llm_client.count_tokens
 
-        # A required block never gets dropped, but it still gets a chance to
-        # compress before the whole call fails outright -- required means
-        # "this content must be represented", not "this exact text must be
-        # sent verbatim no matter what".
+        # Zorunlu bir blok asla düşürülmez, ama tüm çağrı tamamen
+        # başarısız olmadan önce sıkıştırılma şansı yine de verilir --
+        # required, "bu içerik temsil edilmelidir" demektir, "ne olursa
+        # olsun bu tam metin gönderilmelidir" demek değildir.
         texts: dict[str, str] = {}
         compressed: list[str] = []
         required_tokens = 0

@@ -1,17 +1,17 @@
-"""Resolves a node's time budget for the reasoning level of the run in progress.
+"""Devam eden çalışmanın akıl yürütme seviyesi için bir düğümün zaman bütçesini çözer.
 
-``reasoning_levels.py`` has carried a ``timeout_multiplier`` since the feature
-landed (0.6 fast, 1.0 balanced, 1.8 deep), but it only ever reached the
-*service* layer's outer timeout. Node budgets stayed fixed, so a ``deep`` run
-was given 1.8x the wall clock overall while every individual node kept its
-balanced ceiling -- the extra budget could not actually be spent where the extra
-work happens.
+``reasoning_levels.py`` özelliğin eklendiği andan beri bir ``timeout_multiplier``
+taşıyor (0.6 hızlı, 1.0 dengeli, 1.8 derin), ama bu çarpan yalnızca *servis*
+katmanının dış zaman aşımına ulaşabiliyordu. Düğüm bütçeleri sabit kaldığı için
+``deep`` bir çalışmaya toplam duvar saatinin 1.8 katı veriliyordu ama her bir
+düğüm kendi dengeli tavanını koruyordu -- ekstra bütçe, ekstra işin gerçekten
+yapıldığı yerde harcanamıyordu.
 
-Resolution is per call rather than per graph build. ``@node_timeout`` used to
-take a float, which meant the budget was baked in when the graph was compiled;
-a graph is compiled once per process, so no per-request value could ever reach
-it. Taking a node *name* and resolving at call time is what makes the multiplier
-usable at all.
+Çözümleme, grafik derlemesi başına değil çağrı başına yapılır. ``@node_timeout``
+eskiden bir float alıyordu; bu da bütçenin grafik derlenirken sabitlendiği
+anlamına geliyordu. Bir grafik süreç başına yalnızca bir kez derlendiğinden,
+istek başına bir değer ona asla ulaşamazdı. Bir düğüm *adı* alıp çağrı anında
+çözümlemek, çarpanı kullanılabilir kılan şeydir.
 """
 
 from app.ai.policy import get_policy
@@ -22,19 +22,20 @@ __all__ = ["node_budget"]
 
 
 def node_budget(node: str, level: "ReasoningLevel | str | None" = None) -> float:
-    """Resolve the timeout budget for one node at one reasoning level.
+    """Bir akıl yürütme seviyesinde tek bir düğüm için zaman aşımı bütçesini çözer.
 
     Args:
-        node: The node's name, as keyed in ``BudgetPolicy.node_seconds``.
-        level: The run's reasoning level. Unknown, missing or malformed values
-            resolve to balanced -- this is read from checkpointed graph state
-            and must never raise on a value written by an older version.
+        node: Düğümün adı, ``BudgetPolicy.node_seconds`` içindeki anahtarıyla aynı.
+        level: Çalışmanın akıl yürütme seviyesi. Bilinmeyen, eksik veya bozuk
+            değerler dengeli olarak çözümlenir -- bu değer, kontrol noktası
+            alınmış grafik durumundan okunur ve daha eski bir sürüm tarafından
+            yazılmış bir değerde asla hata fırlatmamalıdır.
 
     Returns:
-        The budget in seconds, scaled by the level's multiplier and clamped to
-        the whole-workflow ceiling. A node with no configured budget falls back
-        to the ceiling, which is a no-op timeout rather than an accidental
-        zero-second one.
+        Seviyenin çarpanıyla ölçeklenmiş ve tüm iş akışının tavanına
+        sınırlandırılmış saniye cinsinden bütçe. Yapılandırılmış bütçesi
+        olmayan bir düğüm, kazara sıfır saniyelik bir zaman aşımı yerine
+        etkisiz (no-op) bir zaman aşımı olan tavana geri döner.
     """
     policy = get_policy().budget
     base = policy.node_seconds.get(node)

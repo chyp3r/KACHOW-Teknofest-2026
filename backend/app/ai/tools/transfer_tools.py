@@ -1,31 +1,33 @@
-"""The transfer tool the assistant agent may call for one turn (Faz 4, #201).
+"""Asistan ajanının bir tur için çağırabileceği transfer aracı (Faz 4, #201).
 
-Unlike every other tool in :mod:`app.ai.tools.document_tools`, calling this
-one can lead to a paused, human-confirmed action rather than just returning
-text. That pause is deliberately **not** implemented by this tool calling
-``interrupt()`` itself: a tool handler runs inside the assist step's own
-node (see ``planning_graph._step_assist``/``_run_assist``), and
-``interrupt()`` replays its *whole* owning node from the top on resume --
-for the assist step that would mean re-running the model's entire streaming
-reply and every earlier tool call in the same turn a second time, the exact
-cost ``brief_gate``/``human_gate`` were split into their own nodes to avoid
-paying (see their own docstrings).
+:mod:`app.ai.tools.document_tools` içindeki diğer her aracın aksine, bunu
+çağırmak yalnızca metin döndürmek yerine duraklatılmış, insan tarafından
+onaylanan bir eyleme yol açabilir. Bu duraklama bilinçli olarak bu aracın
+``interrupt()``'ı kendisinin çağırmasıyla **uygulanmaz**: bir araç handler'ı
+assist adımının kendi düğümünün içinde çalışır (bkz.
+``planning_graph._step_assist``/``_run_assist``) ve ``interrupt()``, devam
+ettiğinde sahibi olan *bütün* düğümü baştan tekrar oynatır -- assist adımı
+için bu, modelin bütün akışlı yanıtını ve aynı turdaki her önceki araç
+çağrısını ikinci kez yeniden çalıştırmak anlamına gelirdi; ``brief_gate``/
+``human_gate``'in ödememek için kendi düğümlerine ayrıldığı tam maliyet
+(kendi docstring'lerine bakın).
 
-So this tool only ever *proposes*: it resolves the artifact and recipient
-deterministically and opens an ``artifact_transfer_intents`` row (via
-``TransferIntentService``, reached through ``transfer_provider`` -- this
-module is under ``app.ai.*`` and never imports ``app.domains.*`` directly,
-same as every other injected-provider call site), then hands the outcome
-back to ``_step_assist`` through ``on_transfer_proposed`` -- a side-channel
-callback, the same pattern ``on_anchor_referenced``/``on_tool_result``
-already use. ``_step_assist`` is what actually routes the turn to
-``transfer_gate_node`` (a separate node, safe to interrupt from) for the
-mandatory, server-enforced confirmation. The text this handler returns to
-the model is purely descriptive -- whatever the model says about it in its
-own reply, the transfer only ever executes after a human clicks "Onayla" on
-the real confirmation card, and ``TransferIntentService.execute`` refuses
-anything not persisted as ``CONFIRMED`` regardless of what any caller (this
-tool, the model, the graph) believes happened.
+Bu yüzden bu araç yalnızca *önerir*: artefaktı ve alıcıyı deterministik
+olarak çözümler ve (``transfer_provider`` aracılığıyla ulaşılan
+``TransferIntentService`` üzerinden -- bu modül ``app.ai.*`` altındadır ve
+diğer her enjekte edilmiş sağlayıcı çağrı noktası gibi asla doğrudan
+``app.domains.*``'ı import etmez) bir ``artifact_transfer_intents`` satırı
+açar, sonra sonucu ``on_transfer_proposed`` aracılığıyla ``_step_assist``'e
+geri verir -- ``on_anchor_referenced``/``on_tool_result``'ın zaten kullandığı
+aynı yan kanal geri çağırım deseni. Turu zorunlu, sunucu tarafından
+zorlanan onay için (interrupt için güvenli, ayrı bir düğüm olan)
+``transfer_gate_node``'a fiilen yönlendiren şey ``_step_assist``'tir. Bu
+handler'ın modele döndürdüğü metin tamamen açıklayıcıdır -- model kendi
+yanıtında bu konuda ne söylerse söylesin, transfer yalnızca bir insan
+gerçek onay kartında "Onayla"ya tıkladıktan sonra yürütülür ve
+``TransferIntentService.execute``, herhangi bir çağıranın (bu araç, model,
+graph) ne olduğuna inandığından bağımsız olarak ``CONFIRMED`` olarak
+kalıcı hale getirilmemiş hiçbir şeyi reddeder.
 """
 
 from typing import Any, Callable, Literal, Optional
@@ -50,18 +52,19 @@ class ProposeTransferArgs(BaseModel):
     )
 
 
-#: Terminal outcomes the tool resolves and replies about in plain text --
-#: nothing to confirm, so `_step_assist` never routes to `transfer_gate` for
-#: these (mirrors `_settle` in the now-removed deterministic `transfer_resolve`
-#: step, minus the two outcomes that still need a human: see `_GATED_OUTCOMES`).
+#: Aracın çözümlediği ve düz metinle yanıtladığı terminal sonuçlar --
+#: onaylanacak hiçbir şey yok, bu yüzden `_step_assist` bunlar için asla
+#: `transfer_gate`'e yönlendirmez (şimdi kaldırılmış deterministik
+#: `transfer_resolve` adımındaki `_settle`'ı, hâlâ bir insana ihtiyaç duyan
+#: iki sonuç dışında yansıtır: bkz. `_GATED_OUTCOMES`).
 _TERMINAL_REPLIES = {
     "unresolved": "Gönderilecek bir {noun} bulamadım.",
     "recipient_not_found": "'{recipient_name}' adında bir kullanıcı bulamadım.",
     "artifact_ambiguous": "Birden fazla {noun} buldum; hangisini kastettiğinizi belirtir misiniz?",
 }
 
-#: Outcomes that must pause for a human -- `_step_assist` routes to
-#: `transfer_gate_node` for exactly these two, never for anything above.
+#: Bir insan için duraklaması gereken sonuçlar -- `_step_assist`, tam olarak
+#: bu ikisi için `transfer_gate_node`'a yönlendirir, yukarıdakilerin hiçbiri için değil.
 _GATED_OUTCOMES = {"needs_disambiguation", "needs_confirmation"}
 
 
@@ -76,17 +79,17 @@ def build_transfer_tools(
     transfer_provider: Any,
     on_transfer_proposed: Callable[[dict], None],
 ) -> list[ToolSpec]:
-    """Build the ``propose_transfer`` tool, when it's actually usable.
+    """``propose_transfer`` aracını, gerçekten kullanılabilir olduğunda inşa eder.
 
-    Returns an empty list -- the model is never even offered the tool --
-    when ``transfer_provider`` is unset (feature not wired for this
-    deployment) or the caller identity is missing (``company_id``/
-    ``user_id``, the open demo/dev path with ``REQUIRE_AUTH`` off): a
-    transfer with no authenticated sender has nothing to authorize against.
-    The ``settings.AI_TRANSFER_ENABLED`` gate itself lives one level up, in
-    ``_run_assist`` -- consistent with how every other feature flag in this
-    codebase is checked once at the call site, not duplicated into each
-    tool/provider it gates.
+    ``transfer_provider`` ayarlanmadığında (özellik bu dağıtım için
+    bağlanmamış) veya çağıran kimliği eksik olduğunda (``company_id``/
+    ``user_id``, ``REQUIRE_AUTH`` kapalıyken açık demo/dev yolu) boş bir
+    liste döndürür -- modele araç hiç sunulmaz bile: kimliği doğrulanmış
+    bir göndereni olmayan bir transferin karşı yetkilendirilecek hiçbir şeyi
+    yoktur. ``settings.AI_TRANSFER_ENABLED`` kapısının kendisi bir seviye
+    yukarıda, ``_run_assist``'te yaşar -- bu codebase'deki her diğer özellik
+    bayrağının, kilitlediği her araca/sağlayıcıya çoğaltılmak yerine çağrı
+    noktasında bir kez kontrol edilmesiyle tutarlı.
     """
     if transfer_provider is None or not company_id or not user_id:
         return []

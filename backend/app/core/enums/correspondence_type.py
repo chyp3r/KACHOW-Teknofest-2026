@@ -2,14 +2,15 @@ from enum import StrEnum
 
 
 class CorrespondenceType(StrEnum):
-    """Supported official correspondence outputs produced by the draft workflow.
+    """Taslak iş akışının ürettiği desteklenen resmi yazışma çıktıları.
 
-    Fixed at these four per spec. A user request for a specific genre that
-    isn't one of them (an itiraz dilekçesi, a muvafakatname, ...) still
-    resolves here -- to OTHER_OFFICIAL -- but carries the genre itself as a
-    separate free-text sub-genre alongside the type (see
-    ``app.ai.workflows.correspondence.resolve_correspondence_type``), so the
-    writer prompt still knows what to actually produce.
+    Spesifikasyona göre bu dört tanede sabittir. Bunlardan biri olmayan
+    belirli bir tür için kullanıcı isteği (bir itiraz dilekçesi, bir
+    muvafakatname, ...) yine de buraya -- OTHER_OFFICIAL'a -- çözülür, ama
+    türün kendisini tür ile birlikte ayrı bir serbest metin alt-tür olarak
+    taşır (bkz.
+    ``app.ai.workflows.correspondence.resolve_correspondence_type``), bu
+    yüzden writer prompt'u gerçekte ne üretileceğini yine de bilir.
     """
 
     COVER_LETTER = "cover_letter"

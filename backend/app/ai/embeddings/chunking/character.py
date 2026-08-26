@@ -7,9 +7,9 @@ from app.ai.embeddings.chunking.base import BaseChunker
 
 
 class CharacterChunker(BaseChunker):
-    """Character-based text splitter splitting by a single character (e.g. newline or space)
+    """Tek bir karaktere göre (ör. yeni satır veya boşluk) bölen ve sıkı parça
 
-    and enforcing strict chunk sizes and overlaps.
+    boyutları ile örtüşmeleri zorunlu kılan karakter tabanlı metin bölücü.
     """
 
     def __init__(
@@ -18,12 +18,12 @@ class CharacterChunker(BaseChunker):
         chunk_size: int = 1000,
         chunk_overlap: int = 200,
     ):
-        """Initialize Character Chunker.
+        """Character Chunker'ı başlatır.
 
         Args:
-            separator: Character or string separator to split text on.
-            chunk_size: Maximum size of each chunk.
-            chunk_overlap: Number of overlapping characters between adjacent chunks.
+            separator: Metnin bölüneceği karakter veya dize ayırıcı.
+            chunk_size: Her parçanın maksimum boyutu.
+            chunk_overlap: Komşu parçalar arasındaki örtüşen karakter sayısı.
         """
         self.splitter = CharacterTextSplitter(
             separator=separator,
@@ -32,6 +32,6 @@ class CharacterChunker(BaseChunker):
         )
 
     async def split_text(self, text: str, **kwargs) -> List[Document]:
-        """Split text into chunks using CharacterTextSplitter."""
-        # CharacterTextSplitter's create_documents returns a list of Documents
+        """Metni CharacterTextSplitter kullanarak parçalara böler."""
+        # CharacterTextSplitter'ın create_documents metodu bir Document listesi döndürür
         return self.splitter.create_documents([text])

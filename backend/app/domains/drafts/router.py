@@ -29,28 +29,29 @@ from app.domains.users.repository import UserRepository
 from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
-# Authentication is mandatory (see require_auth_if_enabled) -- every route in
-# this router carries a real, tenant-bound current_user.
+# Kimlik doğrulama zorunludur (bkz. require_auth_if_enabled) -- bu router'daki
+# her rota gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/drafts", tags=["drafts"], dependencies=[Depends(require_auth_if_enabled)]
 )
 
 
 def _assert_owns_draft(draft: DraftModel, current_user: UserModel) -> None:
-    """Refuse to hand back a draft the caller doesn't own.
+    """Çağıranın sahibi olmadığı bir taslağı geri vermeyi reddeder.
 
-    Single ABAC decision (bare, grant-less ``engine.authorize`` -- see
-    ``documents/router.py::_authorize_document``'s docstring for why no DB
-    round trip here) replacing the old ``draft.user_id``/
-    ``bypasses_ownership`` check. ADMIN/MANAGER/ROOT see every draft
-    company-wide, EMPLOYEE only its own -- same outcome as before.
-    ``drafts.company_id`` is NOT NULL and RLS'd since migration
-    ``0016_recorder_tables_rls``, so ``engine.authorize``'s tenant gate is
-    now a real second check here too, not a no-op.
+    Eski ``draft.user_id``/``bypasses_ownership`` kontrolünün yerine geçen
+    tek bir ABAC kararı (yalın, izinsiz ``engine.authorize`` -- burada
+    neden bir DB gidiş-dönüşü olmadığı için bkz.
+    ``documents/router.py::_authorize_document``'ın docstring'i).
+    ADMIN/MANAGER/ROOT şirket genelinde her taslağı görür, EMPLOYEE yalnızca
+    kendisininkini -- eskisiyle aynı sonuç. ``drafts.company_id``,
+    ``0016_recorder_tables_rls`` migration'ından beri NOT NULL ve RLS'lidir,
+    bu yüzden ``engine.authorize``'ın kiracı kapısı artık burada da gerçek
+    bir ikinci kontroldür, boş bir işlem değil.
 
     Raises:
-        AuthorizationException: If ``draft.user_id`` belongs to a different
-            user than ``current_user`` (and it isn't ADMIN/MANAGER/ROOT).
+        AuthorizationException: ``draft.user_id``, ``current_user``'dan
+            farklı bir kullanıcıya aitse (ve ADMIN/MANAGER/ROOT değilse).
     """
     resource = Resource(
         type="draft", id=draft.id, company_id=draft.company_id, owner_id=draft.user_id
@@ -61,8 +62,9 @@ def _assert_owns_draft(draft: DraftModel, current_user: UserModel) -> None:
 
 
 def _assert_can_update_draft(draft: DraftModel, current_user: UserModel) -> None:
-    """Same shape as `_assert_owns_draft`, gated on `Action.DRAFT_UPDATE`
-    instead of `DRAFT_READ` -- owner, or ADMIN/MANAGER/ROOT company-wide."""
+    """`_assert_owns_draft` ile aynı biçim, `DRAFT_READ` yerine
+    `Action.DRAFT_UPDATE` ile korunur -- sahibi, veya şirket genelinde
+    ADMIN/MANAGER/ROOT."""
     resource = Resource(
         type="draft", id=draft.id, company_id=draft.company_id, owner_id=draft.user_id
     )
@@ -79,11 +81,12 @@ async def list_drafts(
     service: DraftService = Depends(get_draft_history_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """List drafts, one row per session (its latest version), newest first.
+    """Taslakları listeler, oturum başına bir satır (en son sürümü), en
+    yeniden en eskiye.
 
-    ``session_id``/``document_id`` narrow the listing; ``user_id`` is
-    resolved from the caller and is not a query parameter, same as
-    ``GET /documents``/``GET /chat/sessions``.
+    ``session_id``/``document_id`` listelemeyi daraltır; ``user_id``,
+    ``GET /documents``/``GET /chat/sessions`` ile aynı şekilde, çağırandan
+    çözümlenir ve bir sorgu parametresi değildir.
     """
     user_id = None if bypasses_ownership(current_user) else current_user.id
     drafts = await service.list_drafts(
@@ -142,10 +145,10 @@ def _share_response(share: DraftShareModel, draft: Optional[DraftModel]) -> Draf
     )
 
 
-# NOTE: /inbox and /outbox must be registered before GET /{draft_id} below --
-# FastAPI matches routes in registration order, and a single-segment path
-# like "/inbox" would otherwise be swallowed by "/{draft_id}" (draft_id=
-# "inbox") since that route was already registered first.
+# NOT: /inbox ve /outbox aşağıdaki GET /{draft_id}'den önce kaydedilmelidir --
+# FastAPI rotaları kayıt sırasına göre eşleştirir ve "/inbox" gibi tek
+# segmentli bir yol, o rota zaten önce kaydedildiği için aksi halde
+# "/{draft_id}" (draft_id="inbox") tarafından yutulurdu.
 @router.get("/inbox", response_model=None)
 async def list_draft_inbox(
     status: Optional[str] = None,
@@ -153,8 +156,8 @@ async def list_draft_inbox(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Shares received by the caller, newest first. Optional `status` filter
-    ("sent" | "read" | "accepted" | "rejected" | "withdrawn")."""
+    """Çağıranın aldığı paylaşımlar, en yeniden en eskiye. İsteğe bağlı
+    `status` filtresi ("sent" | "read" | "accepted" | "rejected" | "withdrawn")."""
     service = _draft_share_service(db)
     items, total = await service.list_inbox(
         current_user.company_id, current_user.id, status, pagination.offset, pagination.limit
@@ -175,7 +178,7 @@ async def list_draft_outbox(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Shares sent by the caller, newest first. Optional `status` filter."""
+    """Çağıranın gönderdiği paylaşımlar, en yeniden en eskiye. İsteğe bağlı `status` filtresi."""
     service = _draft_share_service(db)
     items, total = await service.list_outbox(
         current_user.company_id, current_user.id, status, pagination.offset, pagination.limit
@@ -195,7 +198,7 @@ async def get_draft(
     service: DraftService = Depends(get_draft_history_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Fetch one draft version by id."""
+    """Tek bir taslak sürümünü id ile getirir."""
     draft = await service.get_draft(draft_id)
     _assert_owns_draft(draft, current_user)
     return SuccessResponse(data=DraftResponse.model_validate(draft).model_dump(mode="json"))
@@ -208,13 +211,14 @@ async def update_draft_destination(
     service: DraftService = Depends(get_draft_history_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Override this draft version's routed unit with the caller's own pick.
+    """Bu taslak sürümünün yönlendirilmiş birimini çağıranın kendi seçimiyle geçersiz kılar.
 
-    The routing graph always proposes a primary (and usually an
-    alternative) unit now -- this is the write path for a human choosing a
-    third option instead, e.g. from the chat UI's unit picker. Updates the
-    row in place; unlike a content revision this never creates a new
-    version, since routing metadata isn't the draft's own text.
+    Yönlendirme grafiği artık her zaman birincil (ve genellikle bir
+    alternatif) birim öneriyor -- bu, bir insanın bunun yerine üçüncü bir
+    seçenek seçtiği yazma yoludur, örn. sohbet arayüzünün birim seçicisinden.
+    Satırı yerinde günceller; bir içerik revizyonunun aksine, yönlendirme
+    meta verisi taslağın kendi metni olmadığından bu asla yeni bir sürüm
+    oluşturmaz.
     """
     draft = await service.get_draft(draft_id)
     _assert_can_update_draft(draft, current_user)
@@ -258,7 +262,7 @@ async def delete_draft(
     service: DraftService = Depends(get_draft_history_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Soft-delete a draft and its whole version chain."""
+    """Bir taslağı ve tüm sürüm zincirini geri alınabilir şekilde siler (soft-delete)."""
     draft = await service.get_draft(draft_id)
     _assert_owns_draft(draft, current_user)
     await service.delete_draft(draft_id)
@@ -271,7 +275,7 @@ async def list_draft_versions(
     service: DraftService = Depends(get_draft_history_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """List every version in this draft's revision chain, oldest first."""
+    """Bu taslağın revizyon zincirindeki her sürümü en eskiden en yeniye listeler."""
     draft = await service.get_draft(draft_id)
     _assert_owns_draft(draft, current_user)
     versions = await service.list_versions(draft_id)
@@ -295,12 +299,12 @@ async def send_draft(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Send one draft version to one or more recipients within the caller's company.
+    """Bir taslak sürümünü çağıranın şirketi içinde bir veya daha fazla alıcıya gönderir.
 
-    Delegates to `ArtifactTransferService.execute` (see `DraftShareService.
-    send`'s own docstring) -- `Action.ARTIFACT_TRANSFER`-gated there: an
-    EMPLOYEE may only send its own draft, ADMIN/MANAGER/ROOT may send any
-    draft company-wide.
+    `ArtifactTransferService.execute`'a devreder (bkz. `DraftShareService.
+    send`'in kendi docstring'i) -- orada `Action.ARTIFACT_TRANSFER` ile
+    korunur: bir EMPLOYEE yalnızca kendi taslağını gönderebilir,
+    ADMIN/MANAGER/ROOT şirket genelinde herhangi bir taslağı gönderebilir.
     """
     service = _draft_share_service(db)
     shares = await service.send(draft_id, current_user, request, current_user.company_id)
@@ -324,7 +328,7 @@ async def read_draft_share(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Advance a share to `read`. Recipient only."""
+    """Bir paylaşımı `read` durumuna ilerletir. Yalnızca alıcı."""
     service = _draft_share_service(db)
     share, draft = await service.mark_read(share_id, current_user.company_id, current_user)
     return SuccessResponse(data=_share_response(share, draft).model_dump(mode="json"))
@@ -337,8 +341,8 @@ async def accept_draft_share(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Accept a shared draft. Recipient only -- forks a new version the
-    recipient now owns (see `DraftShareService.respond`)."""
+    """Paylaşılan bir taslağı kabul eder. Yalnızca alıcı -- alıcının artık
+    sahibi olduğu yeni bir sürüm çatallar (bkz. `DraftShareService.respond`)."""
     service = _draft_share_service(db)
     share, draft = await service.respond(
         share_id, current_user.company_id, current_user, "accepted", request.response_note
@@ -362,7 +366,7 @@ async def reject_draft_share(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Reject a shared draft. Recipient only."""
+    """Paylaşılan bir taslağı reddeder. Yalnızca alıcı."""
     service = _draft_share_service(db)
     share, draft = await service.respond(
         share_id, current_user.company_id, current_user, "rejected", request.response_note
@@ -385,7 +389,7 @@ async def withdraw_draft_share(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Withdraw a still-`sent` share. Sender (or Admin/Manager/Root) only."""
+    """Hâlâ `sent` durumundaki bir paylaşımı geri çeker. Yalnızca gönderen (veya Admin/Manager/Root)."""
     service = _draft_share_service(db)
     share = await service.withdraw(share_id, current_user.company_id, current_user)
     await _audit_service(db).record(

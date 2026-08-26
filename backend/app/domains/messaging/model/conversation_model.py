@@ -9,29 +9,33 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class ConversationModel(Base, TimestampMixin):
-    """One DM or group thread between company users.
+    """Şirket kullanıcıları arasında bir DM veya grup thread'i.
 
-    `kind` is `"dm"` or `"group"`, open string (same looseness as `units.
-    role_in_unit`). `dm_key` is the sorted `"user_a_id:user_b_id"` pair for
-    a `kind="dm"` row, `None` for a group -- a partial unique index on
-    `(company_id, dm_key) WHERE kind = 'dm'` (see migration `0022_messaging`)
-    makes a second DM between the same two users structurally impossible,
-    so `ConversationService.open_dm` never has to race a duplicate-check
-    against a concurrent open from the other side.
+    `kind`; `"dm"` veya `"group"`, açık string (`units.role_in_unit` ile
+    aynı esneklik). `dm_key`, `kind="dm"` bir satır için sıralanmış
+    `"user_a_id:user_b_id"` çiftidir, bir grup için `None` -- `(company_id,
+    dm_key) WHERE kind = 'dm'` üzerindeki kısmi unique index (bkz.
+    `0022_messaging` migration'ı) aynı iki kullanıcı arasında ikinci bir
+    DM'i yapısal olarak imkansız kılar, böylece
+    `ConversationService.open_dm` diğer taraftan gelen eşzamanlı bir
+    açmaya karşı hiçbir zaman bir çift-kontrol yarışına girmek zorunda
+    kalmaz.
 
-    Access to a conversation is not an ABAC decision -- it is answered by
-    whether a `ConversationParticipantModel` row exists for the caller,
-    the same "the row itself is the grant" pattern `draft_shares` already
-    uses (see `app.domains.drafts.draft_share_service.DraftShareService`'s
-    own docstring).
+    Bir konuşmaya erişim bir ABAC kararı değildir -- çağıran için bir
+    `ConversationParticipantModel` satırının var olup olmadığıyla
+    cevaplanır, `draft_shares`'in zaten kullandığı aynı "satırın kendisi
+    izindir" örüntüsü (bkz.
+    `app.domains.drafts.draft_share_service.DraftShareService`'in kendi
+    docstring'i).
     """
 
     __tablename__ = "conversations"
     __table_args__ = (
-        #: Partial unique index, not a `UniqueConstraint` -- same reasoning
-        #: as `uq_unit_memberships_one_primary_per_user`: Postgres has no
-        #: declarative "unique except when false" shape, so this is a plain
-        #: index scoped by `WHERE kind = 'dm'` instead.
+        #: `UniqueConstraint` değil kısmi unique index -- aynı gerekçe
+        #: `uq_unit_memberships_one_primary_per_user`'da olduğu gibi:
+        #: Postgres'te bildirimsel bir "false olduğunda hariç unique"
+        #: biçimi yoktur, bu yüzden bunun yerine `WHERE kind = 'dm'` ile
+        #: kapsamlandırılmış düz bir index kullanılır.
         Index(
             "uq_conversations_dm_key",
             "company_id",
@@ -46,16 +50,17 @@ class ConversationModel(Base, TimestampMixin):
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
     kind: Mapped[str] = mapped_column(String, nullable=False)
-    #: Group display name. `None` for a DM -- a DM's "title" is always
-    #: derived from its other participant, computed by the service/frontend,
-    #: never stored (there is nothing to keep in sync when a username
-    #: changes).
+    #: Grup görünen adı. Bir DM için `None` -- bir DM'in "title"ı her
+    #: zaman diğer katılımcısından türetilir, servis/frontend tarafından
+    #: hesaplanır, hiçbir zaman saklanmaz (bir kullanıcı adı değiştiğinde
+    #: senkronize tutulacak hiçbir şey yoktur).
     title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     dm_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     created_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    #: Denormalized from the latest `conversation_messages` row, kept in
-    #: sync by `ConversationMessageRepository.create` in the same flush --
-    #: the conversation list sorts by this without an aggregate join per row.
+    #: En son `conversation_messages` satırından denormalize edilmiştir,
+    #: aynı flush içinde `ConversationMessageRepository.create` tarafından
+    #: senkronize tutulur -- konuşma listesi satır başına aggregate join
+    #: olmadan buna göre sıralanır.
     last_message_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )

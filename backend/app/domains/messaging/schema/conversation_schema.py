@@ -5,13 +5,13 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ConversationCreateRequest(BaseModel):
-    """`POST /messaging/conversations` body -- discriminated by `kind`.
+    """`POST /messaging/conversations` gövdesi -- `kind`'a göre ayrıştırılır.
 
-    A DM sets `participant_id` only; a group sets `title` and
-    `participant_ids` only. One endpoint, not two, because "open or create
-    a conversation" is a single concept to the caller -- the discriminator
-    just picks which fields are relevant, the same way the frontend forms
-    it maps to would.
+    Bir DM yalnızca `participant_id`'yi ayarlar; bir grup yalnızca
+    `title` ve `participant_ids`'i ayarlar. İki değil tek bir endpoint,
+    çünkü "bir konuşmayı aç ya da oluştur" çağıran için tek bir kavramdır
+    -- ayrıştırıcı yalnızca hangi alanların ilgili olduğunu seçer,
+    eşlendiği frontend formlarının yapacağı gibi.
     """
 
     kind: Literal["dm", "group"]
@@ -33,7 +33,8 @@ class ConversationCreateRequest(BaseModel):
 
 
 class ConversationUpdateRequest(BaseModel):
-    """Group-only: rename or archive. A DM has no editable fields."""
+    """Yalnızca grup: yeniden adlandırma veya arşivleme. Bir DM'in
+    düzenlenebilir alanı yoktur."""
 
     title: Optional[str] = Field(default=None, min_length=1, max_length=200)
     is_archived: Optional[bool] = None
@@ -52,10 +53,11 @@ class ParticipantResponse(BaseModel):
 
 
 class ConversationResponse(BaseModel):
-    """One conversation row, denormalized with the caller's own participant
-    state (`unread_count`, `role_in_conversation`) and the other/all
-    participants -- built by the service from several tables, never a
-    direct `model_validate` off `ConversationModel` alone."""
+    """Çağıranın kendi katılımcı durumuyla (`unread_count`,
+    `role_in_conversation`) ve diğer/tüm katılımcılarla denormalize
+    edilmiş tek bir konuşma satırı -- servis tarafından birden çok
+    tablodan oluşturulur, asla tek başına `ConversationModel`'den
+    doğrudan bir `model_validate` değildir."""
 
     id: str
     kind: str

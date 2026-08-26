@@ -8,13 +8,14 @@ logger = logging.getLogger(__name__)
 
 
 class StructuredLoggingMiddleware(BaseHTTPMiddleware):
-    """Structured logging for HTTP requests/responses, including latency.
+    """Gecikme dahil olmak üzere HTTP istek/yanıtları için yapılandırılmış (structured) loglama.
 
-    Logs via ``extra={...}`` rather than a pre-formatted f-string: the
-    production JSONFormatter reads ``record.__dict__`` for anything beyond
-    the standard LogRecord attributes, so fields passed as an f-string were
-    invisible to it -- structured logging in name only, one opaque `message`
-    string in practice.
+    Önceden biçimlendirilmiş bir f-string yerine ``extra={...}`` üzerinden
+    loglar: üretimdeki JSONFormatter, standart LogRecord özniteliklerinin
+    ötesindeki her şey için ``record.__dict__``'i okur, bu yüzden f-string
+    olarak geçirilen alanlar onun için görünmezdi -- pratikte sadece isimde
+    var olan yapılandırılmış loglama, tek bir opak `message` string'inden
+    ibaret kalırdı.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:

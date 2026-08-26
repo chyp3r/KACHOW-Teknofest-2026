@@ -7,31 +7,32 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class DocumentModel(Base, TimestampMixin):
-    """The ownership + listing registry for uploaded documents.
+    """Yüklenen evraklar için sahiplik + listeleme kaydı.
 
-    The document's own text and full analysis stay in the local JSON cache
-    written by `app.domains.documents.service.DocumentService` (a separate
-    concern -- migrating that blob storage off the filesystem is its own,
-    larger piece of work, out of scope here). This table exists to answer
-    exactly one question cheaply and correctly: "does `storage_path` belong
-    to `owner_id`?" -- the check that was missing entirely before (see the
-    architecture migration's B8 finding: any caller who knew or guessed a
-    storage_path could read another user's document through chat).
+    Evrakın kendi metni ve tam analizi, `app.domains.documents.service.
+    DocumentService` tarafından yazılan yerel JSON önbelleğinde kalır (ayrı
+    bir konu -- bu blob depolamasını dosya sisteminden taşımak kendi başına,
+    daha büyük bir iş, burada kapsam dışı). Bu tablo tam olarak tek bir
+    soruyu ucuz ve doğru şekilde yanıtlamak için var: "`storage_path`,
+    `owner_id`'ye mi ait?" -- daha önce tamamen eksik olan kontrol (bkz.
+    mimari geçişin B8 bulgusu: bir storage_path'i bilen veya tahmin eden
+    herhangi bir çağıran, sohbet üzerinden başka bir kullanıcının evrakını
+    okuyabiliyordu).
 
-    `owner_id` and `company_id` are both required now that authentication is
-    mandatory (see `settings.REQUIRE_AUTH`) -- every document has exactly one
-    uploading user in exactly one company. Legacy ownerless rows from before
-    this migration were backfilled to the demo company/employee (see
-    `alembic/versions/0010_backfill_tenancy.py`).
+    Kimlik doğrulama artık zorunlu olduğundan (bkz. `settings.REQUIRE_AUTH`)
+    `owner_id` ve `company_id` her ikisi de zorunludur -- her evrakın tam
+    olarak bir şirkette tam olarak bir yükleyen kullanıcısı vardır. Bu
+    migration'dan önceki sahipsiz eski satırlar demo şirket/çalışana
+    dolduruldu (bkz. `alembic/versions/0010_backfill_tenancy.py`).
     """
 
     __tablename__ = "documents"
 
-    #: The storage backend's key (see `DocumentService._store`), reused as
-    #: the primary key rather than a separate surrogate id -- every other
-    #: layer (the local analysis cache, Qdrant's `storage_path` payload
-    #: filter, the API's `{storage_path}` path parameter) already addresses
-    #: a document by this value.
+    #: Depolama arka ucunun anahtarı (bkz. `DocumentService._store`), ayrı
+    #: bir surrogate id yerine birincil anahtar olarak yeniden kullanılır --
+    #: diğer tüm katmanlar (yerel analiz önbelleği, Qdrant'ın `storage_path`
+    #: payload filtresi, API'nin `{storage_path}` yol parametresi) zaten
+    #: bir evrakı bu değerle adresliyor.
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
@@ -44,15 +45,16 @@ class DocumentModel(Base, TimestampMixin):
     document_type_label: Mapped[str] = mapped_column(String, nullable=False, default="")
     compliance_status: Mapped[str] = mapped_column(String, nullable=False, default="")
     summary: Mapped[str] = mapped_column(String, nullable=False, default="")
-    #: The document's assessed confidentiality grade (``app.ai.guardrails.
-    #: sensitivity.assess``), stored as the ``SensitivityLevel`` string so
-    #: listing/retrieval can filter without re-reading the analysis cache.
-    #: Defaults to ``UNMARKED``, not ``TASNIF_DISI`` -- the same "an absent
-    #: grade is not the same fact as a stated one" reasoning `EvrakField.
-    #: gizlilik_derecesi` already documents.
+    #: Evrakın değerlendirilmiş gizlilik derecesi (``app.ai.guardrails.
+    #: sensitivity.assess``), listeleme/erişimin analiz önbelleğini yeniden
+    #: okumadan filtreleyebilmesi için ``SensitivityLevel`` string'i olarak
+    #: saklanır. Varsayılan olarak ``TASNIF_DISI`` değil ``UNMARKED`` --
+    #: `EvrakField.gizlilik_derecesi`'nin zaten belgelediği "eksik bir
+    #: derece, belirtilmiş bir dereceyle aynı gerçek değildir" mantığıyla
+    #: aynı.
     sensitivity_level: Mapped[str] = mapped_column(
         String, nullable=False, default=SensitivityLevel.UNMARKED.value
     )
-    #: True when the document scan found at least one PII pattern match
-    #: (TCKN, IBAN, phone, address) regardless of confidentiality grade.
+    #: Gizlilik derecesinden bağımsız olarak, evrak taraması en az bir
+    #: PII kalıp eşleşmesi (TCKN, IBAN, telefon, adres) bulduğunda True.
     pii_flagged: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)

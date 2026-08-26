@@ -12,19 +12,21 @@ logger = logging.getLogger(__name__)
 
 
 def convert_messages(messages: list[dict]) -> list[BaseMessage]:
-    """Convert standard message dicts to LangChain Message objects.
+    """Standart mesaj dict'lerini LangChain Message nesnelerine dönüştürür.
 
-    Shared by every ``BaseLLMClient`` implementation that talks to a
-    LangChain chat model (``OllamaClient``, ``EvrenClient``): the mapping is
-    provider-agnostic, just a dict -> ``BaseMessage`` translation.
+    Bir LangChain chat modeliyle konuşan her ``BaseLLMClient``
+    implementasyonu (``OllamaClient``, ``EvrenClient``) tarafından
+    paylaşılır: eşleme sağlayıcıdan bağımsızdır, yalnızca bir
+    dict -> ``BaseMessage`` çevirisidir.
 
-    Two roles beyond the original three exist to round-trip a tool-calling
-    loop: an ``assistant`` message may carry a ``tool_calls`` key (the
-    model's own previous turn requesting one or more tools), and a ``tool``
-    message carries that turn's result (``tool_call_id``, ``name``,
-    ``content``). Both are plain JSON-safe dicts rather than raw LangChain
-    objects so the caller's message list stays serializable (useful for SSE
-    debug logging) between loop turns.
+    Orijinal üç rolün ötesinde iki rol daha vardır ve bunlar bir
+    tool-calling döngüsünü ileri-geri taşımak için bulunur: bir
+    ``assistant`` mesajı bir ``tool_calls`` anahtarı taşıyabilir (modelin
+    kendi önceki turunun bir veya daha fazla tool istemesi), ve bir
+    ``tool`` mesajı o turun sonucunu taşır (``tool_call_id``, ``name``,
+    ``content``). İkisi de ham LangChain nesneleri yerine düz JSON-uyumlu
+    dict'lerdir, böylece çağıranın mesaj listesi döngü turları arasında
+    serileştirilebilir kalır (SSE debug loglaması için faydalı).
     """
     lc_messages: list[BaseMessage] = []
     for msg in messages:
@@ -54,8 +56,9 @@ def convert_messages(messages: list[dict]) -> list[BaseMessage]:
             )
             lc_messages.append(HumanMessage(content=content))
 
-    # A chat model given only a system turn has nothing to respond to and
-    # some providers emit an empty completion. Guarantee a user turn.
+    # Yalnızca bir sistem turu verilen bir chat modelinin yanıt vereceği bir
+    # şey yoktur ve bazı sağlayıcılar boş bir tamamlama üretir. Bir
+    # kullanıcı turu garanti et.
     if lc_messages and all(isinstance(m, SystemMessage) for m in lc_messages):
         lc_messages.append(HumanMessage(content="Yönergeye göre yanıt üret."))
     return lc_messages

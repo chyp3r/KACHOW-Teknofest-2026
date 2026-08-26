@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class UnitCreate(BaseModel):
-    """Pydantic schema for creating a new routable unit."""
+    """Yeni bir yönlendirilebilir birim oluşturmak için Pydantic şeması."""
 
     name: str = Field(min_length=1, max_length=200, description="Birimin adı (benzersiz)")
     description: str = Field(
@@ -15,7 +15,7 @@ class UnitCreate(BaseModel):
 
 
 class UnitUpdate(BaseModel):
-    """Pydantic schema for updating an existing unit. All fields optional."""
+    """Var olan bir birimi güncellemek için Pydantic şeması. Tüm alanlar isteğe bağlı."""
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     description: Optional[str] = Field(default=None, min_length=1, max_length=2000)
@@ -25,7 +25,7 @@ class UnitUpdate(BaseModel):
 
 
 class UnitResponse(BaseModel):
-    """Pydantic schema for unit details output."""
+    """Birim detayları çıktısı için Pydantic şeması."""
 
     id: str = Field(description="Birim ID")
     name: str = Field(description="Birim adı")

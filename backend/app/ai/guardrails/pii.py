@@ -1,13 +1,15 @@
-"""Deterministic Turkish PII detection over extracted document text.
+"""Çıkarılan belge metni üzerinde deterministik Türkçe PII tespiti.
 
-Same rationale as ``app.ai.compliance.field_parser``'s regex-first approach
-(see its module docstring): a TCKN or IBAN is a structurally defined value
-with a checksum, not a free-form fact a model has to infer -- regex plus the
-real checksum algorithm is both faster and more accurate than a model call on
-a path that runs on every upload and every guardrail-scanned reply. A finding
-carries only a masked preview, never the raw value, so a PII finding does not
-itself become a second unencrypted copy of the PII it flags (in logs, in
-``GuardrailEventModel.reasons``, or anywhere else it travels).
+``app.ai.compliance.field_parser``'ın regex-öncelikli yaklaşımıyla aynı
+gerekçe (modül docstring'ine bakın): bir TCKN veya IBAN, bir modelin
+çıkarım yapması gereken serbest biçimli bir gerçek değil, checksum'lı
+yapısal olarak tanımlanmış bir değerdir -- her yüklemede ve guardrail
+tarafından taranan her yanıtta çalışan bir yol için regex artı gerçek
+checksum algoritması, bir model çağrısından hem daha hızlı hem de daha
+doğrudur. Bir bulgu yalnızca maskelenmiş bir önizleme taşır, asla ham
+değeri taşımaz; böylece bir PII bulgusu, işaretlediği PII'nin kendisi
+ikinci bir şifrelenmemiş kopyası haline gelmez (loglarda,
+``GuardrailEventModel.reasons``'da veya gittiği herhangi bir yerde).
 """
 
 import re
@@ -15,79 +17,87 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-#: Turkish national ID number: exactly 11 digits, not a substring of a longer
-#: run (a document number like "12345678901234" must not match).
+#: Türkiye Cumhuriyeti kimlik numarası: tam olarak 11 hane, daha uzun bir
+#: dizinin alt dizesi değil (belge numarası gibi "12345678901234" eşleşmemeli).
 _TCKN_PATTERN = re.compile(r"(?<!\d)\d{11}(?!\d)")
 
-#: Turkish IBAN: "TR" + 24 digits, optionally space-grouped as banks print it.
+#: Türk IBAN'ı: "TR" + 24 hane, bankaların bastığı gibi isteğe bağlı boşluk
+#: gruplu.
 _IBAN_PATTERN = re.compile(
     r"\bTR\d{2}(?:[ ]?\d{4}){5}[ ]?\d{2}\b", re.IGNORECASE
 )
 
-#: Turkish phone numbers: optional +90/0 prefix, mobile (5xx) or landline
-#: (2xx-4xx) area code, then 7 digits, loosely space/dot/dash-grouped. Kept
-#: permissive on separators since real documents format phone numbers every
-#: way imaginable; confidence (not the pattern) carries the uncertainty.
+#: Türk telefon numaraları: isteğe bağlı +90/0 öneki, mobil (5xx) veya sabit
+#: hat (2xx-4xx) alan kodu, ardından 7 hane, gevşek şekilde
+#: boşluk/nokta/tire ile gruplanmış. Ayırıcılar konusunda esnek bırakıldı
+#: çünkü gerçek belgeler telefon numaralarını akla gelebilecek her şekilde
+#: biçimlendiriyor; belirsizliği kalıp değil, güven skoru taşır.
 _PHONE_PATTERN = re.compile(
     r"(?<!\d)(?:\+90[ ]?|0)?(5\d{2}|2\d{2}|3\d{2}|4\d{2})"
     r"[ .\-]?\d{3}[ .\-]?\d{2}[ .\-]?\d{2}(?!\d)"
 )
-#: A phone label nearby raises confidence -- distinguishes a genuine phone
-#: number from an incidental 10-digit run (e.g. part of a longer reference).
+#: Yakında bir telefon etiketi varlığı güveni artırır -- gerçek bir telefon
+#: numarasını rastgele bir 10 haneli diziden (örn. daha uzun bir referansın
+#: parçası) ayırır.
 _PHONE_CONTEXT = re.compile(r"\b(tel|telefon|gsm|cep)\b", re.IGNORECASE)
 
-#: Address heuristic: a content line scores as an address when it carries a
-#: street-level keyword (mahalle/cadde/sokak/...) -- the part of an address
-#: that only ever appears in an actual address. Split from the unit-level
-#: keywords below on purpose: an ordinary official-letter line like "Kat: 2"
-#: or a numbered reference like "No: 5" (a case/document number, an article
-#: number, a list item) uses the exact same words without being an address
-#: at all, and used to be enough on its own to false-positive as one (see
-#: Görev's "hatalı PII tespiti" bug report). A real address is expected to
-#: name a street too, so requiring at least one street-level hit before the
-#: unit-level keywords even count closes that gap.
+#: Adres sezgisi: bir içerik satırı, sokak düzeyinde bir anahtar kelime
+#: taşıdığında (mahalle/cadde/sokak/...) adres olarak puanlanır -- bu,
+#: yalnızca gerçek bir adreste görülen kısımdır. Aşağıdaki birim düzeyi
+#: anahtar kelimelerden bilerek ayrıldı: "Kat: 2" gibi sıradan bir resmi
+#: yazı satırı veya "No: 5" gibi numaralı bir referans (bir dosya/belge
+#: numarası, bir madde numarası, bir liste öğesi) tam olarak aynı kelimeleri
+#: bir adres olmadan da kullanır ve eskiden tek başına bir adres olarak
+#: yanlış pozitif üretmeye yetiyordu (bkz. Görev'in "hatalı PII tespiti" bug
+#: raporu). Gerçek bir adresin bir sokak da adlandırması beklenir, bu yüzden
+#: birim düzeyi anahtar kelimeler sayılmadan önce en az bir sokak düzeyi
+#: eşleşme şart koşmak bu boşluğu kapatır.
 _ADDRESS_STREET_KEYWORDS = re.compile(
     r"\b(mahalle(si)?|mah\.|cadde(si)?|cad\.|sokak|sok\.|bulvar[ıi]?|"
     r"apartman[ıi]?|blok)\b",
     re.IGNORECASE,
 )
 
-#: Unit-level keywords: only meaningful once a street-level hit has already
-#: confirmed this line is actually about an address (see above) -- these
-#: alone are far too generic (kat/daire/no all appear constantly in official
-#: correspondence unrelated to any address) to carry any signal by themselves.
+#: Birim düzeyi anahtar kelimeler: yalnızca bir sokak düzeyi eşleşme bu
+#: satırın gerçekten bir adresle ilgili olduğunu zaten doğruladığında
+#: anlamlıdır (yukarıya bakın) -- tek başlarına bunlar (kat/daire/no hepsi
+#: herhangi bir adresle ilgisiz resmi yazışmalarda sürekli görünür) kendi
+#: başlarına herhangi bir sinyal taşımak için çok fazla geneldir.
 _ADDRESS_UNIT_KEYWORDS = re.compile(
     r"\b(kat\s*:?\s*\d|daire\s*:?\s*\d|no\s*:?\s*\d+)\b",
     re.IGNORECASE,
 )
 
-#: Below this many combined keyword hits a line is not confidently an address.
+#: Bu sayının altındaki birleşik anahtar kelime eşleşmelerinde bir satır
+#: güvenle bir adres sayılmaz.
 _ADDRESS_MIN_KEYWORD_HITS = 2
 
 
 class PiiFinding(BaseModel):
-    """One PII pattern match, carrying only a masked preview of the value.
+    """Yalnızca değerin maskelenmiş bir önizlemesini taşıyan tek bir PII kalıp eşleşmesi.
 
-    ``confidence`` lets callers apply ``GuardrailPolicy.pii_confidence_floor``
-    to separate a real finding from pattern noise (see
-    ``app.ai.guardrails.sensitivity.assess``) -- it is never itself sensitive,
-    so it is safe to log or persist alongside the finding. Defaults to 1.0
-    rather than being required: a finding reconstructed from an already-
-    filtered, already-serialized assessment (see
-    ``app.ai.guardrails.sensitivity.assessment_from_analysis``, which reads
-    back the API-facing ``GuardrailAssessmentSchema.pii_findings`` shape that
-    never carried a confidence field to begin with) has no original
-    confidence to report and shouldn't need to fake one.
+    ``confidence``, çağıranların gerçek bir bulguyu kalıp gürültüsünden
+    ayırmak için ``GuardrailPolicy.pii_confidence_floor``'u uygulamasına
+    izin verir (bkz. ``app.ai.guardrails.sensitivity.assess``) -- kendisi
+    asla hassas değildir, bu yüzden bulgunun yanında loglanması veya
+    kalıcı hale getirilmesi güvenlidir. Zorunlu olmak yerine 1.0 varsayılan
+    değeri taşır: zaten filtrelenmiş, zaten serileştirilmiş bir
+    değerlendirmeden yeniden oluşturulmuş bir bulgunun (bkz.
+    ``app.ai.guardrails.sensitivity.assessment_from_analysis``, ki bu
+    başından beri hiç confidence alanı taşımayan API'ye dönük
+    ``GuardrailAssessmentSchema.pii_findings`` şeklini geri okur) raporlayacak
+    orijinal bir güven skoru yoktur ve birini uydurmasına gerek olmamalıdır.
     """
 
     kind: str = Field(description="'tckn' | 'iban' | 'telefon' | 'adres'.")
     preview: str = Field(description="Maskelenmiş önizleme; ham değer taşımaz.")
     confidence: float = Field(default=1.0, description="0-1 arası güven skoru.")
-    #: Which detector/rule actually fired -- the answer to "hangi detector
-    #: nedeniyle tetiklendi" (Görev's own explainability requirement).
-    #: Defaults to "" rather than being required for the same reason
-    #: `confidence` does (see its own docstring): a finding reconstructed
-    #: from an already-serialized assessment never carried this either.
+    #: Hangi detektörün/kuralın gerçekten tetiklendiği -- "hangi detector
+    #: nedeniyle tetiklendi" sorusunun cevabı (Görev'in kendi
+    #: açıklanabilirlik gereksinimi). Aynı `confidence`'ın kendi
+    #: docstring'inde açıkladığı nedenle zorunlu olmak yerine "" varsayılan
+    #: değerini taşır: zaten serileştirilmiş bir değerlendirmeden yeniden
+    #: oluşturulmuş bir bulgu bunu da hiç taşımamıştır.
     rule_id: str = Field(
         default="",
         description=(
@@ -98,37 +108,38 @@ class PiiFinding(BaseModel):
 
 
 def _mask(value: str, *, keep_start: int = 2, keep_end: int = 2) -> str:
-    """Redact the middle of a value, keeping only a few characters at each end.
+    """Bir değerin ortasını kırp, her uçta yalnızca birkaç karakteri görünür bırak.
 
     Args:
-        value: The raw matched value.
-        keep_start: Characters to keep visible at the start.
-        keep_end: Characters to keep visible at the end.
+        value: Ham eşleşen değer.
+        keep_start: Başta görünür bırakılacak karakter sayısı.
+        keep_end: Sonda görünür bırakılacak karakter sayısı.
 
     Returns:
-        A masked preview, e.g. ``"12*******34"``.
+        Maskelenmiş bir önizleme, örn. ``"12*******34"``.
     """
     stripped = value.strip()
     if len(stripped) <= keep_start + keep_end:
         return "*" * len(stripped)
     middle = "*" * (len(stripped) - keep_start - keep_end)
-    # `stripped[-0:]` is the whole string, not "the last zero characters" --
-    # Python's `-0 == 0`, so a naive `stripped[-keep_end:]` leaks the entire
-    # value back out whenever a caller asks to keep 0 trailing characters
-    # (as the address finder does). Guard the zero case explicitly.
+    # `stripped[-0:]`, "son sıfır karakter" değil, string'in tamamıdır --
+    # Python'da `-0 == 0`, dolayısıyla saf bir `stripped[-keep_end:]`, bir
+    # çağıran 0 sondaki karakteri tutmayı istediğinde (adres bulucunun
+    # yaptığı gibi) değerin tamamını geri sızdırır. Sıfır durumunu açıkça
+    # koru.
     tail = stripped[-keep_end:] if keep_end > 0 else ""
     return f"{stripped[:keep_start]}{middle}{tail}"
 
 
 def _tckn_checksum_valid(digits: str) -> bool:
-    """Validate an 11-digit string against the Turkish TCKN checksum algorithm.
+    """11 haneli bir string'i Türk TCKN checksum algoritmasına karşı doğrula.
 
     Args:
-        digits: Exactly 11 ASCII digit characters.
+        digits: Tam olarak 11 ASCII rakam karakteri.
 
     Returns:
-        True when both check digits (positions 10 and 11) are consistent
-        with the first nine, and the number does not start with 0.
+        Her iki kontrol hanesi de (10. ve 11. pozisyonlar) ilk dokuzla
+        tutarlıysa ve numara 0 ile başlamıyorsa True.
     """
     if digits[0] == "0":
         return False
@@ -143,33 +154,33 @@ def _tckn_checksum_valid(digits: str) -> bool:
 
 
 def _iban_checksum_valid(iban: str) -> bool:
-    """Validate a Turkish IBAN against the ISO 7064 MOD97-10 checksum.
+    """Bir Türk IBAN'ını ISO 7064 MOD97-10 checksum'ına karşı doğrula.
 
     Args:
-        iban: The IBAN with spaces removed, upper-cased.
+        iban: Boşlukları kaldırılmış, büyük harfe çevrilmiş IBAN.
 
     Returns:
-        True when the checksum holds and the length matches a Turkish IBAN
-        (26 characters: "TR" + 24 digits).
+        Checksum tutuyorsa ve uzunluk bir Türk IBAN'ıyla (26 karakter:
+        "TR" + 24 hane) eşleşiyorsa True.
     """
     if len(iban) != 26 or not iban.startswith("TR"):
         return False
     rearranged = iban[4:] + iban[:4]
     try:
-        # A single character's base-36 value is exactly ISO 7064's letter
-        # rule (A=10 ... Z=35) for letters, and the digit's own value for
-        # digits -- no separate lookup table needed.
+        # Tek bir karakterin base-36 değeri, harfler için tam olarak ISO
+        # 7064'ün harf kuralıdır (A=10 ... Z=35), rakamlar için ise
+        # rakamın kendi değeridir -- ayrı bir arama tablosuna gerek yok.
         numeric = "".join(str(int(char, 36)) for char in rearranged)
     except ValueError:
         return False
     return int(numeric) % 97 == 1
 
 
-#: A match plus where it sits in the source text. Positions exist only to
-#: make :func:`redact_pii` possible (replace the exact span, not a
-#: string-search-and-hope) -- :func:`find_pii` throws them away, since
-#: nothing outside this module has ever needed a raw offset into text that
-#: itself must not be retained.
+#: Bir eşleşme artı kaynak metinde nerede bulunduğu. Konumlar yalnızca
+#: :func:`redact_pii`'yi mümkün kılmak için var (bir string arayıp
+#: umut etmek yerine tam aralığı değiştirmek) -- :func:`find_pii` bunları
+#: atar, çünkü bu modül dışındaki hiçbir şey, kendisi saklanmaması gereken
+#: bir metne ham bir ofsete asla ihtiyaç duymamıştır.
 _PositionedFinding = tuple[int, int, PiiFinding]
 
 
@@ -242,14 +253,15 @@ def _find_address_positioned(text: str) -> list[_PositionedFinding]:
             street_hits = len(_ADDRESS_STREET_KEYWORDS.findall(stripped))
             unit_hits = len(_ADDRESS_UNIT_KEYWORDS.findall(stripped))
             hits = street_hits + unit_hits
-            # A street-level hit is mandatory -- see _ADDRESS_UNIT_KEYWORDS'
-            # own docstring on why kat/daire/no alone (however many times
-            # repeated) must never be enough on their own.
+            # Bir sokak düzeyi eşleşme zorunludur -- kat/daire/no'nun tek
+            # başına (kaç kez tekrarlanırsa tekrarlansın) neden asla yeterli
+            # olmaması gerektiği için _ADDRESS_UNIT_KEYWORDS'ün kendi
+            # docstring'ine bakın.
             if street_hits >= 1 and hits >= _ADDRESS_MIN_KEYWORD_HITS:
-                # `line.index(stripped)` recovers exactly how much leading
-                # whitespace `.strip()` removed, so the span lines up with
-                # the original text even though matching ran on the
-                # stripped copy.
+                # `line.index(stripped)`, `.strip()`'in tam olarak ne kadar
+                # baştaki boşluğu kaldırdığını geri kazanır, böylece
+                # eşleştirme kırpılmış kopya üzerinde çalışmış olsa bile
+                # aralık orijinal metinle hizalanır.
                 local_start = line.index(stripped)
                 start = offset + local_start
                 end = start + len(stripped)
@@ -280,48 +292,51 @@ def _find_all_positioned(text: str) -> list[_PositionedFinding]:
 
 
 def find_pii(text: str) -> list[PiiFinding]:
-    """Scan text for Turkish PII patterns.
+    """Metni Türkçe PII kalıpları için tara.
 
-    Deliberately unfiltered by confidence here -- callers (chiefly
-    ``app.ai.guardrails.sensitivity.assess``) apply
-    ``GuardrailPolicy.pii_confidence_floor`` so the threshold lives in one
-    tunable place rather than being baked into the scanner.
+    Burada bilerek güvene göre filtrelenmemiştir -- çağıranlar (başlıca
+    ``app.ai.guardrails.sensitivity.assess``) ``GuardrailPolicy.pii_confidence_floor``'u
+    uygular, böylece eşik tarayıcının içine gömülmek yerine tek, ayarlanabilir
+    bir yerde yaşar.
 
     Args:
-        text: Raw text to scan (document text, or a generated reply for the
-            output-side leakage check).
+        text: Taranacak ham metin (belge metni, veya çıktı tarafı sızıntı
+            kontrolü için üretilmiş bir yanıt).
 
     Returns:
-        Every pattern match found, each with only a masked preview.
+        Bulunan her kalıp eşleşmesi, her biri yalnızca maskelenmiş bir
+        önizlemeyle.
     """
     return [finding for _start, _end, finding in _find_all_positioned(text)]
 
 
 def redact_pii(text: str, *, confidence_floor: float = 0.0) -> tuple[str, list[PiiFinding]]:
-    """Replace every PII span in ``text`` with its own masked preview.
+    """``text``'teki her PII aralığını kendi maskelenmiş önizlemesiyle değiştir.
 
-    Used by ``app.ai.guardrails.output_gate`` to redact a generated reply
-    in place rather than blocking it outright: unlike a document upload
-    (which either has PII or doesn't), a reply's PII spans need to actually
-    be removed from the text the user sees, not just reported alongside it.
+    ``app.ai.guardrails.output_gate`` tarafından, üretilmiş bir yanıtı
+    tamamen engellemek yerine yerinde kırpmak için kullanılır: bir belge
+    yüklemesinin aksine (ki ya PII'si vardır ya da yoktur), bir yanıtın PII
+    aralıklarının yalnızca yanında raporlanması değil, kullanıcının gördüğü
+    metinden gerçekten kaldırılması gerekir.
 
     Args:
-        text: Text to redact.
-        confidence_floor: Findings below this confidence are left in place,
-            same threshold role as ``GuardrailPolicy.pii_confidence_floor``
-            elsewhere.
+        text: Kırpılacak metin.
+        confidence_floor: Bu güvenin altındaki bulgular olduğu gibi
+            bırakılır, başka yerlerdeki ``GuardrailPolicy.pii_confidence_floor``
+            ile aynı eşik rolü.
 
     Returns:
-        The redacted text (unchanged when nothing cleared the floor), and
-        the findings that were actually redacted.
+        Kırpılmış metin (hiçbir şey eşiği aşmadıysa değişmeden), ve
+        gerçekten kırpılan bulgular.
     """
     matches = [m for m in _find_all_positioned(text) if m[2].confidence >= confidence_floor]
     if not matches:
         return text, []
 
-    # Replace from the highest start offset down, so replacing one span
-    # (which can change the text's length) never invalidates the still-
-    # unprocessed offsets, all of which sit earlier in the string.
+    # En yüksek başlangıç ofsetinden aşağıya doğru değiştir, böylece bir
+    # aralığı değiştirmek (ki bu metnin uzunluğunu değiştirebilir), hepsi
+    # string'de daha önce yer alan henüz işlenmemiş ofsetleri asla geçersiz
+    # kılmaz.
     redacted = text
     for start, end, finding in sorted(matches, key=lambda m: m[0], reverse=True):
         redacted = redacted[:start] + finding.preview + redacted[end:]

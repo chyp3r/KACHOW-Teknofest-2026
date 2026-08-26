@@ -8,31 +8,31 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class ArtifactTransferModel(Base, TimestampMixin):
-    """One artifact (taslak/evrak) transfer, from any channel.
+    """Herhangi bir kanaldan yapılan bir belge (taslak/evrak) transferi.
 
-    The single record every transfer path -- manual chat send, the legacy
-    `POST /drafts/{id}/send` REST endpoint, and (Faz 4) the AI-assisted
-    flow -- writes exactly one row into, via `ArtifactTransferService.
-    execute`. This is deliberately *not* a replacement for the tamper-
-    evident `audit_log` hash chain (`app.domains.audit`) -- that is written
-    separately, best-effort, after commit. This table is the queryable
-    domain record: "who sent what to whom, through which channel, with
-    what outcome" answered in one row, one query.
+    Her transfer yolunun -- manuel sohbet gönderimi, eski `POST
+    /drafts/{id}/send` REST uç noktası ve (Faz 4) AI destekli akış --
+    `ArtifactTransferService.execute` üzerinden tam olarak tek bir satır
+    yazdığı tek kayıt. Bu, bilinçli olarak sahtekarlığa karşı korumalı
+    `audit_log` hash zincirinin (`app.domains.audit`) yerine geçmez --
+    o, commit sonrasında ayrıca, best-effort olarak yazılır. Bu tablo
+    sorgulanabilir alan (domain) kaydıdır: "kim, kime, hangi kanaldan,
+    hangi sonuçla ne gönderdi" sorusu tek satırda, tek sorguyla yanıtlanır.
 
-    `source_artifact_id` is a loose reference (a `drafts.id` or a
-    `documents.id`/storage_path), same looseness `drafts.document_id`
-    already has -- `artifact_kind` disambiguates which table it points
-    into. `snapshot_ref` is the recipient's own copy: a new `drafts.id`
-    (forked at transfer time) for a draft, or the new `document_pool_items.
-    id` for a document.
+    `source_artifact_id`, `drafts.document_id`'nin zaten sahip olduğu aynı
+    gevşeklikte bir referanstır (bir `drafts.id` ya da bir
+    `documents.id`/storage_path) -- `artifact_kind`, hangi tabloya işaret
+    ettiğini netleştirir. `snapshot_ref` alıcının kendi kopyasıdır: bir
+    taslak için (transfer anında çatallanmış) yeni bir `drafts.id`, bir
+    evrak için yeni bir `document_pool_items.id`.
     """
 
     __tablename__ = "artifact_transfers"
     __table_args__ = (
-        #: Partial unique index, not a `UniqueConstraint` -- same reasoning
-        #: as `ConversationModel.dm_key`'s own index: most transfers don't
-        #: supply an idempotency key at all, and NULL-vs-NULL must never
-        #: collide.
+        #: `UniqueConstraint` değil, kısmi (partial) benzersiz indeks --
+        #: `ConversationModel.dm_key`'in kendi indeksiyle aynı gerekçe:
+        #: çoğu transfer hiç idempotency anahtarı vermez ve NULL-vs-NULL
+        #: asla çakışmamalıdır.
         Index(
             "uq_artifact_transfers_idempotency",
             "company_id",
@@ -49,9 +49,10 @@ class ArtifactTransferModel(Base, TimestampMixin):
     #: "draft" | "document"
     artifact_kind: Mapped[str] = mapped_column(String, nullable=False)
     source_artifact_id: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    #: The draft version transferred, when `artifact_kind == "draft"` --
-    #: pinned at transfer time so a later revision of the same draft never
-    #: silently changes what this row claims was sent.
+    #: `artifact_kind == "draft"` olduğunda transfer edilen taslak
+    #: versiyonu -- transfer anında sabitlenir, böylece aynı taslağın
+    #: sonraki bir revizyonu bu satırın gönderildiğini iddia ettiği şeyi
+    #: asla sessizce değiştirmez.
     source_version: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     snapshot_ref: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     sender_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False, index=True)
@@ -66,30 +67,34 @@ class ArtifactTransferModel(Base, TimestampMixin):
     )
     #: "chat" | "ai" | "rest"
     channel: Mapped[str] = mapped_column(String, nullable=False)
-    #: True only for a Faz 4 AI-suggested recipient the user then confirmed
-    #: -- never set by this phase's manual channels.
+    #: Yalnızca kullanıcının sonradan onayladığı bir Faz 4 AI önerisi
+    #: alıcı için True -- bu fazın manuel kanalları tarafından asla
+    #: ayarlanmaz.
     ai_suggested: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    #: "routing_unit" | "favorite_rank" | "explicit_name" -- Faz 4 only.
+    #: "routing_unit" | "favorite_rank" | "explicit_name" -- yalnızca Faz 4.
     recommendation_source: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     recommendation_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
-    #: Whether the recipient's primary unit differs from the artifact's own
-    #: `destination_unit_id` -- computed once here by `TransferPolicy`,
-    #: never left for a caller (LLM included) to judge for itself.
+    #: Alıcının birincil biriminin belgenin kendi `destination_unit_id`'sinden
+    #: farklı olup olmadığı -- burada `TransferPolicy` tarafından bir kez
+    #: hesaplanır, bunu kendi başına değerlendirmesi için asla bir çağırana
+    #: (LLM dahil) bırakılmaz.
     cross_unit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    #: False only ever for a future automated/system-initiated transfer --
-    #: every channel this phase supports requires the acting user's own
-    #: HTTP call, which is itself the confirmation.
+    #: Yalnızca gelecekteki otomatik/sistem başlatmalı bir transfer için
+    #: False olabilir -- bu fazın desteklediği her kanal, kendisi zaten
+    #: onay anlamına gelen, işlemi yapan kullanıcının kendi HTTP çağrısını
+    #: gerektirir.
     confirmed_by_user: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    #: "permit" | "deny" -- the policy verdict this transfer executed
-    #: under. A row only ever exists for "permit"; a "deny" never reaches
-    #: persistence (see `ArtifactTransferService.execute`), so this column
-    #: is always "permit" today, kept for the Faz 4 audit trail shape where
-    #: a denied attempt may still be worth recording.
+    #: "permit" | "deny" -- bu transferin altında yürütüldüğü politika
+    #: kararı. Bir satır yalnızca "permit" için var olur; bir "deny" asla
+    #: kalıcı hale gelmez (bkz. `ArtifactTransferService.execute`),
+    #: dolayısıyla bu kolon bugün her zaman "permit"tir, reddedilen bir
+    #: girişimin yine de kaydedilmeye değer olabileceği Faz 4 denetim izi
+    #: (audit trail) şekli için tutulmaktadır.
     policy_decision: Mapped[str] = mapped_column(String, nullable=False, default="permit")
     policy_reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     #: "executed" | "failed" | "withdrawn"
     status: Mapped[str] = mapped_column(String, nullable=False, default="executed")
-    #: Caller-supplied idempotency token. `None` for most manual sends;
-    #: required by the Faz 4 AI channel (`f"intent:{intent_id}"`) so a
-    #: retried confirmation never re-executes.
+    #: Çağıranın sağladığı idempotency belirteci. Çoğu manuel gönderim için
+    #: `None`; Faz 4 AI kanalı için gereklidir (`f"intent:{intent_id}"`),
+    #: böylece tekrarlanan bir onay asla yeniden yürütülmez.
     idempotency_key: Mapped[Optional[str]] = mapped_column(String, nullable=True)

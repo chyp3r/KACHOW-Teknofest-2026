@@ -2,26 +2,27 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    """User role types used throughout the system for RBAC.
+    """Sistem genelinde RBAC için kullanılan kullanıcı rol türleri.
 
-    Four roles, one per level of the tenancy hierarchy:
+    Kiracılık hiyerarşisinin her seviyesi için bir tane olmak üzere dört rol:
 
-    - ROOT: platform operator, not bound to any company (``UserModel.
-      company_id`` is NULL only for this role). Sees every company, never a
-      company's business data directly -- see ``app.core.authz`` for how a
-      root subject must explicitly scope to a company before any
-      company-resource action is permitted.
-    - ADMIN: a company admin, created by root, scoped to exactly one
-      company.
-    - MANAGER: a company manager, designated by that company's admin.
-    - EMPLOYEE: a company employee, designated by an admin or manager.
+    - ROOT: herhangi bir şirkete bağlı olmayan platform operatörü
+      (``UserModel.company_id`` yalnızca bu rol için NULL'dur). Her
+      şirketi görür, asla bir şirketin iş verisini doğrudan görmez -- bir
+      root öznesinin herhangi bir şirket-kaynağı eylemine izin verilmeden
+      önce açıkça bir şirkete nasıl kapsanması gerektiği için
+      ``app.core.authz``'ye bakın.
+    - ADMIN: root tarafından oluşturulan, tam olarak bir şirkete kapsanan
+      bir şirket admini.
+    - MANAGER: o şirketin admini tarafından atanan bir şirket müdürü.
+    - EMPLOYEE: bir admin veya müdür tarafından atanan bir şirket çalışanı.
 
-    ROOT, ADMIN and MANAGER all clear every confidentiality level (see
-    ``GuardrailPolicy.role_clearance_map``) -- MANAGER represents a company
-    manager, trusted with full access the same as ADMIN. EMPLOYEE's ceiling
-    is not fixed by role at all: it comes from that individual's own
-    ``UserModel.clearance_level``, since two employees can legitimately need
-    different access.
+    ROOT, ADMIN ve MANAGER'ın hepsi her gizlilik seviyesini açar (bkz.
+    ``GuardrailPolicy.role_clearance_map``) -- MANAGER, ADMIN ile aynı tam
+    erişime güvenilen bir şirket müdürünü temsil eder. EMPLOYEE'nin tavanı
+    rol tarafından hiç sabitlenmemiştir: o bireyin kendi
+    ``UserModel.clearance_level``'ından gelir, çünkü iki çalışan meşru
+    biçimde farklı erişime ihtiyaç duyabilir.
     """
 
     ROOT = "root"

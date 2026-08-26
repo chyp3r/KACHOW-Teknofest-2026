@@ -38,28 +38,27 @@ async def _verify_document_access(
     current_user: UserModel,
     document_repository: DocumentRepository,
 ) -> None:
-    """Refuse a chat turn that attaches a document the caller doesn't own or
-    isn't cleared for.
+    """Çağıranın sahibi olmadığı veya erişim yetkisi olmayan bir evrakı ekleyen bir sohbet turunu reddeder.
 
-    A document being attached only changes which tools the assistant can
-    call (see app.ai.tools.document_tools's module docstring) -- nothing
-    upstream of that previously checked whether the caller was allowed to
-    attach it in the first place. ADMIN/MANAGER/ROOT skip only the
-    ownership half (see ``bypasses_ownership``) -- they see every document
-    company-wide, but clearance still applies (though it never actually
-    binds for them: see ``clearance_for``), and the company boundary itself
-    is never skipped for anyone.
+    Bir evrakın eklenmesi yalnızca asistanın hangi araçları çağırabileceğini
+    değiştirir (bkz. app.ai.tools.document_tools'un modül docstring'i) --
+    bundan önce hiçbir şey, çağıranın onu eklemesine ilk etapta izin verilip
+    verilmediğini kontrol etmiyordu. ADMIN/MANAGER/ROOT yalnızca sahiplik
+    yarısını atlar (bkz. ``bypasses_ownership``) -- şirket genelinde her
+    evrakı görürler, ama yetki hâlâ geçerlidir (gerçi onlar için hiçbir
+    zaman fiilen bağlayıcı olmaz: bkz. ``clearance_for``), ve şirket sınırı
+    kimse için asla atlanmaz.
 
-    This is the coarse, turn-level gate (may this caller even attach this
-    document at all); ``document_tools.py``'s own deny-at-retrieval check is
-    the finer-grained one underneath it, since a single turn's tools can
-    also touch legislation search and other content this gate never sees.
+    Bu kaba, tur seviyesindeki kapıdır (bu çağıran bu evrakı ekleyebilir mi
+    diye); ``document_tools.py``'nin kendi alım-anında-reddetme kontrolü bunun
+    altındaki daha ince taneli olandır, çünkü tek bir turun araçları bu
+    kapının hiç görmediği mevzuat aramasına ve diğer içeriğe de dokunabilir.
 
     Raises:
-        AuthorizationException: If the document is registered to a
-            different company, or a different owner than ``current_user``
-            (and it isn't ADMIN/MANAGER/ROOT), or ``current_user``'s
-            clearance doesn't cover the document's confidentiality level.
+        AuthorizationException: Evrak farklı bir şirkete kayıtlıysa, veya
+            ``current_user``'dan farklı bir sahibe aitse (ve ADMIN/MANAGER/
+            ROOT değilse), veya ``current_user``'ın yetkisi evrakın gizlilik
+            seviyesini karşılamıyorsa.
     """
     if not document_id:
         return
@@ -80,7 +79,7 @@ async def _resolve_revision_draft(
     current_user: UserModel,
     draft_repository: DraftRepository,
 ) -> Optional[DraftModel]:
-    """Resolve and authorize an explicitly selected revision target."""
+    """Açıkça seçilmiş bir revizyon hedefini çözer ve yetkilendirir."""
     if not draft_id:
         return None
     draft = await draft_repository.get_by_id(draft_id)
@@ -94,25 +93,25 @@ async def _resolve_revision_draft(
         raise AuthorizationException(message="Bu taslağı düzenleme izniniz yok.")
     return draft
 
-# Authentication is mandatory (see require_auth_if_enabled) -- every route in
-# this router carries a real, tenant-bound current_user.
+# Kimlik doğrulama zorunludur (bkz. require_auth_if_enabled) -- bu router'daki
+# her rota gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/chat", tags=["chat"], dependencies=[Depends(require_auth_if_enabled)]
 )
 
 
 def make_serializable(obj: Any) -> Any:
-    """Recursively convert workflow output into JSON-serializable values.
+    """İş akışı çıktısını özyinelemeli olarak JSON'a dönüştürülebilir değerlere çevirir.
 
-    Workflow state carries LangChain ``Document`` objects and Pydantic models
-    that ``json.dumps`` cannot encode, and a single unencodable value anywhere in
-    the tree would abort the whole SSE stream.
+    İş akışı durumu, ``json.dumps``'ın kodlayamadığı LangChain ``Document``
+    nesneleri ve Pydantic modelleri taşır, ve ağacın herhangi bir yerindeki
+    tek bir kodlanamayan değer tüm SSE akışını durdurur.
 
     Args:
-        obj: Any value from the workflow state.
+        obj: İş akışı durumundan herhangi bir değer.
 
     Returns:
-        An equivalent structure of JSON-safe primitives.
+        JSON açısından güvenli ilkel değerlerden oluşan eşdeğer bir yapı.
     """
     if obj is None or isinstance(obj, (str, int, float, bool)):
         return obj
@@ -136,24 +135,24 @@ def make_serializable(obj: Any) -> Any:
 def _sse_response(
     events: AsyncIterator[dict[str, Any]], http_request: Request
 ) -> StreamingResponse:
-    """Wrap a workflow event stream in the shared SSE transport.
+    """Bir iş akışı olay akışını paylaşılan SSE taşıma katmanına sarar.
 
-    Shared by ``/stream`` and ``/resume`` since a resumed run streams exactly
-    the same event vocabulary as a fresh one.
+    Devam ettirilen bir çalıştırma tazesiyle tamamen aynı olay kelime
+    dağarcığını akıttığı için ``/stream`` ve ``/resume`` tarafından paylaşılır.
 
     Args:
-        events: The service's async event generator.
-        http_request: The inbound request, polled for client disconnects.
+        events: Servisin asenkron olay üreticisi.
+        http_request: İstemci bağlantı kesilmeleri için sorgulanan gelen istek.
 
     Returns:
-        A ``text/event-stream`` response.
+        Bir ``text/event-stream`` yanıtı.
     """
 
     async def event_generator():
         try:
             async for event in events:
-                # Stop the workflow as soon as the client goes away instead of
-                # holding the local model busy for a response nobody will read.
+                # İstemci uzaklaşır uzaklaşmaz, kimsenin okumayacağı bir yanıt
+                # için yerel modeli meşgul tutmak yerine iş akışını durdur.
                 if await http_request.is_disconnected():
                     logger.info("Client disconnected; aborting chat stream.")
                     break
@@ -175,8 +174,8 @@ def _sse_response(
         headers={
             "Cache-Control": "no-cache",
             "Connection": "keep-alive",
-            # Nginx buffers proxied responses by default, which would defeat the
-            # entire point of streaming.
+            # Nginx varsayılan olarak proxy'lenen yanıtları arabelleğe alır, bu da
+            # akışın tüm amacını boşa çıkarır.
             "X-Accel-Buffering": "no",
         },
     )
@@ -190,12 +189,13 @@ async def send_chat_message(
     draft_repository: DraftRepository = Depends(get_draft_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Orchestrate a chat interaction and return the completed result.
+    """Bir sohbet etkileşimini düzenler ve tamamlanmış sonucu döndürür.
 
-    Routes the user input through the master planning graph, which resolves
-    whether it needs analysis, drafting, document Q&A or plain conversation.
-    May also return an ``INTERRUPTED`` status when the run paused at the
-    human-in-the-loop gate; resume it via ``POST /chat/resume``.
+    Kullanıcı girdisini, analiz, taslak yazımı, evrak soru-cevap ya da düz
+    sohbete mi ihtiyaç duyduğunu çözen ana planlama grafiği üzerinden
+    yönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir
+    ``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile
+    devam ettirin.
     """
     await _verify_document_access(request.document_id, current_user, document_repository)
     revision_draft = await _resolve_revision_draft(
@@ -223,19 +223,19 @@ async def stream_chat_message(
     current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="chat:stream")),
 ):
-    """Orchestrate a chat interaction and stream progress events over SSE.
+    """Bir sohbet etkileşimini düzenler ve ilerleme olaylarını SSE üzerinden akıtır.
 
-    Emits ``session`` first with the resolved thread_id, then
-    ``node_start``/``node_end``/``node_skipped``/``node_error`` for workflow
-    phases, ``token`` for live text as it is generated, ``partial_result`` for
-    intermediate output the client can render before the run finishes, and
-    either a terminal ``final_result`` or, if the run paused at the
-    human-in-the-loop gate, an ``interrupt`` event carrying what the human
-    needs to answer.
+    Önce çözümlenmiş thread_id ile ``session`` yayınlar, ardından iş akışı
+    aşamaları için ``node_start``/``node_end``/``node_skipped``/
+    ``node_error``, üretildikçe canlı metin için ``token``, istemcinin
+    çalıştırma bitmeden önce render edebileceği ara çıktı için
+    ``partial_result``, ve ya sonlandırıcı bir ``final_result`` ya da,
+    çalıştırma insan-döngüde kapısında duraklatıldıysa, insanın
+    yanıtlaması gerekeni taşıyan bir ``interrupt`` olayı yayınlar.
     """
-    # Checked before entering the SSE response, not inside the generator, so
-    # a denied request gets a normal 403 instead of a stream that opens and
-    # then immediately reports a generic error.
+    # SSE yanıtına girmeden önce, üretici içinde değil, kontrol edilir; böylece
+    # reddedilen bir istek, açılıp hemen genel bir hata bildiren bir akış
+    # yerine normal bir 403 alır.
     await _verify_document_access(request.document_id, current_user, document_repository)
     revision_draft = await _resolve_revision_draft(
         request.draft_id, current_user, draft_repository
@@ -263,11 +263,11 @@ async def resume_chat_stream(
     current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=30, window_seconds=60, key_prefix="chat:resume")),
 ):
-    """Resume a run paused at the human-in-the-loop gate, streaming over SSE.
+    """İnsan-döngüde kapısında duraklatılmış bir çalıştırmayı SSE üzerinden akıtarak devam ettirir.
 
-    ``action="answer"`` fills in a draft's missing-information placeholders
-    without regenerating it. ``action="approve"|"revise"|"reject"`` resolves a
-    draft that needed a human's sign-off before unit routing.
+    ``action="answer"``, bir taslağın eksik bilgi yer tutucularını yeniden
+    üretmeden doldurur. ``action="approve"|"revise"|"reject"``, birim
+    yönlendirmesinden önce insan onayına ihtiyaç duyan bir taslağı çözer.
     """
     user_id = current_user.id
     ChatService._verify_thread_ownership(request.session_id, user_id)
@@ -285,7 +285,7 @@ async def resume_chat_sync(
     service: ChatService = Depends(get_chat_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Resume a paused run and return the completed (or re-paused) result."""
+    """Duraklatılmış bir çalıştırmayı devam ettirir ve tamamlanmış (veya yeniden duraklatılmış) sonucu döndürür."""
     result = await service.resume(
         request.session_id, request, user_id=current_user.id, company_id=current_user.company_id
     )
@@ -305,11 +305,11 @@ async def list_chat_sessions(
     session_repository: ChatSessionRepository = Depends(get_chat_session_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """List the caller's chat sessions, most recently active first.
+    """Çağıranın sohbet oturumlarını, en son aktif olanı önce listeler.
 
-    ``user_id=None`` (an ADMIN/MANAGER/ROOT -- see ``bypasses_ownership``)
-    lists every session *within the caller's own company*, matching
-    ``GET /documents``'s convention.
+    ``user_id=None`` (bir ADMIN/MANAGER/ROOT -- bkz. ``bypasses_ownership``),
+    ``GET /documents``'in kuralına uygun olarak *çağıranın kendi şirketi
+    içindeki* her oturumu listeler.
     """
     user_id = None if bypasses_ownership(current_user) else current_user.id
     sessions = await session_repository.list_for_user(
@@ -336,15 +336,15 @@ async def list_chat_session_messages(
     message_repository: ChatMessageRepository = Depends(get_chat_message_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """List a session's messages in conversation order (oldest first).
+    """Bir oturumun mesajlarını konuşma sırasına göre listeler (en eskiden en yeniye).
 
-    Ownership reuses ``ChatService._verify_thread_ownership`` -- the same
-    ``user_id:`` prefix check that already gates ``/chat/resume`` from
-    touching another user's thread.
+    Sahiplik, ``ChatService._verify_thread_ownership``'i yeniden kullanır --
+    ``/chat/resume``'un başka bir kullanıcının thread'ine dokunmasını zaten
+    engelleyen aynı ``user_id:`` öneki kontrolü.
 
     Raises:
-        AuthorizationException: If ``session_id`` belongs to a different
-            user than ``current_user``.
+        AuthorizationException: ``session_id``, ``current_user``'dan
+            farklı bir kullanıcıya aitse.
     """
     ChatService._verify_thread_ownership(
         session_id, current_user.id
@@ -373,14 +373,15 @@ async def get_session_state(
     service: ChatService = Depends(get_chat_service),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Report whether a session is idle, running, or paused on an interrupt.
+    """Bir oturumun boşta mı, çalışıyor mu, yoksa bir kesintide mi duraklatılmış olduğunu bildirir.
 
-    Lets the client recover after a page reload or a dropped SSE connection:
-    if ``status`` is ``"interrupted"``, re-render the resume form from the
-    returned ``interrupt`` payload instead of losing it.
+    İstemcinin bir sayfa yenilemesi veya kopan bir SSE bağlantısı sonrası
+    kurtarma yapmasını sağlar: ``status`` ``"interrupted"`` ise, devam
+    ettirme formunu kaybetmek yerine dönen ``interrupt`` yükünden yeniden
+    render edin.
     """
     if not session_id:
-        raise HTTPException(status_code=422, detail="session_id is required.")
+        raise HTTPException(status_code=422, detail="session_id gereklidir.")
     state = await service.get_session_state(
         session_id, user_id=current_user.id
     )

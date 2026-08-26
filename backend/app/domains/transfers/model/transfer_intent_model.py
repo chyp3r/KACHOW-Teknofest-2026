@@ -9,31 +9,33 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class ArtifactTransferIntentModel(Base, TimestampMixin):
-    """The AI channel's confirmation lifecycle for one proposed transfer.
+    """Önerilen bir transfer için AI kanalının onay yaşam döngüsü.
 
-    **Not read or written anywhere yet.** Migrated now (Faz 3, #199) so its
-    RLS policy and table shape ship alongside `artifact_transfers`, but the
-    state machine that owns it -- `TransferIntentService`, the CAS-based
-    `state` transitions, `transfer_gate_node`'s `interrupt()` -- is Faz 4.
-    Existing here, unused, is deliberately safe: RLS is already enforced,
-    and there is nothing to migrate later beyond adding the reader/writer
-    code.
+    **Henüz hiçbir yerde okunmuyor veya yazılmıyor.** RLS politikası ve
+    tablo şekli `artifact_transfers` ile birlikte teslim edilsin diye şimdi
+    (Faz 3, #199) migrate edildi, ancak bunu sahiplenen durum makinesi --
+    `TransferIntentService`, CAS tabanlı `state` geçişleri,
+    `transfer_gate_node`'un `interrupt()`'ı -- Faz 4'tür. Burada var olması
+    ama kullanılmaması bilinçli olarak güvenlidir: RLS zaten uygulanıyor
+    ve daha sonra okuyucu/yazıcı kodu eklemek dışında migrate edilecek
+    bir şey yok.
 
-    `state` will carry the lifecycle documented in the plan's §I:
+    `state`, planın §I'sinde belgelenen yaşam döngüsünü taşıyacak:
     INTENT_DETECTED -> {AMBIGUOUS, RECIPIENT_RESOLVED, UNRESOLVED} ->
     POLICY_CHECKED -> {AWAITING_CONFIRMATION, POLICY_DENIED} ->
-    {CONFIRMED, CANCELLED} -> {TRANSFER_EXECUTED, FAILED}. Advanced via a
-    single conditional `UPDATE ... WHERE state = :expected` (row-level CAS)
-    so a duplicate or stale confirmation resolves to "0 rows changed"
-    rather than a race.
+    {CONFIRMED, CANCELLED} -> {TRANSFER_EXECUTED, FAILED}. Tek bir koşullu
+    `UPDATE ... WHERE state = :expected` (satır seviyeli CAS) ile ilerler,
+    böylece tekrarlanan veya eskimiş bir onay bir yarış durumuna değil
+    "0 satır değişti" sonucuna varır.
     """
 
     __tablename__ = "artifact_transfer_intents"
     __table_args__ = (
-        #: Composite, not a plain single-column index on `thread_id` --
-        #: every real query here is "this thread's active intent(s)",
-        #: which is `(thread_id, state)`; Postgres can still serve a
-        #: thread_id-only lookup off the same index's leading column.
+        #: `thread_id` üzerinde düz tek kolonlu bir indeks değil, bileşik
+        #: bir indeks -- buradaki her gerçek sorgu "bu thread'in aktif
+        #: intent'(ler)i" biçimindedir, yani `(thread_id, state)`; Postgres
+        #: yine de aynı indeksin öndeki kolonu üzerinden sadece thread_id'ye
+        #: göre bir aramaya hizmet edebilir.
         Index("ix_artifact_transfer_intents_thread_state", "thread_id", "state"),
     )
 
@@ -41,8 +43,8 @@ class ArtifactTransferIntentModel(Base, TimestampMixin):
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
-    #: The LangGraph thread this intent belongs to -- same composed id
-    #: `ChatService._thread_id` produces.
+    #: Bu intent'in ait olduğu LangGraph thread'i -- `ChatService._thread_id`'nin
+    #: ürettiği aynı bileşik id.
     thread_id: Mapped[str] = mapped_column(String, nullable=False)
     run_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     requested_by: Mapped[str] = mapped_column(
@@ -54,15 +56,16 @@ class ArtifactTransferIntentModel(Base, TimestampMixin):
     resolved_recipient_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id"), nullable=True
     )
-    #: Candidate list when name resolution was ambiguous (multiple same-
-    #: named users) -- rendered verbatim in the disambiguation interrupt,
-    #: never re-guessed by the model.
+    #: İsim çözümlemesi belirsiz olduğunda (aynı isimde birden fazla
+    #: kullanıcı) aday listesi -- belirsizlik giderme interrupt'ında
+    #: olduğu gibi gösterilir, model tarafından asla yeniden tahmin
+    #: edilmez.
     candidate_recipients: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
     state: Mapped[str] = mapped_column(String, nullable=False)
     policy_snapshot: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
-    #: sha256 of `policy_snapshot`, re-computed at confirmation time and
-    #: compared -- the TOCTOU guard between "policy was checked" and "user
-    #: clicked confirm".
+    #: `policy_snapshot`'un sha256'sı, onay anında yeniden hesaplanır ve
+    #: karşılaştırılır -- "politika kontrol edildi" ile "kullanıcı onaya
+    #: tıkladı" arasındaki TOCTOU koruması.
     policy_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     cross_unit: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

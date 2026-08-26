@@ -1,33 +1,33 @@
-"""Which external MCP servers this application knows about.
+"""Bu uygulamanın bildiği harici MCP sunucuları.
 
-`MCPManager` can talk to any server; this module decides which ones exist. Kept
-separate so registration is a small, greppable list rather than a call buried in
-startup, and so a server can be switched off by configuration without touching
-code.
+`MCPManager` herhangi bir sunucuyla konuşabilir; bu modül hangilerinin var
+olduğuna karar verir. Kayıt işlemi, başlangıçta gömülü bir çağrı yerine küçük,
+grep'lenebilir bir liste olsun ve bir sunucu koda dokunmadan yapılandırma ile
+devre dışı bırakılabilsin diye ayrı tutuldu.
 
-One server today: `mevzuat-mcp` (github.com/saidsurucu/mevzuat-mcp, MIT), which
-queries mevzuat.gov.tr and bedesten.adalet.gov.tr. Two runtime callers share it,
-gated by two independent settings (see `core.config.Settings` for the full
-reasoning):
+Bugün itibarıyla tek bir sunucu var: mevzuat.gov.tr ve bedesten.adalet.gov.tr'yi
+sorgulayan `mevzuat-mcp` (github.com/saidsurucu/mevzuat-mcp, MIT). Bunu iki
+bağımsız ayar tarafından kontrol edilen iki çalışma zamanı çağıranı paylaşıyor
+(tam gerekçe için `core.config.Settings`'e bakın):
 
-* `app.ai.retrieval.mcp_mevzuat` -- document analysis's legislation retrieval,
-  live by default (`MEVZUAT_SOURCE="mcp"`), falling back to the committed
-  corpus on failure. Never touches `check_required_fields`: that is set
-  subtraction over a rule table with hard-coded article numbers, so the
-  compliance decision stays deterministic regardless of which source served
-  the citations.
-* `app.ai.tools.mevzuat_tools` -- the assistant's live lookup tool, off by
-  default (`MEVZUAT_MCP_ENABLED`), offered as an escalation when the local
-  corpus tool finds nothing.
+* `app.ai.retrieval.mcp_mevzuat` -- doküman analizinin mevzuat getirme
+  bileşeni, varsayılan olarak canlıdır (`MEVZUAT_SOURCE="mcp"`), başarısızlık
+  durumunda depoya gömülü derlem'e geri döner. `check_required_fields`'a asla
+  dokunmaz: o, sabit kodlanmış madde numaralarına sahip bir kural tablosu
+  üzerinde küme çıkarmasıdır, bu yüzden uyumluluk kararı, alıntıları hangi
+  kaynağın sağladığından bağımsız olarak deterministik kalır.
+* `app.ai.tools.mevzuat_tools` -- asistanın canlı arama aracı, varsayılan
+  olarak kapalıdır (`MEVZUAT_MCP_ENABLED`), yerel derlem aracı hiçbir şey
+  bulamadığında bir üst kademe olarak sunulur.
 
-`register_servers()` below registers the server whenever *either* setting
-wants it, so the documented default keeps working even though the two
-settings' defaults disagree (`MEVZUAT_SOURCE="mcp"` but
-`MEVZUAT_MCP_ENABLED=False`).
+Aşağıdaki `register_servers()`, *iki ayardan herhangi biri* isteyince
+sunucuyu kaydeder; böylece iki ayarın varsayılanları birbiriyle
+çelişse bile (`MEVZUAT_SOURCE="mcp"` ama `MEVZUAT_MCP_ENABLED=False`)
+belgelenen varsayılan davranış çalışmaya devam eder.
 
-The same server is also used off-line, by `scripts/fetch_mevzuat_corpus.py`, to
-build the committed corpus that both the "local" source above and the assistant's
-local-corpus tool read from.
+Aynı sunucu, yukarıdaki "local" kaynağın ve asistanın yerel derlem aracının
+okuduğu, depoya gömülü derlemi oluşturmak için `scripts/fetch_mevzuat_corpus.py`
+tarafından çevrimdışı olarak da kullanılır.
 """
 
 import logging
@@ -37,18 +37,19 @@ from app.mcp.manager import mcp_manager
 
 logger = logging.getLogger(__name__)
 
-#: Registered name for the legislation server, used by every call site.
+#: Mevzuat sunucusu için kayıtlı ad, tüm çağrı noktalarında kullanılır.
 MEVZUAT_SERVER = "mevzuat"
 
 
 def register_servers() -> list[str]:
-    """Register every configured MCP server with the shared manager.
+    """Yapılandırılmış her MCP sunucusunu paylaşılan yönetici ile kaydet.
 
-    Idempotent: re-registering replaces the client rather than accumulating
-    duplicates, so calling this from both startup and a test fixture is safe.
+    İdempotenttir: yeniden kayıt, kopyalar biriktirmek yerine istemciyi
+    değiştirir; bu yüzden bunu hem başlangıçtan hem de bir test fixture'ından
+    çağırmak güvenlidir.
 
     Returns:
-        The names of the servers now registered.
+        Şu anda kayıtlı olan sunucuların adları.
     """
     registered: list[str] = []
 
@@ -77,12 +78,12 @@ def register_servers() -> list[str]:
 
 
 def is_registered(name: str) -> bool:
-    """Report whether a server is available to call.
+    """Bir sunucunun çağrılabilir durumda olup olmadığını bildir.
 
     Args:
-        name: Registered server name.
+        name: Kayıtlı sunucu adı.
 
     Returns:
-        True when the server was registered.
+        Sunucu kayıtlıysa True.
     """
     return name in mcp_manager.clients

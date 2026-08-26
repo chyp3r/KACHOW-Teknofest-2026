@@ -8,16 +8,17 @@ from app.domains.units.repository import UnitRepository
 
 
 class DraftService:
-    """Business logic for the drafts API.
+    """Drafts API için iş mantığı.
 
-    Creation happens through `app.domains.drafts.draft_recorder`, called
-    from `app.domains.documents.draft_service.DraftService.
-    generate_draft_and_route` and from `ChatService` -- both run outside a
-    request-scoped session (the latter during SSE streaming), so they own
-    their own session/repository instead of going through this service.
-    `delete_draft` is the one write this service does own: it runs inside
-    the request-scoped session the drafts router already has, with no
-    SSE-streaming concern to route around.
+    Oluşturma, `app.domains.documents.draft_service.DraftService.
+    generate_draft_and_route`'tan ve `ChatService`'ten çağrılan
+    `app.domains.drafts.draft_recorder` üzerinden gerçekleşir -- ikisi de
+    istek kapsamlı bir oturumun dışında çalışır (ikincisi SSE streaming
+    sırasında), bu yüzden bu servisten geçmek yerine kendi
+    oturum/repository'lerine sahiptirler. `delete_draft`, bu servisin
+    sahip olduğu tek yazma işlemidir: drafts router'ının zaten sahip
+    olduğu istek kapsamlı oturum içinde çalışır, etrafından dolaşılması
+    gereken bir SSE-streaming derdi yoktur.
     """
 
     def __init__(self, repository: DraftRepository) -> None:
@@ -30,11 +31,11 @@ class DraftService:
         return draft
 
     async def list_versions(self, draft_id: str) -> List[DraftModel]:
-        """Every version in the draft's chain, oldest first.
+        """Taslağın zincirindeki tüm versiyonlar, en eskiden en yeniye.
 
-        Looks the draft up first purely to resolve its `session_id` --
-        version chains for a direct-API draft (`session_id=None`) collapse
-        to just that one draft, since there is nothing to chain it to.
+        Taslağı yalnızca `session_id`'sini çözümlemek için önce arar --
+        doğrudan API taslağının (`session_id=None`) versiyon zinciri tek
+        bir taslağa indirgenir, çünkü zincirlenecek başka bir şey yoktur.
         """
         draft = await self.get_draft(draft_id)
         if draft.session_id is None:
@@ -71,13 +72,13 @@ class DraftService:
         )
 
     async def delete_draft(self, draft_id: str) -> None:
-        """Soft-delete a draft, and the whole version chain it belongs to.
+        """Bir taslağı ve ait olduğu tüm versiyon zincirini soft-delete yap.
 
         Raises:
-            NotFoundException: If `draft_id` doesn't exist (or is already
-                deleted -- `get_by_id` filters `is_deleted`, so a second
-                delete call is reported the same as a missing draft rather
-                than silently succeeding).
+            NotFoundException: `draft_id` mevcut değilse (ya da zaten
+                silinmişse -- `get_by_id`, `is_deleted`'i filtreler, bu
+                yüzden ikinci bir silme çağrısı sessizce başarılı olmak
+                yerine eksik bir taslakla aynı şekilde raporlanır).
         """
         draft = await self.get_draft(draft_id)
         if draft.session_id is None:
@@ -86,33 +87,33 @@ class DraftService:
             await self.repository.soft_delete_session(draft.session_id)
 
     async def update_destination(self, draft_id: str, destination: str, company_id: str) -> DraftModel:
-        """Override this draft version's routed unit with the caller's own pick.
+        """Bu taslak versiyonunun yönlendirildiği birimi çağıranın kendi seçimiyle geçersiz kıl.
 
-        The routing graph always proposes a primary + (usually) an
-        alternative now (see `app.ai.workflows.routing_graph.
-        _best_effort_unit`), but a human may still want a third option --
-        this is the write path for that, e.g. from the chat UI's unit
-        picker. `destination` need not match a real unit: a custom,
-        free-text destination is accepted the same way routing's own
-        fallback already tolerates an unmatched name (see
-        `DraftModel.destination_unit_id`'s docstring) -- it just resolves
-        to no `destination_unit_id`.
+        Routing graph artık her zaman birincil + (genellikle) bir alternatif
+        önerir (bkz. `app.ai.workflows.routing_graph._best_effort_unit`),
+        ama bir insan yine de üçüncü bir seçenek isteyebilir -- bu, ör.
+        chat UI'ın birim seçicisinden gelen o durum için yazma yoludur.
+        `destination`'ın gerçek bir birimle eşleşmesi gerekmez: özel,
+        serbest metin bir hedef, routing'in kendi fallback'inin eşleşmeyen
+        bir adı zaten tolere ettiği şekilde kabul edilir (bkz.
+        `DraftModel.destination_unit_id`'in docstring'i) -- yalnızca
+        `destination_unit_id` olmadan çözümlenir.
 
         Args:
-            draft_id: The specific version being corrected -- not
-                necessarily the session's latest (an older version's
-                routing can still be corrected after the fact).
-            destination: The chosen unit's name, non-empty.
-            company_id: The caller's tenant, used to resolve `destination`
-                against this company's own `units` (never another
-                tenant's).
+            draft_id: Düzeltilmekte olan spesifik versiyon -- illa
+                oturumun en sonuncusu değil (daha eski bir versiyonun
+                yönlendirmesi de sonradan düzeltilebilir).
+            destination: Seçilen birimin adı, boş olamaz.
+            company_id: Çağıranın kiracısı; `destination`'ı bu şirketin
+                kendi `units`'ine karşı (başka bir kiracınınkine değil)
+                çözümlemek için kullanılır.
 
         Raises:
-            NotFoundException: If `draft_id` doesn't exist.
-            ValidationException: If `destination` is blank.
+            NotFoundException: `draft_id` mevcut değilse.
+            ValidationException: `destination` boşsa.
 
         Returns:
-            The updated draft row.
+            Güncellenmiş taslak satırı.
         """
         destination = destination.strip()
         if not destination:

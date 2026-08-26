@@ -1,9 +1,9 @@
-"""FastAPI-facing glue: ``UserModel`` -> ``Subject``, and the PEP #1 dependency factory.
+"""FastAPI'ye bakan bağlantı katmanı: ``UserModel`` -> ``Subject``, ve PEP #1 dependency fabrikası.
 
-``app.api.dependency`` stays the single place every router imports its
-`Depends(...)` callables from (see that module) -- ``require_permission``
-is re-exported there rather than routers importing straight from this
-package, same as every other dependency factory.
+``app.api.dependency``, her router'ın `Depends(...)` çağrılabilirlerini
+içe aktardığı tek yer olmaya devam eder (bkz. o modül) -- router'lar bu
+paketten doğrudan içe aktarma yapmak yerine ``require_permission`` orada
+yeniden dışa aktarılır, diğer tüm dependency fabrikalarıyla aynı şekilde.
 """
 
 from typing import Awaitable, Callable, Optional
@@ -20,22 +20,24 @@ from app.domains.users.model.user_model import UserModel
 from app.infrastructure.cache import get_cache
 from app.infrastructure.database.session import get_db
 
-#: Loads the resource a permission check needs, given the caller and a DB
-#: session. Returns ``None`` for a resource-less/creation-time check.
+#: Bir yetki denetiminin ihtiyaç duyduğu kaynağı, çağıran ve bir DB
+#: oturumu verildiğinde yükler. Kaynaksız/oluşturma-zamanı denetimi için
+#: ``None`` döner.
 ResourceLoader = Callable[[UserModel, AsyncSession], Awaitable[Optional[Resource]]]
 
 
 def subject_from_user(user: UserModel) -> Subject:
-    """Build the PDP's ``Subject`` from an authenticated ``UserModel``.
+    """PDP'nin ``Subject``'ini kimliği doğrulanmış bir ``UserModel``'den oluşturur.
 
-    An unrecognised ``user.role`` string (data corruption, or a role value
-    retired from ``UserRole`` with rows never migrated) resolves to
-    ``UserRole.EMPLOYEE`` rather than raising -- the same fail-toward
-    -least-privilege choice ``app.core.permissions.role_checker.
-    clearance_for`` makes for the same situation: EMPLOYEE's built-in rules
-    are ``scope="own"`` only, so this can never grant more than "the caller
-    may act on resources it owns", which is the narrowest the engine's rule
-    table expresses.
+    Tanınmayan bir ``user.role`` dizesi (veri bozulması, ya da satırları
+    hiç göç ettirilmemiş, ``UserRole``'den kaldırılmış bir rol değeri)
+    hata fırlatmak yerine ``UserRole.EMPLOYEE``'ye çözümlenir --
+    ``app.core.permissions.role_checker.clearance_for``'ın aynı durum için
+    yaptığı en-az-yetki-yönünde-hata-toleranslı seçimle aynı: EMPLOYEE'nin
+    yerleşik kuralları yalnızca ``scope="own"``'dur, bu yüzden bu asla
+    "çağıran, sahip olduğu kaynaklar üzerinde işlem yapabilir"den fazlasını
+    vermez, ki bu da motorun kural tablosunun ifade edebileceği en dar
+    kapsamdır.
     """
     try:
         role = UserRole(user.role)
@@ -45,12 +47,13 @@ def subject_from_user(user: UserModel) -> Subject:
 
 
 def get_authz_service(db: AsyncSession = Depends(get_db)) -> AuthzService:
-    """Provide a DB- and Redis-cache-backed ``AuthzService``.
+    """DB ve Redis önbelleği destekli bir ``AuthzService`` sağlar.
 
-    Overridden in tests (see ``tests/conftest.py``'s autouse fixture) to a
-    cache-less instance backed by whatever ``get_db`` override is already in
-    effect, so a test that never heard of ``permission_grants`` still gets
-    "no grants, built-in rules only" rather than a real DB round trip.
+    Testlerde (bkz. ``tests/conftest.py``'nin autouse fixture'ı) o an
+    geçerli olan ``get_db`` override'ı tarafından desteklenen, önbelleksiz
+    bir örnekle geçersiz kılınır; böylece ``permission_grants``'tan hiç
+    haberi olmayan bir test, gerçek bir DB gidiş-dönüşü yerine "yetki yok,
+    sadece yerleşik kurallar" sonucunu alır.
     """
     return AuthzService(
         grant_repository=PermissionGrantRepository(db),
@@ -59,23 +62,24 @@ def get_authz_service(db: AsyncSession = Depends(get_db)) -> AuthzService:
 
 
 def require_permission(action: str, resource_loader: Optional[ResourceLoader] = None):
-    """Dependency factory: permit only callers ``authorize()`` grants ``action`` to.
+    """Dependency fabrikası: yalnızca ``authorize()``'ın ``action``'a izin verdiği çağıranları geçirir.
 
-    The PEP #1 counterpart to the ownership checks inlined in
-    ``documents/router.py``/``drafts/router.py`` (PEP #2, using the bare
-    ``engine.authorize`` with no DB grants -- see those routers). This one
-    is for routes whose access model is exactly "built-in role rules plus
-    whatever ``permission_grants`` say", most notably the grant-management
-    endpoints themselves.
+    ``documents/router.py``/``drafts/router.py`` içine gömülü sahiplik
+    denetimlerinin (PEP #2, DB yetkileri olmadan çıplak ``engine.authorize``
+    kullanır -- bkz. o router'lar) PEP #1 karşılığı. Bu olan, erişim modeli
+    tam olarak "yerleşik rol kuralları artı ``permission_grants``'ın
+    söyledikleri" olan route'lar içindir, en başta yetki-yönetimi
+    endpoint'lerinin kendisi.
 
     Args:
-        action: An ``Action`` constant.
-        resource_loader: Optional async callable resolving the target
-            resource from the caller and a DB session. Omitted for
-            resource-less checks.
+        action: Bir ``Action`` sabiti.
+        resource_loader: Çağıran ve bir DB oturumundan hedef kaynağı
+            çözümleyen isteğe bağlı asenkron çağrılabilir. Kaynaksız
+            denetimler için atlanır.
 
     Returns:
-        A FastAPI dependency yielding the authenticated user once permitted.
+        İzin verildiğinde kimliği doğrulanmış kullanıcıyı üreten bir
+        FastAPI dependency'si.
     """
     from app.api.dependency import get_current_user
 

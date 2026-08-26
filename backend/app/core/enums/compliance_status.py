@@ -2,12 +2,12 @@ from enum import StrEnum
 
 
 class ComplianceStatus(StrEnum):
-    """Result of checking an incoming document against required-field rules.
+    """Gelen bir belgenin zorunlu alan kurallarına karşı kontrol edilmesinin sonucu.
 
-    Derived deterministically from the set of missing fields, never from a model
-    judgement: `COMPLIANT` when nothing is missing, `INCOMPLETE` when at least one
-    mandatory field is absent, and `PARTIALLY_COMPLIANT` when only advisory
-    fields are absent.
+    Bir model yargısından değil, eksik alanlar kümesinden deterministik olarak
+    türetilir: hiçbir şey eksik değilse `COMPLIANT`, en az bir zorunlu alan
+    yoksa `INCOMPLETE`, ve yalnızca tavsiye niteliğindeki alanlar eksikse
+    `PARTIALLY_COMPLIANT`.
     """
 
     COMPLIANT = "compliant"

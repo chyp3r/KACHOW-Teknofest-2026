@@ -1,7 +1,8 @@
-"""`FeedbackService` -- the write side of the RLHF-style data-collection
-layer (Faz C1, #183). Only collection lives here today: nothing in this
-module reads these rows back out for training. See `FeedbackModel`'s
-docstring for why a vote's identity is `content_hash`, not a message id.
+"""`FeedbackService` -- RLHF tarzı veri toplama katmanının yazma tarafı
+(Faz C1, #183). Bugün burada yalnızca toplama yapılır: bu modülde eğitim
+için bu satırları geri okuyan hiçbir şey yok. Bir oyun kimliğinin neden
+mesaj id'si değil de `content_hash` olduğu için `FeedbackModel`'ın
+docstring'ine bakın.
 """
 
 import hashlib
@@ -36,15 +37,16 @@ class FeedbackService:
         draft_id: Optional[str] = None,
         context: Optional[dict] = None,
     ) -> FeedbackModel:
-        """Cast a vote, upserting onto any existing vote on the same text.
+        """Bir oy verir; aynı metin üzerinde mevcut bir oy varsa onun
+        üzerine upsert yapar.
 
-        A second vote on the exact same rated text (re-clicking, or
-        switching 👍→👎) updates the existing row's `signal`/`comment`/
-        `dimensions`/`context` in place rather than inserting a duplicate --
-        `uq_feedback_vote_identity` would reject the duplicate anyway, but
-        resolving it here means the caller gets back one coherent row
-        either way instead of a constraint-violation error on the second
-        click.
+        Tam olarak aynı oylanan metin üzerinde ikinci bir oy (tekrar
+        tıklama veya 👍→👎 değiştirme), yeni bir kayıt eklemek yerine
+        mevcut satırın `signal`/`comment`/`dimensions`/`context`
+        alanlarını yerinde günceller -- `uq_feedback_vote_identity` zaten
+        yinelemeyi reddederdi, ancak bunu burada çözmek, çağıranın ikinci
+        tıklamada bir kısıt ihlali hatası yerine her iki durumda da tutarlı
+        tek bir satır almasını sağlar.
         """
         content_hash = _hash_content(content)
         existing = await self.repository.find_existing_vote(

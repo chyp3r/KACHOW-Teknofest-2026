@@ -7,7 +7,7 @@ from app.infrastructure.database.base import Base
 from app.infrastructure.database.models import TimestampMixin
 
 class UserModel(Base, TimestampMixin):
-    """SQLAlchemy ORM model for user accounts supporting role-based authorization."""
+    """Rol tabanlı yetkilendirmeyi destekleyen kullanıcı hesapları için SQLAlchemy ORM modeli."""
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
@@ -17,10 +17,11 @@ class UserModel(Base, TimestampMixin):
     )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: NULL only for role='root' (see the check constraint above) -- root is
-    #: the one role not bound to any single tenant, and reaches a company's
-    #: data only through the explicit scope-switch path, never through this
-    #: column. Every other role must belong to exactly one company.
+    #: Sadece role='root' için NULL olur (yukarıdaki check constraint'e
+    #: bakınız) -- root, tek bir kiracıya bağlı olmayan tek roldür ve bir
+    #: şirketin verisine bu kolon üzerinden değil, sadece açık kapsam
+    #: değiştirme (scope-switch) yolu üzerinden ulaşır. Diğer her rol tam
+    #: olarak bir şirkete ait olmalıdır.
     company_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("companies.id"), nullable=True, index=True
     )
@@ -28,12 +29,13 @@ class UserModel(Base, TimestampMixin):
     email: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False, default="employee")
-    #: Individual confidentiality ceiling for an EMPLOYEE-role user (see
-    #: app.core.permissions.role_checker.clearance_for). Meaningless for
-    #: ADMIN/MANAGER, who clear every level by role alone -- kept on every
-    #: user row anyway rather than nullable-for-non-employees, so a role
-    #: change from EMPLOYEE to something else never leaves a stale
-    #: nullable/non-nullable mismatch to migrate around.
+    #: EMPLOYEE rolündeki bir kullanıcı için bireysel gizlilik tavanı
+    #: (bkz. app.core.permissions.role_checker.clearance_for). Sadece rolüyle
+    #: her seviyeyi geçen ADMIN/MANAGER için anlamsızdır -- yine de
+    #: EMPLOYEE-olmayanlar için nullable yapmak yerine her kullanıcı
+    #: satırında tutulur, böylece EMPLOYEE'den başka bir role geçiş, etrafında
+    #: migration yapılması gereken bayat bir nullable/non-nullable
+    #: uyuşmazlığı bırakmaz.
     clearance_level: Mapped[str] = mapped_column(
         String, nullable=False, default=SensitivityLevel.HIZMETE_OZEL.value
     )

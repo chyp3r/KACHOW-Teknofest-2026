@@ -1,33 +1,37 @@
-"""Matches a message against precomputed class prototypes by cosine similarity.
+"""Bir mesajı önceden hesaplanmış sınıf prototipleriyle kosinüs benzerliğine göre eşleştirir.
 
-Layer 2 of the decision ladder: it sits between the lexical rules (~0 ms, blind
-to paraphrase) and the fast-tier model (~1-3 s for a single structured label).
-Only messages the lexical layer abstained on reach it.
+Karar merdiveninin 2. katmanı: sözcüksel kurallar (~0 ms, parafraza kör) ile
+hızlı katman modeli (~1-3 s, tek bir yapılandırılmış etiket için) arasında yer alır.
+Yalnızca sözcüksel katmanın çekimser kaldığı mesajlar buraya ulaşır.
 
-Why this is worth a layer at all
+Bu neden ayrı bir katmana değer
 --------------------------------
-One ``embed_query`` on a short message costs ~21 ms at p50 and ~29 ms at p95, measured against a model
-that is already resident and warm -- ``HybridRetriever`` calls the same service
-on every legislation search. A single fast-tier label costs 1-3 s once the JSON
-schema, Pydantic validation and a possible retry are counted. So a paraphrase
-resolved here costs a few percent of what it costs one rung up.
+Kısa bir mesaj üzerinde tek bir ``embed_query`` çağrısı, halihazırda bellekte ve
+ısınmış durumdaki bir modele karşı ölçüldüğünde p50'de ~21 ms, p95'te ~29 ms
+tutuyor -- ``HybridRetriever`` da her mevzuat aramasında aynı servisi çağırıyor.
+Buna karşılık tek bir hızlı katman etiketi, JSON şeması, Pydantic doğrulaması ve
+olası bir yeniden deneme dahil edildiğinde 1-3 saniye sürüyor. Yani burada
+çözülen bir parafraz, bir üst basamağa kıyasla maliyetin sadece birkaç yüzdesine
+mal oluyor.
 
-Why it never decides alone
---------------------------
-A prototype hit needs **both** a high absolute similarity and a clear gap to the
-runner-up. Cosine similarity between short Turkish sentences is compressed --
-unrelated official-register sentences routinely sit around 0.6 -- so an absolute
-threshold alone would fire constantly, and a margin alone would fire on two
-equally-bad matches that happen to differ. Failing either check means falling
-through to the model, which is the correct outcome for a genuinely unclear
-message.
+Neden tek başına karar vermiyor
+--------------------------------
+Bir prototip isabeti için **hem** yüksek bir mutlak benzerlik **hem de** bir
+sonrakiyle net bir fark gerekir. Kısa Türkçe cümleler arasındaki kosinüs
+benzerliği sıkışık bir dağılım gösterir -- birbiriyle alakasız resmi üslup
+cümleleri bile genellikle 0.6 civarında kalır -- bu yüzden tek başına mutlak bir
+eşik sürekli tetiklenir, tek başına bir fark ölçütü de birbirinden farklı ama
+ikisi de kötü olan iki eşleşmede tetiklenir. Bu kontrollerden herhangi birinin
+başarısız olması modele düşmek anlamına gelir; bu da gerçekten belirsiz bir
+mesaj için doğru sonuçtur.
 
-Staleness
----------
-The vector file records the embedding model, its dimension and the policy
-version that produced it. On any mismatch the matcher disables itself and every
-message escalates as before. Deciding from vectors built by a different model is
-worse than paying for a model call: it is confidently wrong rather than slow.
+Bayatlama (staleness)
+----------------------
+Vektör dosyası, kendisini üreten embedding modelini, boyutunu ve policy
+sürümünü kaydeder. Herhangi bir uyuşmazlıkta eşleştirici kendini devre dışı
+bırakır ve her mesaj eskisi gibi üst katmana yükseltilir. Farklı bir modelle
+üretilmiş vektörlerden karar vermek, bir model çağrısına para ödemekten daha
+kötüdür: bu, yavaş olmak yerine kendinden emin bir şekilde yanlış olmaktır.
 """
 
 import json
@@ -45,27 +49,27 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["SemanticMatch", "PrototypeMatcher", "PROTOTYPE_DIR"]
 
-#: Where ``scripts/build_prototypes.py`` writes its output.
+#: ``scripts/build_prototypes.py``'nin çıktısını yazdığı yer.
 #:
-#: Relative to the working directory, matching ``MEVZUAT_CORPUS_DIR``. Deriving
-#: it from ``__file__`` instead looked tidier and was wrong: in the container the
-#: package root *is* the working directory, so walking up past it landed on `/`
-#: and the vectors were written outside every mount, silently discarded when the
-#: container exited.
+#: Çalışma dizinine göre, ``MEVZUAT_CORPUS_DIR`` ile aynı şekilde göreli.
+#: Bunu ``__file__``'dan türetmek daha derli toplu görünüyordu ama yanlıştı:
+#: konteyner içinde paket kökü çalışma dizininin *kendisi* olduğundan, onun
+#: üzerinden yukarı çıkmak `/`'e iniyordu ve vektörler her mount'un dışında
+#: yazılıyor, konteyner kapandığında sessizce kayboluyordu.
 PROTOTYPE_DIR = Path(settings.PROTOTYPE_DIR)
 
 
 @dataclass(frozen=True)
 class SemanticMatch:
-    """One family's best label for a message.
+    """Bir ailenin bir mesaj için en iyi etiketi.
 
     Attributes:
-        label: The winning class.
-        similarity: Cosine similarity to that class's best prototype.
-        runner_up_gap: How far ahead of the second-best class it sits.
-        decisive: Whether both thresholds were cleared. A non-decisive match is
-            still returned -- it is useful evidence for a log line -- but must
-            not be acted on.
+        label: Kazanan sınıf.
+        similarity: O sınıfın en iyi prototipine olan kosinüs benzerliği.
+        runner_up_gap: İkinci en iyi sınıfa göre ne kadar önde olduğu.
+        decisive: Her iki eşiğin de geçilip geçilmediği. Kararsız (decisive
+            olmayan) bir eşleşme yine de döndürülür -- log satırı için faydalı
+            bir kanıttır -- ama işleme alınmamalıdır.
     """
 
     label: str
@@ -75,7 +79,7 @@ class SemanticMatch:
 
 
 def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
-    """Cosine similarity of two vectors, 0.0 when either has no magnitude."""
+    """İki vektörün kosinüs benzerliği; ikisinden biri sıfır büyüklükteyse 0.0."""
     dot = sum(a * b for a, b in zip(left, right))
     left_norm = math.sqrt(sum(a * a for a in left))
     right_norm = math.sqrt(sum(b * b for b in right))
@@ -85,7 +89,7 @@ def _cosine(left: Sequence[float], right: Sequence[float]) -> float:
 
 
 class PrototypeMatcher:
-    """Loads precomputed prototype vectors and scores messages against them."""
+    """Önceden hesaplanmış prototip vektörlerini yükler ve mesajları bunlara karşı puanlar."""
 
     def __init__(
         self,
@@ -94,14 +98,14 @@ class PrototypeMatcher:
         model_name: str,
         prototype_dir: Optional[Path] = None,
     ) -> None:
-        """Load the prototype vectors for every family.
+        """Her aile için prototip vektörlerini yükler.
 
         Args:
-            embeddings_client: Used only to embed the incoming message. No
-                prototype is embedded at request time.
-            model_name: The embedding model in use, checked against the stamp
-                on each vector file.
-            prototype_dir: Override for the vector directory, for tests.
+            embeddings_client: Yalnızca gelen mesajı embed etmek için kullanılır.
+                İstek anında hiçbir prototip embed edilmez.
+            model_name: Kullanımdaki embedding modeli; her vektör dosyasındaki
+                damgaya karşı kontrol edilir.
+            prototype_dir: Testler için vektör dizininin geçersiz kılınması.
         """
         self._client = embeddings_client
         self._model_name = model_name
@@ -111,11 +115,11 @@ class PrototypeMatcher:
 
     @property
     def available(self) -> bool:
-        """Whether any family loaded successfully."""
+        """Herhangi bir ailenin başarıyla yüklenip yüklenmediği."""
         return bool(self._families)
 
     def _load(self) -> None:
-        """Read every family's vector file, skipping stale or unreadable ones."""
+        """Her ailenin vektör dosyasını okur; bayat veya okunamayanları atlar."""
         if not self._dir.exists():
             logger.info(
                 "No prototype directory at %s; semantic matching disabled. "
@@ -165,26 +169,28 @@ class PrototypeMatcher:
             )
 
     async def label_similarities(self, text: str, family: str) -> Optional[dict[str, float]]:
-        """Score a message against every label of one family, not just the winner.
+        """Bir mesajı, sadece kazananla değil bir ailenin her etiketiyle karşılaştırıp puanlar.
 
-        The single ``match()`` result below is a *decision* -- it collapses
-        every label to the winner plus a decisive/not-decisive verdict, which
-        is exactly right for the old "semantic rung decides alone or stays
-        silent" ladder. The fusion layer (``app.ai.workflows.router_fusion``)
-        needs the full per-label similarity as continuous evidence instead --
-        "how close is this to *each* label" is a richer feature than "which
-        label won" the same way the lexical layer's per-intent scores are.
+        Aşağıdaki tekil ``match()`` sonucu bir *karar*dır -- her etiketi
+        kazanan artı kararlı/kararsız bir hükme indirger, ki bu eski "semantik
+        basamak tek başına karar verir ya da sessiz kalır" merdiveni için tam
+        olarak doğrudur. Füzyon katmanı (``app.ai.workflows.router_fusion``)
+        bunun yerine sürekli bir kanıt olarak her etiket için tam benzerliğe
+        ihtiyaç duyar -- "bu her bir etikete ne kadar yakın" bilgisi, tıpkı
+        sözcüksel katmanın niyet başına skorları gibi, "hangi etiket kazandı"
+        bilgisinden daha zengin bir özelliktir.
 
-        Never raises. An embeddings outage degrades this to ``None`` and the
-        caller treats semantic evidence as absent, exactly as ``match()`` did.
+        Asla hata fırlatmaz. Bir embedding kesintisi bunu ``None``'a
+        düşürür ve çağıran taraf semantik kanıtı, tıpkı ``match()``'in
+        yaptığı gibi, yok sayar.
 
         Args:
-            text: The user's message.
-            family: The family to score against.
+            text: Kullanıcının mesajı.
+            family: Karşılaştırılacak aile.
 
         Returns:
-            Label -> best cosine similarity, or None when the family is
-            unavailable, the text is empty, or the embedding call failed.
+            Etiket -> en iyi kosinüs benzerliği, ya da aile mevcut değilse,
+            metin boşsa ya da embedding çağrısı başarısız olduysa None.
         """
         entries = self._families.get(family)
         if not entries or not (text or "").strip():
@@ -208,18 +214,19 @@ class PrototypeMatcher:
         return best_per_label or None
 
     async def match(self, text: str, family: str) -> Optional[SemanticMatch]:
-        """Score a message against one family's prototypes.
+        """Bir mesajı bir ailenin prototipleriyle karşılaştırıp puanlar.
 
-        Never raises. An embeddings outage degrades this layer to a no-op and
-        the caller escalates exactly as it did before the layer existed.
+        Asla hata fırlatmaz. Bir embedding kesintisi bu katmanı no-op'a
+        düşürür ve çağıran taraf, bu katman var olmadan önce yaptığı gibi
+        üst basamağa yükseltir.
 
         Args:
-            text: The user's message.
-            family: The family to score against.
+            text: Kullanıcının mesajı.
+            family: Karşılaştırılacak aile.
 
         Returns:
-            The best match, or None when the family is unavailable, the text is
-            empty, or the embedding call failed.
+            En iyi eşleşme, ya da aile mevcut değilse, metin boşsa ya da
+            embedding çağrısı başarısız olduysa None.
         """
         best_per_label = await self.label_similarities(text, family)
         if not best_per_label:

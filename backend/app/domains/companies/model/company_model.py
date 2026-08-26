@@ -8,34 +8,37 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class CompanyModel(Base, TimestampMixin):
-    """SQLAlchemy ORM model for a tenant company.
+    """Bir kiracı şirket için SQLAlchemy ORM modeli.
 
-    The root of the multi-tenancy hierarchy: every company-scoped row in the
-    system (``users``, ``units``, ``documents``, ``drafts``, ...) carries a
-    ``company_id`` foreign key back to this table. See
-    ``app.core.permissions.role_checker.bypasses_ownership`` for how that
-    boundary composes with role-based ownership bypass.
+    Çoklu kiracılık (multi-tenancy) hiyerarşisinin kökü: sistemdeki
+    şirkete özel her satır (``users``, ``units``, ``documents``,
+    ``drafts``, ...) bu tabloya geri işaret eden bir ``company_id``
+    foreign key taşır. Bu sınırın rol tabanlı sahiplik bypass'ıyla nasıl
+    bir araya geldiği için ``app.core.permissions.role_checker.
+    bypasses_ownership``'e bakın.
     """
 
     __tablename__ = "companies"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    #: Human-readable, URL/label-safe identifier -- used as the storage path
-    #: prefix for uploads (``uploads/{slug}/...``) and as the Grafana/
-    #: Langfuse label value, since the uuid ``id`` is not something a human
-    #: reading a dashboard or a filesystem should have to resolve.
+    #: İnsan tarafından okunabilir, URL/etiket açısından güvenli tanımlayıcı --
+    #: yüklemeler için depolama yolu öneki (``uploads/{slug}/...``) ve
+    #: Grafana/Langfuse etiket değeri olarak kullanılır; çünkü uuid olan
+    #: ``id``, bir dashboard veya dosya sistemini okuyan bir insanın
+    #: çözmek zorunda kalması gereken bir şey değildir.
     slug: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=False)
     tax_number: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    #: Per-company feature flags and preferences (e.g. future opt-in MFA,
-    #: routing calibration notes). Kept as a JSON bag rather than columns so
-    #: adding a company-level toggle never needs a migration.
+    #: Şirket başına özellik bayrakları ve tercihler (ör. ileride opt-in
+    #: MFA, yönlendirme kalibrasyon notları). Şirket düzeyinde bir açma/
+    #: kapama eklemek asla migration gerektirmesin diye sütunlar yerine
+    #: bir JSON torbası olarak tutulur.
     settings: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    #: The root user who created this company. Nullable so the demo-company
-    #: seed row (created before any root user exists) doesn't need a
-    #: chicken-and-egg workaround.
+    #: Bu şirketi oluşturan root kullanıcı. Nullable, çünkü demo şirket seed
+    #: satırının (henüz hiçbir root kullanıcı yokken oluşturulur) tavuk-
+    #: yumurta sorununa bir çözüme ihtiyacı olmasın diye.
     created_by: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("users.id"), nullable=True
     )

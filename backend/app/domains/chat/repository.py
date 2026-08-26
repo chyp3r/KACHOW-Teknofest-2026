@@ -8,7 +8,7 @@ from app.domains.chat.model.chat_model import ChatMessageModel, ChatSessionModel
 
 
 class ChatSessionRepository:
-    """The listing registry backing `chat_sessions` (see `ChatSessionModel`)."""
+    """`chat_sessions`'ın arkasındaki listeleme kaydı (bkz. `ChatSessionModel`)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -27,11 +27,11 @@ class ChatSessionRepository:
         title: Optional[str],
         company_id: Optional[str] = None,
     ) -> ChatSessionModel:
-        """Fetch the session row, creating it on the first turn.
+        """Oturum satırını getir, ilk turda oluştur.
 
-        A later turn only updates `document_id` (the most recently attached
-        document) -- `title`/`user_id`/`company_id` are set once, at
-        creation, and never overwritten.
+        Sonraki bir tur yalnızca `document_id`'yi (en son eklenen belgeyi)
+        günceller -- `title`/`user_id`/`company_id` bir kez, oluşturma
+        anında ayarlanır ve asla üzerine yazılmaz.
         """
         session = await self.get_by_id(session_id)
         if session is not None:
@@ -53,16 +53,17 @@ class ChatSessionRepository:
     async def list_for_user(
         self, company_id: Optional[str], user_id: Optional[str], skip: int = 0, limit: int = 100
     ) -> List[ChatSessionModel]:
-        """List sessions of `company_id` visible to `user_id`, most recently active first.
+        """`user_id`'nin görebildiği `company_id`'nin oturumlarını, en son aktif olan önce sırayla listele.
 
-        `user_id=None` (an ADMIN/MANAGER/ROOT -- see `bypasses_ownership`)
-        lists every session in the company. `company_id` is `Optional` only
-        because `chat_sessions.company_id` itself still is (see
-        `ChatSessionModel.company_id`'s docstring) -- once migration
-        `0016_recorder_tables_rls` makes it `NOT NULL`, every real caller
-        always supplies one; explicit filtering here (not left to row-level
-        security alone) is the same primary-defense convention every other
-        repository follows, e.g. `DocumentRepository.list_for_owner`.
+        `user_id=None` (bir ADMIN/MANAGER/ROOT -- bkz. `bypasses_ownership`)
+        şirketteki her oturumu listeler. `company_id`'nin `Optional` olması
+        yalnızca `chat_sessions.company_id`'nin kendisinin hâlâ öyle olması
+        yüzünden (bkz. `ChatSessionModel.company_id`'nin docstring'i) --
+        `0016_recorder_tables_rls` migrasyonu onu `NOT NULL` yaptığında,
+        her gerçek çağıran her zaman bir tane sağlar; buradaki açık
+        filtreleme (yalnızca satır düzeyi güvenliğe bırakılmadan) diğer
+        her repository'nin izlediği aynı birincil-savunma kuralıdır,
+        ör. `DocumentRepository.list_for_owner`.
         """
         query = select(ChatSessionModel)
         if company_id is not None:
@@ -84,7 +85,7 @@ class ChatSessionRepository:
 
 
 class ChatMessageRepository:
-    """The message log backing `chat_messages` (see `ChatMessageModel`)."""
+    """`chat_messages`'ın arkasındaki mesaj günlüğü (bkz. `ChatMessageModel`)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -114,15 +115,17 @@ class ChatMessageRepository:
     async def list_for_session(
         self, session_id: str, skip: int = 0, limit: int = 200
     ) -> List[ChatMessageModel]:
-        """List a session's messages in deterministic conversation order.
+        """Bir oturumun mesajlarını, belirli bir sırayla (konuşma sırasıyla) listele.
 
-        PostgreSQL's ``now()`` is fixed for the whole transaction, so the
-        user and assistant rows written by ``record_turn`` have the exact
-        same ``created_at`` value. Ordering by that column alone therefore
-        let the database return a resume result before its structured user
-        response, which exposed the transport summary as a normal chat
-        bubble. The role and id tie-breakers preserve the write contract
-        (user, then assistant) and make pagination stable for existing rows.
+        PostgreSQL'in ``now()``'ı tüm transaction boyunca sabittir, bu yüzden
+        ``record_turn``'ün yazdığı user ve assistant satırları tam olarak
+        aynı ``created_at`` değerine sahip olur. Yalnızca bu sütuna göre
+        sıralamak, veritabanının yapılandırılmış user cevabından önce bir
+        resume sonucunu döndürmesine izin veriyordu, bu da transport
+        özetini normal bir sohbet balonu olarak açığa çıkarıyordu. role ve
+        id eşitlik bozucuları yazma sözleşmesini (önce user, sonra
+        assistant) korur ve mevcut satırlar için sayfalamayı kararlı hale
+        getirir.
         """
         query = (
             select(ChatMessageModel)

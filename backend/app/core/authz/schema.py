@@ -7,11 +7,12 @@ from app.core.authz.attributes import Action
 
 
 class PermissionGrantCreate(BaseModel):
-    """Pydantic schema for delegating a permission to a user (Admin/Manager only).
+    """Bir kullanıcıya yetki devretmek için Pydantic şeması (yalnızca Admin/Manager).
 
-    The target user is the ``{user_id}`` path parameter of
-    ``POST /users/{user_id}/permissions``, not a field here -- one row is
-    always "this action, to this specific person", never a bulk operation.
+    Hedef kullanıcı, ``POST /users/{user_id}/permissions``'ın
+    ``{user_id}`` path parametresidir, burada bir alan değil -- bir satır
+    her zaman "bu eylem, bu belirli kişiye" demektir, asla toplu bir
+    işlem değildir.
     """
 
     action: str = Field(description="Örn. 'document:delete' -- bkz. app.core.authz.attributes.Action")
@@ -42,7 +43,7 @@ class PermissionGrantCreate(BaseModel):
 
 
 class PermissionGrantResponse(BaseModel):
-    """Pydantic schema for a persisted permission grant."""
+    """Kalıcı bir yetki için Pydantic şeması."""
 
     id: str
     company_id: str

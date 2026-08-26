@@ -14,44 +14,47 @@ from app.ai.workflows.resilience import LLM_RETRY, TRANSIENT_ERRORS, node_timeou
 
 logger = logging.getLogger(__name__)
 
-#: Below this score the draft is not trustworthy enough to route automatically
-#: via the model call -- routing still always proposes a best-effort unit
-#: (see `_best_effort_unit`), just flagged `requires_human_approval=True`
-#: for audit rather than left blank. Policy owns it alongside
-#: `MIN_AUTOMATED_CONFIDENCE_SCORE`, whose relationship to it is an enforced
-#: invariant: 70 is "may be sent without review", 50 is "not confident
-#: enough to route automatically", and inverting them would make a draft too
-#: weak to route simultaneously good enough to send.
+#: Bu skorun altında draft, model çağrısıyla otomatik yönlendirilecek kadar
+#: güvenilir değildir -- routing yine de her zaman en iyi çaba (best-effort)
+#: bir birim önerir (bkz. `_best_effort_unit`), yalnızca boş bırakılmak
+#: yerine denetim için `requires_human_approval=True` işaretlenir. Policy
+#: bunu `MIN_AUTOMATED_CONFIDENCE_SCORE` ile birlikte sahipleniyor; ikisi
+#: arasındaki ilişki zorunlu bir değişmezdir: 70 "gözden geçirilmeden
+#: gönderilebilir" demektir, 50 "otomatik yönlendirilecek kadar güvenilir
+#: değil" demektir, ve bunları ters çevirmek, yönlendirilemeyecek kadar
+#: zayıf bir draft'ı aynı anda gönderilebilecek kadar iyi yapardı.
 HUMAN_APPROVAL_SCORE_THRESHOLD = get_policy().routing.human_approval_score_threshold
 
-#: `(name, description)` pairs for the units eligible for routing, scoped to
-#: one company. Supplied by the caller (see `create_routing_graph`) and
-#: re-fetched on every decision -- there is no module-level constant
-#: anymore, since the list is now runtime-managed (see `app.domains.units`),
-#: not policy. Takes `company_id` because units are company-scoped (Faz 1
-#: tenancy work): returning every company's units here would leak one
-#: tenant's department names/descriptions into another's routing prompt.
+#: Yönlendirme için uygun, tek bir şirkete kapsanmış birimler için
+#: `(ad, açıklama)` çiftleri. Çağıran tarafından sağlanır (bkz.
+#: `create_routing_graph`) ve her kararda yeniden getirilir -- artık modül
+#: seviyesinde bir sabit yok, çünkü liste artık policy değil, çalışma
+#: zamanında yönetiliyor (bkz. `app.domains.units`). `company_id` alır
+#: çünkü birimler şirket-kapsamlıdır (Faz 1 tenancy çalışması): burada her
+#: şirketin birimlerini döndürmek, bir kiracının bölüm adlarını/
+#: açıklamalarını başka bir kiracının yönlendirme prompt'una sızdırırdı.
 UnitsProvider = Callable[[str], Awaitable[List[Tuple[str, str]]]]
 
 
 class RoutingState(TypedDict, total=False):
-    """LangGraph state for the unit-routing workflow.
+    """Birim-yönlendirme workflow'u için LangGraph state'i.
 
-    Declared with ``total=False`` and including every key the node writes.
-    LangGraph drops updates for keys absent from the state schema, which is why
-    ``routed_unit``/``reasoning``/``priority`` previously never reached the API
-    response even though the node returned them.
+    ``total=False`` ile bildirildi ve node'un yazdığı her anahtarı içeriyor.
+    LangGraph, state şemasında bulunmayan anahtarlar için güncellemeleri
+    düşürür; bu yüzden node onları döndürmesine rağmen
+    ``routed_unit``/``reasoning``/``priority`` daha önce API yanıtına hiç
+    ulaşmıyordu.
     """
 
     draft: str
     confidence_score: float
-    #: Which company's unit list to route against. Every caller supplies it
-    #: now (`DraftService.generate_draft_and_route`, `routing/router.py`,
-    #: and `PlanningState.company_id` via `planning_graph.py`'s routing
-    #: sub-call) -- empty/missing still degrades to "no units configured"
-    #: (see `routing_node`'s `if not units:` branch) rather than falling
-    #: back to every company's units, fail-secure for any caller this
-    #: doesn't hold for.
+    #: Hangi şirketin birim listesine göre yönlendirileceği. Artık her
+    #: çağıran bunu sağlıyor (`DraftService.generate_draft_and_route`,
+    #: `routing/router.py`ve `planning_graph.py`'ın routing alt-çağrısı
+    #: üzerinden `PlanningState.company_id`) -- boş/eksik olması, her
+    #: şirketin birimlerine geri düşmek yerine yine de "hiç birim
+    #: tanımlanmamış"a düşer (bkz. `routing_node`'un `if not units:` dalı);
+    #: bu tutmayan herhangi bir çağıran için fail-secure'dır.
     company_id: str
     final_destination: Optional[str]
     justification: str
@@ -59,21 +62,22 @@ class RoutingState(TypedDict, total=False):
     reasoning: str
     priority: str
     requires_human_approval: bool
-    #: Second-choice unit name(s), when a runner-up could be determined --
-    #: never a substitute for `routed_unit`, only ever an option shown
-    #: alongside it (see Görev's "her zaman bir öneri + alternatif"
-    #: requirement). Empty when the company has only one active unit.
+    #: Bir ikinci sıradaki belirlenebildiğinde, ikinci tercih birim adı/
+    #: adları -- asla `routed_unit`'in yerine geçmez, yalnızca onunla
+    #: birlikte gösterilen bir seçenektir (bkz. Görev'in "her zaman bir
+    #: öneri + alternatif" gereksinimi). Şirketin yalnızca bir aktif birimi
+    #: varsa boştur.
     alternative_units: List[str]
 
 
 class RouteOutput(BaseModel):
-    """Structured routing decision.
+    """Yapılandırılmış yönlendirme kararı.
 
-    ``destination``/``alternative`` are plain ``str`` rather than a
-    ``Literal`` -- the eligible unit set is runtime-managed and can change
-    between two routing calls, so it cannot be baked into the response
-    model's type. The caller (`routing_node` below) validates both against
-    the unit list that was actually offered in the prompt.
+    ``destination``/``alternative`` bir ``Literal`` yerine düz ``str``'dir --
+    uygun birim kümesi çalışma zamanında yönetilir ve iki yönlendirme
+    çağrısı arasında değişebilir, dolayısıyla yanıt modelinin tipine
+    gömülemez. Çağıran (aşağıdaki `routing_node`), her ikisini de prompt'ta
+    gerçekten sunulan birim listesine karşı doğrular.
     """
 
     destination: str = Field(
@@ -99,24 +103,25 @@ def _decision(
     requires_human_approval: bool,
     alternatives: Tuple[str, ...] = (),
 ) -> Dict[str, Any]:
-    """Build the full routing state update for a decision.
+    """Bir karar için tam routing state güncellemesini oluşturur.
 
     Args:
-        destination: The chosen unit's name, or ``None`` only when the
-            company has no active units at all -- every other case fills
-            this from ``_best_effort_unit`` rather than leaving it unset
-            (see that function's own docstring).
-        justification: Turkish rationale.
-        requires_human_approval: Whether this pick is low-confidence enough
-            to flag for review -- the same flag
-            `app.domains.documents.draft_service` and the draft-quality
-            score use for scoring/audit. Recorded, but never itself a
-            reason to withhold `destination`: a unit suggestion is always
-            better than none (see Görev's own requirement).
-        alternatives: Runner-up unit name(s), if any.
+        destination: Seçilen birimin adı, ya da yalnızca şirketin hiç aktif
+            birimi olmadığında ``None`` -- diğer her durum bunu ayarsız
+            bırakmak yerine ``_best_effort_unit``'ten doldurur (bkz. o
+            fonksiyonun kendi docstring'i).
+        justification: Türkçe gerekçe.
+        requires_human_approval: Bu seçimin gözden geçirme için
+            işaretlenecek kadar düşük güvenli olup olmadığı -- aynı bayrağı
+            `app.domains.documents.draft_service` ve draft-kalite skoru da
+            puanlama/denetim için kullanır. Kaydedilir, ama asla
+            `destination`'ı vermemek için bir gerekçe değildir: bir birim
+            önerisi her zaman hiç olmamasından iyidir (bkz. Görev'in kendi
+            gereksinimi).
+        alternatives: Varsa, ikinci sıradaki birim adı/adları.
 
     Returns:
-        The state update, with both the canonical and the API-facing key names.
+        Hem kanonik hem de API'ye görünen anahtar adlarıyla state güncellemesi.
     """
     return {
         "final_destination": destination,
@@ -130,31 +135,32 @@ def _decision(
 
 
 def _format_units(units: List[Tuple[str, str]]) -> str:
-    """Render `(name, description)` pairs as a Turkish bullet list for the prompt."""
+    """`(ad, açıklama)` çiftlerini prompt için Türkçe bir madde listesi olarak render eder."""
     return "\n".join(f"- {name}: {description}" for name, description in units)
 
 
 def _tokenize(text: str) -> set[str]:
-    """Fold text to its significant (length > 2) normalized tokens."""
+    """Metni önemli (uzunluk > 2) normalleştirilmiş token'larına indirger."""
     return {token for token in normalize(text).split() if len(token) > 2}
 
 
 def _rank_units(draft: str, units: List[Tuple[str, str]]) -> List[str]:
-    """Every unit's name, ranked by how much of the draft's own vocabulary
-    its name+description shares -- highest overlap first.
+    """Her birimin adı+açıklamasının, draft'ın kendi kelime dağarcığıyla
+    ne kadar örtüştüğüne göre sıralanmış hali -- en yüksek örtüşme önce.
 
-    A deliberately weak, deterministic signal (plain token overlap, not a
-    semantic match) rather than no signal at all: when nothing overlaps
-    (an empty draft, unrelated vocabulary), every unit scores 0 and
-    Python's stable sort leaves them in the caller's own order, so this
-    still returns *something* usable rather than an arbitrary shuffle.
+    Hiç sinyal olmaması yerine kasıtlı olarak zayıf, deterministik bir
+    sinyal (semantik eşleşme değil, düz token örtüşmesi): hiçbir şey
+    örtüşmediğinde (boş bir draft, ilgisiz kelime dağarcığı), her birim 0
+    puan alır ve Python'ın kararlı (stable) sıralaması onları çağıranın
+    kendi sırasında bırakır, böylece bu yine de keyfi bir karıştırma
+    yerine kullanılabilir *bir şey* döndürür.
 
     Args:
-        draft: The draft text to score units against (may be empty).
-        units: `(name, description)` pairs.
+        draft: Birimlerin puanlanacağı draft metni (boş olabilir).
+        units: `(ad, açıklama)` çiftleri.
 
     Returns:
-        Unit names, best match first. Same length as `units`.
+        Birim adları, en iyi eşleşme önce. `units` ile aynı uzunlukta.
     """
     draft_tokens = _tokenize(draft)
     return [
@@ -168,27 +174,28 @@ def _rank_units(draft: str, units: List[Tuple[str, str]]) -> List[str]:
 
 
 def _best_effort_unit(draft: str, units: List[Tuple[str, str]]) -> Tuple[str, Tuple[str, ...]]:
-    """A primary + (up to one) alternative unit, guaranteed non-empty when
-    `units` is non-empty.
+    """Bir birincil + (en fazla bir) alternatif birim; `units` boş
+    değilken boş olmayacağı garanti edilir.
 
-    The deterministic fallback every branch that used to leave
-    `routed_unit` unset now calls instead: whether the model failed,
-    returned something off-list, or was never confident enough to ask
-    (`score < HUMAN_APPROVAL_SCORE_THRESHOLD`), the company's own unit list
-    is never empty-handed to the user (see Görev's "her zaman en az bir
-    öneri" requirement) -- a plausible guess beats an unfilled field, and
-    the caller-visible `requires_human_approval` flag still records that
-    this specific pick was a fallback, for audit.
+    Eskiden `routed_unit`'i ayarsız bırakan her dalın artık bunun yerine
+    çağırdığı deterministik fallback: model başarısız olsun, listede
+    olmayan bir şey döndürsün ya da hiç sormaya yetecek kadar güvenli
+    olmasın (`score < HUMAN_APPROVAL_SCORE_THRESHOLD`), şirketin kendi
+    birim listesi kullanıcıya asla eli boş sunulmaz (bkz. Görev'in "her
+    zaman en az bir öneri" gereksinimi) -- makul bir tahmin, doldurulmamış
+    bir alandan iyidir, ve çağırana görünür `requires_human_approval`
+    bayrağı yine de bu belirli seçimin denetim için bir fallback olduğunu
+    kaydeder.
 
     Args:
-        draft: The draft text to score against (may be empty).
-        units: This company's active `(name, description)` units. Must be
-            non-empty -- the "no units configured at all" case is handled
-            by the caller before this is ever reached.
+        draft: Puanlanacak draft metni (boş olabilir).
+        units: Bu şirketin aktif `(ad, açıklama)` birimleri. Boş
+            olmamalıdır -- "hiç birim tanımlanmamış" durumu, buraya hiç
+            ulaşılmadan önce çağıran tarafından ele alınır.
 
     Returns:
-        The top-ranked unit name, and a 0-or-1-length tuple with the
-        runner-up when one exists.
+        En yüksek sıradaki birim adı ve varsa ikinci sıradakiyle birlikte
+        0-veya-1 uzunlukta bir tuple.
     """
     ranking = _rank_units(draft, units)
     return ranking[0], tuple(ranking[1:2])
@@ -197,18 +204,18 @@ def _best_effort_unit(draft: str, units: List[Tuple[str, str]]) -> Tuple[str, Tu
 def _fill_alternative(
     draft: str, units: List[Tuple[str, str]], primary: str, candidate: str
 ) -> Tuple[str, ...]:
-    """Resolve this decision's alternative: the model's own pick if valid,
-    else a deterministic best-effort runner-up excluding `primary`.
+    """Bu kararın alternatifini çözer: geçerliyse modelin kendi seçimi,
+    değilse `primary`'yi hariç tutan deterministik best-effort ikinci sıradaki.
 
     Args:
-        draft: The draft text (for the deterministic fallback ranking).
-        units: This company's active units.
-        primary: The already-decided primary destination.
-        candidate: The model's own `RouteOutput.alternative`, possibly
-            invalid (off-list, blank, or a duplicate of `primary`).
+        draft: Draft metni (deterministik fallback sıralaması için).
+        units: Bu şirketin aktif birimleri.
+        primary: Zaten karar verilmiş birincil hedef.
+        candidate: Modelin kendi `RouteOutput.alternative`'ı, geçersiz
+            olabilir (listede yok, boş, ya da `primary`'nin bir kopyası).
 
     Returns:
-        A 0-or-1-length tuple.
+        0-veya-1 uzunlukta bir tuple.
     """
     unit_names = {name for name, _ in units}
     if candidate and candidate != primary and candidate in unit_names:
@@ -220,22 +227,22 @@ def _fill_alternative(
 
 
 def create_routing_graph(llm_client: BaseLLMClient, units_provider: UnitsProvider):
-    """Create and compile the unit-routing workflow.
+    """Birim-yönlendirme workflow'unu oluşturur ve derler.
 
-    Flow: START -> route -> END
+    Akış: START -> route -> END
 
     Args:
-        llm_client: LLM used for the routing decision. Pass the fast-tier client:
-            the output is one label plus one sentence.
-        units_provider: Async callable taking a `company_id` and returning
-            that company's currently active `(name, description)` units,
-            read fresh on every call (see
+        llm_client: Yönlendirme kararı için kullanılan LLM. Hızlı-katman
+            (fast-tier) istemciyi geçirin: çıktı bir etiket artı bir cümledir.
+        units_provider: Bir `company_id` alan ve o şirketin şu anda aktif
+            `(ad, açıklama)` birimlerini, her çağrıda yeniden okuyarak
+            döndüren async çağrılabilir (bkz.
             `app.domains.units.provider.get_active_units_for_routing`) --
-            injected the same way `llm_client` is, so this module never
-            imports `app.domains` directly.
+            `llm_client` ile aynı şekilde enjekte edilir, böylece bu modül
+            `app.domains`'i asla doğrudan import etmez.
 
     Returns:
-        The compiled LangGraph workflow.
+        Derlenmiş LangGraph workflow'u.
     """
     router_agent = RouterAgent(llm_client)
 
@@ -252,10 +259,10 @@ def create_routing_graph(llm_client: BaseLLMClient, units_provider: UnitsProvide
         units = await units_provider(company_id) if company_id else []
 
         if not units:
-            # The one branch that genuinely has nothing to suggest -- every
-            # other case below always fills `destination` from
-            # `_best_effort_unit` instead of leaving it unset (see Görev's
-            # "her zaman en az bir öneri" requirement).
+            # Gerçekten önerecek hiçbir şeyi olmayan tek dal -- aşağıdaki
+            # diğer her durum, `destination`'ı ayarsız bırakmak yerine her
+            # zaman `_best_effort_unit`'ten doldurur (bkz. Görev'in "her
+            # zaman en az bir öneri" gereksinimi).
             logger.warning("No active units configured; routing cannot assign one.")
             update = _decision(
                 None,

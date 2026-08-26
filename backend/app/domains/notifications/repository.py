@@ -8,10 +8,10 @@ from app.domains.notifications.model.notification_model import NotificationModel
 
 
 class NotificationRepository:
-    """Repository for `notifications` (see `NotificationModel`).
+    """`notifications` için repository (bkz. `NotificationModel`).
 
-    Every method takes an explicit `company_id`, same convention as every
-    other repository since the tenancy work.
+    Her metot açık bir `company_id` alır, tenancy çalışmasından bu yana
+    diğer tüm repository'lerle aynı kural.
     """
 
     def __init__(self, db: AsyncSession):

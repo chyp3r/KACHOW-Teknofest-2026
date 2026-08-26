@@ -1,24 +1,25 @@
-"""Deterministic register and consistency checks a regex can decide alone.
+"""Bir regex'in tek başına karar verebileceği deterministik kayıt/üslup ve
+tutarlılık kontrolleri.
 
-``draft_verifier.py`` answers "is every concrete claim grounded and is the
-structure complete" -- set-membership questions. This module answers a
-different, narrower class of question that doesn't need an LLM either, just a
-different kind of pattern match: "does this draft address the same person
-consistently," "does it repeat itself instead of saying something new," and
-"did the signature block get filled with the placeholder's own label instead
-of a real value." All three are concrete, regex-checkable symptoms of the
-reported bug's "gövde dolgu paragraflarıyla doldu" and "imza bloğu uydurma"
-failure shapes, kept separate from ``draft_verifier`` the same way
-``app.ai.identity.parties`` is: this module imports from ``draft_verifier``
-(the same one-directional dependency ``llm_judge.py`` and ``parties.py``
-already use), never the reverse, so ``draft_verifier`` stays a leaf module.
+``draft_verifier.py`` "her somut iddia dayanaklı mı ve yapı tam mı" sorusunu
+yanıtlar -- küme-üyeliği soruları. Bu modül, bir LLM de gerektirmeyen, farklı
+bir tür örüntü eşleştirmesi gerektiren farklı, daha dar bir soru sınıfını
+yanıtlar: "bu taslak aynı kişiye tutarlı bir şekilde hitap ediyor mu," "yeni
+bir şey söylemek yerine kendini tekrar ediyor mu" ve "imza bloğu gerçek bir
+değer yerine yer tutucunun kendi etiketiyle mi dolduruldu." Üçü de, bildirilen
+hatanın "gövde dolgu paragraflarıyla doldu" ve "imza bloğu uydurma" hata
+şekillerinin somut, regex ile kontrol edilebilir belirtileridir;
+``app.ai.identity.parties``'in olduğu gibi ``draft_verifier``'dan ayrı
+tutulur: bu modül ``draft_verifier``'dan içe aktarır (``llm_judge.py`` ve
+``parties.py``'nin zaten kullandığı aynı tek yönlü bağımlılık), asla tersi
+değil, böylece ``draft_verifier`` bir yaprak modül olarak kalır.
 
-Findings are plain ``RuleFinding``s (see ``confidence_rules.py``) -- the
-caller (``draft_graph.verify_node``) folds them into the same
-``merge_verdicts`` pass that already scores PII/mevzuat/judge findings and
-turns them into ``repair_items`` for the existing verify -> revise -> writer
-loop. No new detection surface is added here beyond what that loop already
-knows how to act on.
+Bulgular düz ``RuleFinding``lardır (bkz. ``confidence_rules.py``) --
+çağıran (``draft_graph.verify_node``), bunları zaten PII/mevzuat/yargıç
+bulgularını skorlayan ve mevcut doğrula -> revize et -> yazar döngüsü için
+``repair_items``e dönüştüren aynı ``merge_verdicts`` geçişine katlar. Burada
+o döngünün zaten üzerine hareket etmeyi bildiğinin ötesinde yeni bir tespit
+yüzeyi eklenmez.
 """
 
 import re
@@ -26,17 +27,17 @@ import re
 from app.ai.verification.confidence_rules import RuleFinding
 from app.ai.verification.draft_verifier import PLACEHOLDER_PATTERN, _fold, _signature_block
 
-#: A person referred to with the formal third-person address form used for
-#: the addressee ("Sayın Ahmet Yılmaz"). Two to three capitalized tokens
-#: after "Sayın" -- a name, not an institution (an institution's own antet
-#: line never starts with "Sayın").
+#: Muhatap için kullanılan resmi üçüncü şahıs hitap biçimiyle atıfta
+#: bulunulan bir kişi ("Sayın Ahmet Yılmaz"). "Sayın"dan sonra iki ila üç
+#: büyük harfle başlayan token -- bir isim, bir kurum değil (bir kurumun
+#: kendi antet satırı asla "Sayın" ile başlamaz).
 _SAYIN_PATTERN = re.compile(
     r"\bSayın\s+([A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ']*(?:\s+[A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ']*){0,2})"
 )
 
-#: The same person referred to with an informal honorific instead ("Ahmet
-#: Bey'in", "Ayşe Hanım"). Case suffixes ("'nin", "'in", ...) are optional so
-#: both the bare and the possessive-inflected form match.
+#: Aynı kişiye bunun yerine gayri resmi bir unvanla atıfta bulunuluyor
+#: ("Ahmet Bey'in", "Ayşe Hanım"). Hâl ekleri ("'nin", "'in", ...) isteğe
+#: bağlıdır, böylece hem çıplak hem de iyelik ekli biçim eşleşir.
 _BEY_HANIM_PATTERN = re.compile(
     r"\b([A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ']*(?:\s+[A-ZÇĞİÖŞÜ][\wçğıöşüÇĞİÖŞÜ']*){0,2})\s+"
     r"(?:Bey|Hanım)(?:'(?:nin|nın|nün|nun|in|ın|ün|un))?\b"
@@ -44,21 +45,22 @@ _BEY_HANIM_PATTERN = re.compile(
 
 
 def check_person_consistency(draft: str) -> list[RuleFinding]:
-    """Flag the same named person addressed two different, conflicting ways.
+    """Aynı adlandırılmış kişiye iki farklı, çelişen şekilde hitap edilmesini işaretle.
 
-    A well-formed draft refers to any one person by exactly one register
-    throughout -- the formal "Sayın X" form for the addressee, or the
-    informal "X Bey/Hanım" form for someone mentioned in passing. The same
-    name appearing under both forms means the draft lost track of who it
-    was talking about (the reported bug's shape: the addressee institution
-    treated as a person, or a third party addressed as if they were reading
-    the letter).
+    İyi biçimlendirilmiş bir taslak, herhangi bir kişiye baştan sona tam
+    olarak tek bir kayıtla atıfta bulunur -- muhatap için resmi "Sayın X"
+    biçimi veya geçerken bahsedilen biri için gayri resmi "X Bey/Hanım"
+    biçimi. Aynı adın her iki biçimde de görünmesi, taslağın kimden
+    bahsettiğini kaybettiği anlamına gelir (bildirilen hatanın şekli:
+    muhatap kurumun bir kişi gibi ele alınması veya üçüncü bir tarafa
+    sanki mektubu okuyorlarmış gibi hitap edilmesi).
 
     Args:
-        draft: The generated draft text.
+        draft: Üretilen taslak metni.
 
     Returns:
-        One ``kisi_tutarsizligi`` finding per name caught in both forms.
+        Her iki biçimde de yakalanan her isim için bir
+        ``kisi_tutarsizligi`` bulgusu.
     """
     sayin_token_sets = [
         set(_fold(name).split()) for name in _SAYIN_PATTERN.findall(draft) if _fold(name)

@@ -20,7 +20,7 @@ from app.infrastructure.extractors.marks import detect_marks
 
 logger = logging.getLogger(__name__)
 
-try:  # pragma: no cover - exercised via patching in tests
+try:  # pragma: no cover - testlerde patch ile çalıştırılır
     import pypdfium2 as pdfium
 except ImportError:  # pragma: no cover
     pdfium = None
@@ -33,56 +33,58 @@ except ImportError:  # pragma: no cover
 IMAGE_EXTENSIONS = {"png", "jpg", "jpeg", "tif", "tiff", "bmp", "gif", "webp"}
 PDF_EXTENSIONS = {"pdf"}
 PDF_POINTS_PER_INCH = 72
-#: Transcription instruction, in English on purpose.
+#: Transkripsiyon talimatı, bilinçli olarak İngilizce.
 #:
-#: This used to be the Turkish "Bu belgedeki tüm metni olduğu gibi, satır yapısını
-#: koruyarak çıkar." Asking a model to read Turkish in Turkish looks obviously
-#: right and measured as the worst option for every model tried, including the one
-#: shipped at the time: glm-ocr went from NED 0.164 to 0.145 purely by dropping the
-#: Turkish wording, and deepseek-ocr went from a total failure (NED 1.000, empty
-#: output) to its best result. The instruction language is not the transcription
-#: language -- these models follow English instructions far more reliably, and the
-#: text they transcribe is unaffected by the language they were asked in.
+#: Bu daha önce Türkçe "Bu belgedeki tüm metni olduğu gibi, satır yapısını
+#: koruyarak çıkar." idi. Bir modele Türkçeyi Türkçe olarak okumasını istemek
+#: bariz biçimde doğru görünür ve o dönemde sevk edilen dahil, denenen her
+#: model için en kötü seçenek olarak ölçüldü: glm-ocr yalnızca Türkçe
+#: ifadeyi bırakarak NED 0.164'ten 0.145'e düştü, deepseek-ocr ise tam bir
+#: başarısızlıktan (NED 1.000, boş çıktı) en iyi sonucuna geçti. Talimat
+#: dili transkripsiyon dili değildir -- bu modeller İngilizce talimatları
+#: çok daha güvenilir biçimde takip eder ve transkribe ettikleri metin,
+#: hangi dilde soruldukları konusundan etkilenmez.
 #:
-#: Changing this and `settings.OLLAMA_VISION_MODEL` are coupled: deepseek-ocr
-#: returns nothing at all under the old Turkish prompt.
+#: Bunu ve `settings.OLLAMA_VISION_MODEL`'i değiştirmek birbirine bağlıdır:
+#: deepseek-ocr eski Türkçe prompt altında hiçbir şey döndürmüyor.
 DEFAULT_PROMPT = "Extract all text from this document exactly as it appears."
-#: Generous enough for a full page of Turkish official correspondence. Left unset,
-#: Ollama truncates the transcription part-way through a field value.
+#: Türkçe resmi yazışmanın tam bir sayfası için yeterince cömert. Ayarlanmazsa,
+#: Ollama transkripsiyonu bir alan değerinin ortasında keser.
 DEFAULT_NUM_PREDICT = 4096
 DEFAULT_NUM_CTX = 8192
 REQUEST_TIMEOUT_SECONDS = 300
 
 
 class VisionExtractorBase(BaseDocumentExtractor):
-    """Shared rasterisation/mark-detection machinery for vision-model OCR.
+    """Vision-model OCR için paylaşılan rasterizasyon/işaret tespit makinesi.
 
-    Everything about turning a PDF/image into model input and packaging the
-    result as an `ExtractedDocument` is provider-independent; only the actual
-    model call (`_transcribe`) differs between `OllamaVisionExtractor`
-    (local, raw HTTP against Ollama's `/api/generate`) and
-    `EvrenVisionExtractor` (Evren's OpenAI-compatible chat completions).
+    Bir PDF/görüntüyü model girdisine çevirme ve sonucu bir
+    `ExtractedDocument` olarak paketleme konusundaki her şey sağlayıcıdan
+    bağımsızdır; yalnızca gerçek model çağrısı (`_transcribe`)
+    `OllamaVisionExtractor` (yerel, Ollama'nın `/api/generate`'ine karşı
+    ham HTTP) ile `EvrenVisionExtractor` (Evren'in OpenAI uyumlu chat
+    completions'ı) arasında farklıdır.
     """
 
     def __init__(self, dpi: int = OCR_RENDER_DPI, prompt: str = DEFAULT_PROMPT) -> None:
-        """Initialise the vision extractor.
+        """Vision çıkarıcısını başlat.
 
         Args:
-            dpi: Rasterisation density for PDF pages.
-            prompt: Transcription instruction.
+            dpi: PDF sayfaları için rasterizasyon yoğunluğu.
+            prompt: Transkripsiyon talimatı.
         """
         self.dpi = dpi
         self.prompt = prompt
 
     @abstractmethod
     async def _transcribe(self, image: bytes) -> str:
-        """Send one page image to the model and return its transcription.
+        """Bir sayfa görüntüsünü modele gönder ve transkripsiyonunu döndür.
 
         Args:
-            image: PNG bytes of a single page.
+            image: Tek bir sayfanın PNG byte'ları.
 
         Returns:
-            The transcribed text.
+            Transkribe edilen metin.
         """
 
     async def extract(
@@ -93,24 +95,25 @@ class VisionExtractorBase(BaseDocumentExtractor):
         mime_type: Optional[str] = None,
         raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
-        """Transcribe a scanned document with a vision-language model.
+        """Taranmış bir belgeyi görsel bir dil modeliyle transkribe et.
 
         Args:
-            content: Raw PDF or image bytes.
-            file_name: Original file name, used to decide the input kind.
-            mime_type: Declared content type, used to decide the input kind.
-            raster_cache: Optional shared cache of already-rasterised pages,
-                keyed by DPI (see `BaseDocumentExtractor.extract`). This
-                extractor is the usual escalation *after*
-                `TesseractExtractor` rejects a result, so the common case is
-                a cache hit -- reusing pages already rendered at the same
-                DPI instead of rasterising the same PDF a second time.
+            content: Ham PDF veya görüntü byte'ları.
+            file_name: Girdi türüne karar vermek için kullanılan orijinal dosya adı.
+            mime_type: Girdi türüne karar vermek için kullanılan bildirilen içerik türü.
+            raster_cache: DPI'ya göre anahtarlanmış, zaten rasterize edilmiş
+                sayfaların isteğe bağlı paylaşılan önbelleği (bkz.
+                `BaseDocumentExtractor.extract`). Bu çıkarıcı genellikle
+                `TesseractExtractor` bir sonucu reddettikten *sonraki*
+                yükselme adımıdır, bu yüzden yaygın durum önbellek isabetidir
+                -- aynı PDF'i ikinci kez rasterize etmek yerine aynı DPI'da
+                zaten render edilmiş sayfaları yeniden kullanır.
 
         Returns:
-            The transcribed text, flagged as OCR output.
+            OCR çıktısı olarak işaretlenmiş, transkribe edilen metin.
 
         Raises:
-            DocumentExtractionError: If rasterisation or the model call fails.
+            DocumentExtractionError: Rasterizasyon veya model çağrısı başarısız olursa.
         """
         is_pdf = has_pdf_magic_bytes(content) or mime_type == "application/pdf"
         if is_pdf and pdfium is None:
@@ -121,11 +124,12 @@ class VisionExtractorBase(BaseDocumentExtractor):
         try:
             if not is_pdf:
                 images = [content]
-                # Decoded only for mark detection below (see its own
-                # try/except) -- the transcription call above never needed a
-                # PIL object for this branch, so a decode failure here must
-                # not break transcription, which is why this is not folded
-                # into the same try/except as the rest of this method.
+                # Yalnızca aşağıdaki işaret tespiti için çözülür (kendi
+                # try/except'ine bakın) -- yukarıdaki transkripsiyon çağrısı
+                # bu dal için hiçbir zaman bir PIL nesnesine ihtiyaç
+                # duymadı, bu yüzden burada bir çözme hatası transkripsiyonu
+                # bozmamalı, bu yüzden bu, metodun geri kalanıyla aynı
+                # try/except'e katılmıyor.
                 pil_pages = []
                 if _PILImage is not None:
                     try:
@@ -145,20 +149,21 @@ class VisionExtractorBase(BaseDocumentExtractor):
                     if raster_cache is not None:
                         raster_cache[self.dpi] = pil_pages
                 images = await asyncio.to_thread(self._encode_png, pil_pages)
-            # Deliberately sequential, unlike TesseractExtractor's page loop.
-            # Tesseract pages parallelise safely because each OCR call is its
-            # own `tesseract` subprocess, competing for CPU cores the OS
-            # already schedules. A vision-model call is a generation request
-            # against one served model; local Ollama serialises generation
-            # against a given model rather than running requests on it
-            # concurrently, so concurrent page requests would queue behind
-            # each other on the server side regardless of client-side
-            # fan-out -- the same shape of cost this project already measured
-            # as a net loss for concurrent classify+extract calls against the
-            # same model. Revisit only with live measurements to weigh
-            # against; guessing wrong here costs latency on this extractor
-            # specifically, which is already the last-resort path for the
-            # hardest-to-read documents.
+            # Bilinçli olarak sıralı, TesseractExtractor'ın sayfa döngüsünün
+            # aksine. Tesseract sayfaları güvenle paralelleşir çünkü her OCR
+            # çağrısı, işletim sisteminin zaten zamanladığı çekirdekler için
+            # yarışan kendi `tesseract` alt sürecidir. Bir vision-model
+            # çağrısı ise sunulan tek bir modele karşı bir üretim isteğidir;
+            # yerel Ollama, verilen bir modele karşı üretimi eşzamanlı
+            # istekler yerine sıralar, bu yüzden eşzamanlı sayfa istekleri,
+            # istemci tarafındaki dağılımdan bağımsız olarak sunucu
+            # tarafında birbirinin arkasında kuyruğa girer -- bu proje aynı
+            # model için eşzamanlı sınıflandır+çıkar çağrılarında zaten net
+            # bir kayıp olarak ölçtüğü aynı maliyet şekli. Bunu yalnızca
+            # canlı ölçümlerle karşılaştırarak yeniden gözden geçirin;
+            # burada yanlış tahmin etmek, zaten okunması en zor belgeler
+            # için son çare yol olan bu çıkarıcıya özel olarak gecikme
+            # maliyeti getirir.
             pages = [await self._transcribe(img) for img in images]
         except DocumentExtractionError:
             raise
@@ -175,9 +180,10 @@ class VisionExtractorBase(BaseDocumentExtractor):
             len(pages),
             len(text),
         )
-        # Best-effort, same rendered pages: detect_marks never raises (see
-        # its own docstring), so a detector bug here must never fail a
-        # transcription that otherwise succeeded.
+        # En iyi çaba, aynı render edilmiş sayfalar: detect_marks asla
+        # exception fırlatmaz (kendi docstring'ine bakın), bu yüzden
+        # buradaki bir dedektör hatası aksi halde başarılı olan bir
+        # transkripsiyonu asla başarısız kılmamalı.
         mark_lists = await asyncio.gather(
             *(
                 asyncio.to_thread(detect_marks, image, page_number)
@@ -194,26 +200,27 @@ class VisionExtractorBase(BaseDocumentExtractor):
         )
 
     async def render_first_page(self, content: bytes) -> Optional["_PILImage.Image"]:
-        """Rasterise only page 1 of a PDF, for header-band repair's own use.
+        """Bir PDF'in yalnızca 1. sayfasını başlık bandı onarımının kendi kullanımı için rasterize et.
 
-        `_render_pages` renders every page and is used when a full OCR pass
-        is already under way; this exists for the opposite situation --
-        header repair needs page 1 of a result whose extractor never
-        rendered anything at all (a text-layer path, e.g. OpenDataLoader or
-        PdfiumExtractor reading a Class-A scanner text layer -- see
-        `FallbackDocumentExtractor.is_scanned_text_layer`). Rendering only
-        page 1 keeps this always-paid cost bounded to roughly one page
-        regardless of document length, since the repair only ever touches
-        the header band of the first page.
+        `_render_pages` her sayfayı render eder ve tam bir OCR geçişi zaten
+        sürerken kullanılır; bu ise tam tersi durum için var -- başlık
+        onarımı, hiçbir şey render etmemiş bir çıkarıcının sonucunun 1.
+        sayfasına ihtiyaç duyar (bir metin katmanı yolu, örn. OpenDataLoader
+        veya PdfiumExtractor bir Class-A tarayıcı metin katmanını okuyor --
+        bkz. `FallbackDocumentExtractor.is_scanned_text_layer`). Yalnızca 1.
+        sayfayı render etmek, onarımın yalnızca ilk sayfanın başlık bandına
+        dokunması nedeniyle bu her zaman ödenen maliyeti belge uzunluğundan
+        bağımsız olarak yaklaşık bir sayfa ile sınırlı tutar.
 
         Args:
-            content: Raw PDF bytes.
+            content: Ham PDF byte'ları.
 
         Returns:
-            The rendered first page as a PIL image, or None when `content`
-            is not a renderable PDF (corrupt bytes, no pages, or pdfium
-            unavailable) -- callers must degrade to the original,
-            un-repaired text rather than raise.
+            İlk sayfa, render edilmiş bir PIL görüntüsü olarak, ya da
+            `content` render edilebilir bir PDF değilse (bozuk byte'lar,
+            sayfa yok, veya pdfium kullanılamıyor) None -- çağıranlar bunu,
+            exception fırlatmak yerine orijinal, onarılmamış metne
+            düşülmesi gereken bir durum olarak ele almalıdır.
         """
         if pdfium is None:
             return None
@@ -238,18 +245,19 @@ class VisionExtractorBase(BaseDocumentExtractor):
             document.close()
 
     def _render_pages(self, content: bytes) -> list:
-        """Rasterise every page of a PDF to a PIL image, in document order.
+        """Bir PDF'in her sayfasını belge sırasına göre PIL görüntüsüne rasterize et.
 
-        Kept separate from PNG encoding (`_encode_png`) so the raw rendered
-        pages are what goes into `raster_cache` -- the same shape
-        `TesseractExtractor` caches, and reusable for any future consumer
-        that doesn't specifically need PNG bytes.
+        PNG kodlamasından (`_encode_png`) ayrı tutulur, böylece
+        `raster_cache`'e giren şey ham render edilmiş sayfalardır --
+        `TesseractExtractor`'ın önbelleklediği aynı şekil, özellikle PNG
+        byte'larına ihtiyaç duymayan herhangi bir gelecekteki tüketici için
+        yeniden kullanılabilir.
 
         Args:
-            content: Raw PDF bytes.
+            content: Ham PDF byte'ları.
 
         Returns:
-            One rendered PIL image per page.
+            Sayfa başına bir render edilmiş PIL görüntüsü.
         """
         scale = self.dpi / PDF_POINTS_PER_INCH
         document = pdfium.PdfDocument(content)
@@ -266,13 +274,13 @@ class VisionExtractorBase(BaseDocumentExtractor):
             document.close()
 
     def _encode_png(self, images: list) -> list[bytes]:
-        """Encode PIL images to PNG bytes.
+        """PIL görüntülerini PNG byte'larına kodla.
 
         Args:
-            images: PIL images, in document order.
+            images: Belge sırasına göre PIL görüntüleri.
 
         Returns:
-            PNG-encoded bytes per image, same order.
+            Aynı sırayla, görüntü başına PNG kodlu byte'lar.
         """
         encoded = []
         for image in images:
@@ -288,7 +296,7 @@ class VisionExtractorBase(BaseDocumentExtractor):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Accept PDFs and raster images; reject anything textual."""
+        """PDF'leri ve raster görüntüleri kabul et; metinsel her şeyi reddet."""
         if has_pdf_magic_bytes(content) or mime_type == "application/pdf":
             return True
         if mime_type and mime_type.startswith("image/"):
@@ -296,28 +304,30 @@ class VisionExtractorBase(BaseDocumentExtractor):
         return matches_extension(file_name, IMAGE_EXTENSIONS | PDF_EXTENSIONS)
 
     async def transcribe_header_band(self, page_image) -> str:
-        """Transcribe just the header band of one already-rasterised page.
+        """Zaten rasterize edilmiş bir sayfanın yalnızca başlık bandını transkribe et.
 
-        Used by `FallbackDocumentExtractor`'s header-repair step, not by this
-        class's own `extract()`. Crops the top `HEADER_BAND_FRACTION` of the
-        page and sends only that crop through the same model call a full-page
-        transcription uses -- a small crop costs a fraction of the time
-        for specifically the part of a scan this project's OCR chain
-        struggles with (letterhead emblems, handwritten annotations), without
-        paying that cost on the body text Tesseract already reads well.
+        Bu sınıfın kendi `extract()`'i tarafından değil,
+        `FallbackDocumentExtractor`'ın başlık onarım adımı tarafından
+        kullanılır. Sayfanın üst `HEADER_BAND_FRACTION`'ını kırpar ve
+        yalnızca o kırpımı, tam sayfa transkripsiyonun kullandığı aynı model
+        çağrısından geçirir -- küçük bir kırpım, bu projenin OCR zincirinin
+        özellikle zorlandığı kısım (antetli kaşe amblemleri, el yazısı
+        notlar) için tam sayfa maliyetinin bir kısmına mal olur, Tesseract'ın
+        zaten iyi okuduğu gövde metni için bu maliyeti ödemeden.
 
         Args:
-            page_image: A rasterised PIL page image, e.g. from `raster_cache`
-                (the same shape `TesseractExtractor` and this class's own
-                `extract()` share a cache entry for).
+            page_image: `raster_cache`'ten gelen rasterize edilmiş bir PIL
+                sayfa görüntüsü (bu sınıfın kendi `extract()`'i ile
+                `TesseractExtractor`'ın aynı önbellek girdisini paylaştığı
+                aynı şekil).
 
         Returns:
-            The crop's transcription. May be empty on a genuine blank header;
-            callers should treat that the same as any other best-effort
-            failure, not retry.
+            Kırpımın transkripsiyonu. Gerçekten boş bir başlıkta boş
+            olabilir; çağıranlar bunu diğer en-iyi-çaba başarısızlıkları
+            gibi ele almalı, yeniden denememeli.
 
         Raises:
-            DocumentExtractionError: If the model call itself fails.
+            DocumentExtractionError: Model çağrısının kendisi başarısız olursa.
         """
         width, height = page_image.size
         crop = page_image.crop((0, 0, width, int(height * HEADER_BAND_FRACTION)))
@@ -330,37 +340,37 @@ class VisionExtractorBase(BaseDocumentExtractor):
             ) from exc
 
     async def transcribe_page(self, page_image) -> str:
-        """Transcribe one already-rasterised page in full, no crop.
+        """Zaten rasterize edilmiş bir sayfayı tamamen, kırpma olmadan transkribe et.
 
-        Sibling to `transcribe_header_band` -- same model call, same
-        `self.prompt`, just the whole page instead of the top
-        `HEADER_BAND_FRACTION` band. Used by `FallbackDocumentExtractor`'s
-        signature-recovery step (see that class's `_repair_signature`) for
-        the failure mode header-band repair cannot reach: wet-signature ink
-        obscuring the printed name below it sits well past the header band,
-        in the lower half of the page. Measured directly on four real
-        documents where OpenDataLoader/Tesseract lost or garbled the
-        signer's name entirely (a missing line, or "İF; BOZDAG ;" for
-        "Bekir BOZDAĞ") -- full-page transcription recovered the correct
-        name on all four.
+        `transcribe_header_band`'in kardeşi -- aynı model çağrısı, aynı
+        `self.prompt`, yalnızca üst `HEADER_BAND_FRACTION` bandı yerine
+        tüm sayfa. `FallbackDocumentExtractor`'ın imza kurtarma adımı
+        tarafından (bkz. o sınıfın `_repair_signature`'ı) başlık bandı
+        onarımının ulaşamadığı başarısızlık modu için kullanılır: ıslak
+        imza mürekkebinin altındaki basılı ismi gizlemesi, başlık bandının
+        çok ötesinde, sayfanın alt yarısında yer alır. Doğrudan
+        OpenDataLoader/Tesseract'ın imza sahibinin adını tamamen kaybettiği
+        veya bozduğu dört gerçek belge üzerinde ölçüldü (eksik bir satır,
+        veya "Bekir BOZDAĞ" için "İF; BOZDAG ;") -- tam sayfa
+        transkripsiyon dördünde de doğru ismi kurtardı.
 
-        Lives on the base class, not a provider-specific subclass: the body
-        only calls `_encode_png`/`_transcribe`, both already provider-
-        agnostic here, so every `VisionExtractorBase` subclass gets full-page
-        recovery for free.
+        Sağlayıcıya özel bir alt sınıfta değil, temel sınıfta yaşar: gövde
+        yalnızca `_encode_png`/`_transcribe`'i çağırır, ikisi de burada
+        zaten sağlayıcıdan bağımsızdır, bu yüzden her `VisionExtractorBase`
+        alt sınıfı tam sayfa kurtarmayı bedavaya alır.
 
         Args:
-            page_image: A rasterised PIL page image, same shape
-                `transcribe_header_band` and `TesseractExtractor` share a
-                `raster_cache` entry for.
+            page_image: `transcribe_header_band` ve `TesseractExtractor`'ın
+                bir `raster_cache` girdisini paylaştığı aynı şekilde
+                rasterize edilmiş bir PIL sayfa görüntüsü.
 
         Returns:
-            The page's full transcription. May be empty on total failure;
-            callers should treat that the same as any other best-effort
-            failure, not retry.
+            Sayfanın tam transkripsiyonu. Tam başarısızlıkta boş olabilir;
+            çağıranlar bunu diğer en-iyi-çaba başarısızlıkları gibi ele
+            almalı, yeniden denememeli.
 
         Raises:
-            DocumentExtractionError: If the model call itself fails.
+            DocumentExtractionError: Model çağrısının kendisi başarısız olursa.
         """
         try:
             encoded = await asyncio.to_thread(self._encode_png, [page_image])
@@ -373,104 +383,113 @@ class VisionExtractorBase(BaseDocumentExtractor):
 
 
 class OllamaVisionExtractor(VisionExtractorBase):
-    """OCR via a local vision-language model served by Ollama.
+    """Ollama tarafından sunulan yerel bir görsel dil modeliyle OCR.
 
-    Complements `TesseractExtractor` rather than replacing it. Measured on this
-    project's corpus, Tesseract is both more accurate and roughly seventy times
-    faster on clean 300 DPI renders. On degraded scans -- skewed, blurred,
-    low-contrast, JPEG-compressed, the way a photocopied or photographed evrak
-    actually arrives -- Tesseract collapses, recovering **1 of 62** header fields
-    across the sample corpus where this model recovers 58.
+    `TesseractExtractor`'ın yerini almak yerine onu tamamlar. Bu projenin
+    korpusunda ölçüldüğünde, Tesseract temiz 300 DPI render'larda hem daha
+    doğru hem de kabaca yetmiş kat daha hızlıdır. Bozuk taramalarda --
+    eğik, bulanık, düşük kontrastlı, JPEG sıkıştırmalı, bir evrakın gerçekte
+    fotokopi çekilmiş veya fotoğraflanmış haliyle geldiği şekilde --
+    Tesseract çöker; örnek korpustaki 62 başlık alanından yalnızca **1**'ini
+    kurtarırken bu model 58'ini kurtarır.
 
-    So the chain keeps Tesseract first for speed and escalates here only when the
-    result fails the readability check.
+    Bu yüzden zincir hız için önce Tesseract'ı tutar ve yalnızca sonuç
+    okunabilirlik kontrolünü geçemediğinde buraya yükselir.
 
-    On model choice (see `scripts/evaluate_ocr_fields.py`): candidates are judged
-    on how many prescribed fields survive, not on how well the text reads, and the
-    two disagree sharply. Over 12 degraded evrak carrying 62 labelled fields:
+    Model seçimi hakkında (bkz. `scripts/evaluate_ocr_fields.py`): adaylar
+    metnin ne kadar iyi okunduğuna göre değil, kaç öngörülen alanın hayatta
+    kaldığına göre değerlendirilir ve ikisi keskin biçimde ayrışır. 62
+    etiketli alan taşıyan 12 bozuk evrak üzerinde:
 
     ==========================  ==========  ==========  ============
-    model                       found       exact       OCRTurk tokF1
+    model                       bulunan     tam         OCRTurk tokF1
     ==========================  ==========  ==========  ============
     tesseract                   1/62        0/62        0.411
     glm-ocr                     59/62       35/62       0.676
-    deepseek-ocr (current)      58/62       48/62       0.846
+    deepseek-ocr (mevcut)       58/62       48/62       0.846
     frob/unlimited-ocr:q8_0     0/62        0/62        0.708
     ==========================  ==========  ==========  ============
 
-    `frob/unlimited-ocr` is why the field metric exists. It out-scores glm-ocr on
-    text fidelity and recovers **zero** fields -- it reads the Turkish accurately
-    but reformats the page, and a header the parser cannot find is reported as
-    missing information. Text metrics cannot see that failure.
+    `frob/unlimited-ocr` bu alan metriğinin neden var olduğunu gösterir.
+    Metin sadakatinde glm-ocr'ı geçer ama **sıfır** alan kurtarır -- Türkçeyi
+    doğru okur ama sayfayı yeniden biçimlendirir, ve ayrıştırıcının
+    bulamadığı bir başlık eksik bilgi olarak raporlanır. Metin metrikleri bu
+    başarısızlığı göremez.
 
-    glm-ocr and deepseek-ocr find the same fields (59 vs 58, trading wins and
-    losses document by document -- noise at this sample size). They differ on
-    whether the *value* is right, and there deepseek-ocr is decisively ahead:
-    48 exact against 35. Same missing-field accuracy, far fewer wrong values, and
-    faster on the synthetic corpus above -- which decided the original default.
+    glm-ocr ve deepseek-ocr aynı alanları bulur (59'a karşı 58, belge belge
+    kazanıp kaybederek -- bu örneklem büyüklüğünde gürültü). *Değerin*
+    doğru olup olmadığı konusunda ayrışırlar, ve orada deepseek-ocr kesin
+    biçimde öndedir: 48'e karşı 35 tam eşleşme. Aynı eksik-alan doğruluğu,
+    çok daha az yanlış değer, ve yukarıdaki sentetik korpusta daha hızlı --
+    bu da orijinal varsayılanı belirledi.
 
-    That synthetic corpus (12 documents, one degradation profile) did not hold up
-    against real scans. Re-measured on `scripts/evaluate_ocr_real.py`'s 19
-    hand-labelled real `CY-*.pdf` documents (76 fields, `datasets/resmi_yazisma/
-    ocr_ground_truth.json`), scored through the real production chain
-    (Tesseract + header-band repair), not raw full-page transcription:
+    O sentetik korpus (12 belge, bir bozulma profili) gerçek taramalar
+    karşısında tutarlı çıkmadı. `scripts/evaluate_ocr_real.py`'nin 19
+    elle etiketlenmiş gerçek `CY-*.pdf` belgesi (76 alan,
+    `datasets/resmi_yazisma/ocr_ground_truth.json`) üzerinde, ham tam sayfa
+    transkripsiyon yerine gerçek üretim zincirinden (Tesseract + başlık
+    bandı onarımı) geçirilerek yeniden ölçüldü:
 
     ======================  ===========  ===========  =====
-    engine                  zincir bul.  zincir tam   süre
+    motor                   zincir bul.  zincir tam   süre
     ======================  ===========  ===========  =====
     tesseract               64/76        32/76         54s
-    deepseek-ocr (was)      65/76        42/76        730s
-    glm-ocr:latest (now)    67/76        50/76       1579s
+    deepseek-ocr (eski)     65/76        42/76        730s
+    glm-ocr:latest (yeni)   67/76        50/76       1579s
     ======================  ===========  ===========  =====
 
-    glm-ocr:latest recovers more fields and gets more of them exactly right --
-    roughly a 19% relative gain in exact match -- at roughly double the
-    wall-clock. That tradeoff was made deliberately in favour of accuracy: this
-    project's compliance checker reports a wrong value as if it were correct,
-    which is worse than reporting a field as missing.
+    glm-ocr:latest daha fazla alan kurtarır ve daha fazlasını tam doğru
+    yapar -- tam eşleşmede kabaca %19 göreli kazanım -- kabaca iki kat
+    duvar saati süresi pahasına. Bu takas bilinçli olarak doğruluk lehine
+    yapıldı: bu projenin uyum kontrolcüsü yanlış bir değeri doğruymuş gibi
+    raporlar, bu ise bir alanı eksik olarak raporlamaktan daha kötüdür.
 
-    This also settled a specific question raised during that investigation: a
-    torch/transformers deployment of the *same* GLM-OCR weights
-    (`zai-org/GLM-OCR`, see `scripts/ocr_sidecar.py`) does **not** beat this
-    Ollama-served version -- 46/76 exact against 50/76, after fixing a genuine
-    bug in the comparison harness (it fed the model an un-downscaled 300 DPI
-    page; capping input resolution -- see `ocr_sidecar.MAX_IMAGE_DIMENSION` --
-    fixed that and reversed an earlier, wrong "transformers is much faster"
-    reading, but did not close the accuracy gap). No transformers deployment
-    ships as a result: the Ollama-served model already wins.
+    Bu ayrıca o araştırma sırasında ortaya çıkan belirli bir soruyu da
+    çözdü: *aynı* GLM-OCR ağırlıklarının (`zai-org/GLM-OCR`, bkz.
+    `scripts/ocr_sidecar.py`) bir torch/transformers dağıtımı, bu
+    Ollama-sunulan sürümü **geçmiyor** -- karşılaştırma altyapısındaki
+    gerçek bir hata düzeltildikten sonra 46/76'ya karşı 50/76 tam eşleşme
+    (modele indirgenmemiş 300 DPI bir sayfa besleniyordu; girdi
+    çözünürlüğünü sınırlamak -- bkz. `ocr_sidecar.MAX_IMAGE_DIMENSION` --
+    bunu düzeltti ve daha önceki, yanlış "transformers çok daha hızlı"
+    okumasını tersine çevirdi, ama doğruluk farkını kapatmadı). Sonuç
+    olarak hiçbir transformers dağıtımı sevk edilmiyor: Ollama-sunulan
+    model zaten kazanıyor.
 
-    A separate finding, after the table above shipped this model as default:
-    this extractor's *own* full-page transcription almost never ran in
-    production. `FallbackDocumentExtractor` returned on the first result
-    passing `char_count`/`quality_ratio` alone, and that document-wide
-    readability average cannot see header damage -- a real document scored
-    0.85 quality_ratio and 3316 characters while recovering **zero** of five
-    prescribed header fields. See `FallbackDocumentExtractor
-    ._has_enough_header_fields` for the field-aware acceptance criterion that
-    fixed this, and `is_scanned_text_layer` for the companion fix that widens
-    header-band repair to a scanner's own junk OCR text layer (previously
-    invisible to the `used_ocr` gate). Re-measured on the grown 23-document
-    ground truth (88 fields, 4 documents added specifically because they hit
-    this failure) with both fixes in place, scored through the real
-    production chain:
+    Ayrı bir bulgu, yukarıdaki tablo bu modeli varsayılan olarak sevk
+    ettikten sonra: bu çıkarıcının *kendi* tam sayfa transkripsiyonu
+    üretimde neredeyse hiç çalışmadı. `FallbackDocumentExtractor` yalnızca
+    `char_count`/`quality_ratio`'yu geçen ilk sonuçta durdu, ve o belge
+    geneli okunabilirlik ortalaması başlık hasarını göremez -- gerçek bir
+    belge 0.85 quality_ratio ve 3316 karakter skorlarken beş öngörülen
+    başlık alanından **sıfırını** kurtarmıştı. Bunu düzelten alan-farkında
+    kabul kriteri için `FallbackDocumentExtractor
+    ._has_enough_header_fields`'e, ve başlık bandı onarımını bir
+    tarayıcının kendi çöp OCR metin katmanına genişleten eşlik eden
+    düzeltme için `is_scanned_text_layer`'a bakın (önceden `used_ocr`
+    kapısına görünmezdi). Her iki düzeltme yerindeyken, büyümüş 23 belgelik
+    ground truth (88 alan, bu başarısızlığı vurduğu için özel olarak
+    eklenen 4 belge) üzerinde, gerçek üretim zincirinden geçirilerek
+    yeniden ölçüldü:
 
     ======================  ===========  ===========  =======
-    engine                  zincir bul.  zincir tam    süre
+    motor                   zincir bul.  zincir tam    süre
     ======================  ===========  ===========  =======
     tesseract               74/88        36/88          71s
     glm-ocr:latest          77/88        59/88        2110s
     ======================  ===========  ===========  =======
 
-    The original 19-document/76-field subset holds exactly flat under both
-    engines (64/76 and 68/76 found, byte-identical to the table above) --
-    the new criterion changes nothing for a document that was already
-    correctly accepted. CY-034 specifically gained one exact match (0 -> 1)
-    from the markdown-heading strip in `OpenDataLoaderExtractor`. Of the 4
-    added documents, the worst case (CY-050: 0 of 3 recoverable fields under
-    the old rule, confirmed directly against the live cache before this fix)
-    now recovers all 3 under both engines' chains -- exactly the documents
-    the new criterion exists to catch escalated, and only those: 2 of the 23
-    documents triggered field-triggered escalation across the whole run.
+    Orijinal 19 belge/76 alanlık alt küme her iki motor altında da tam
+    olarak sabit kalır (64/76 ve 68/76 bulunan, yukarıdaki tabloyla byte
+    eşit) -- yeni kriter zaten doğru kabul edilmiş bir belge için hiçbir
+    şey değiştirmiyor. CY-034, `OpenDataLoaderExtractor`'daki markdown
+    başlık kırpmasından bir tam eşleşme kazandı (0 -> 1). Eklenen 4
+    belgenin en kötü durumu (CY-050: eski kural altında 3 kurtarılabilir
+    alanın 0'ı, bu düzeltmeden önce doğrudan canlı önbelleğe karşı
+    doğrulandı) şimdi her iki motorun zincirinde de 3'ünün tamamını
+    kurtarıyor -- yeni kriterin yakalamak için var olduğu tam olarak o
+    belgeler yükseldi, ve yalnızca onlar: tüm çalışma boyunca 23 belgeden
+    2'si alan-tetiklemeli yükselmeyi tetikledi.
     """
 
     name = "ollama_vision"
@@ -482,26 +501,26 @@ class OllamaVisionExtractor(VisionExtractorBase):
         dpi: int = OCR_RENDER_DPI,
         prompt: str = DEFAULT_PROMPT,
     ) -> None:
-        """Initialise the vision extractor.
+        """Vision çıkarıcısını başlat.
 
         Args:
-            model: Ollama vision model tag; defaults to `settings.OLLAMA_VISION_MODEL`.
-            base_url: Ollama endpoint; defaults to `settings.OLLAMA_BASE_URL`.
-            dpi: Rasterisation density for PDF pages.
-            prompt: Turkish transcription instruction.
+            model: Ollama vision model etiketi; varsayılan `settings.OLLAMA_VISION_MODEL`.
+            base_url: Ollama uç noktası; varsayılan `settings.OLLAMA_BASE_URL`.
+            dpi: PDF sayfaları için rasterizasyon yoğunluğu.
+            prompt: Türkçe transkripsiyon talimatı.
         """
         super().__init__(dpi=dpi, prompt=prompt)
         self.model = model or settings.OLLAMA_VISION_MODEL
         self.base_url = (base_url or settings.OLLAMA_BASE_URL).rstrip("/")
 
     async def _transcribe(self, image: bytes) -> str:
-        """Send one page image to Ollama's raw `/api/generate` and return its transcription.
+        """Bir sayfa görüntüsünü Ollama'nın ham `/api/generate`'ine gönder ve transkripsiyonunu döndür.
 
         Args:
-            image: PNG bytes of a single page.
+            image: Tek bir sayfanın PNG byte'ları.
 
         Returns:
-            The transcribed text.
+            Transkribe edilen metin.
         """
 
         def _call() -> str:
@@ -530,16 +549,17 @@ class OllamaVisionExtractor(VisionExtractorBase):
 
 
 class EvrenVisionExtractor(VisionExtractorBase):
-    """OCR via Evren's fast tier, sent as a multimodal chat completion.
+    """Evren'in hızlı katmanı üzerinden, çok modlu bir chat completion olarak gönderilen OCR.
 
-    Evren's own `vlm` model alias is video-only -- it rejects any request
-    carrying an image with a 400 ("At most 0 image(s) may be provided").
-    Evren's own troubleshooting docs recommend routing OCR/document images to
-    `llm-fast` or `llm-large` instead (up to 2 images per request; this
-    extractor only ever sends one page at a time). Same escalation role as
-    `OllamaVisionExtractor` -- used instead of it when `settings.LOCAL_MODE`
-    is False, see `app.infrastructure.extractors.get_document_extractor` and
-    `app.api.dependency`.
+    Evren'in kendi `vlm` model takma adı yalnızca video içindir -- görüntü
+    taşıyan herhangi bir isteği 400 ile reddeder ("At most 0 image(s) may be
+    provided"). Evren'in kendi sorun giderme dokümanları OCR/belge
+    görüntülerini bunun yerine `llm-fast` veya `llm-large`'a yönlendirmeyi
+    önerir (istek başına en fazla 2 görüntü; bu çıkarıcı her seferinde
+    yalnızca bir sayfa gönderir). `settings.LOCAL_MODE` False olduğunda
+    onun yerine kullanılan `OllamaVisionExtractor` ile aynı yükselme rolüne
+    sahiptir, bkz. `app.infrastructure.extractors.get_document_extractor`
+    ve `app.api.dependency`.
     """
 
     name = "evren_vision"
@@ -550,24 +570,24 @@ class EvrenVisionExtractor(VisionExtractorBase):
         dpi: int = OCR_RENDER_DPI,
         prompt: str = DEFAULT_PROMPT,
     ) -> None:
-        """Initialise the vision extractor.
+        """Vision çıkarıcısını başlat.
 
         Args:
-            model: Evren model alias; defaults to `settings.EVREN_LLM_FAST_MODEL`.
-            dpi: Rasterisation density for PDF pages.
-            prompt: Transcription instruction.
+            model: Evren model takma adı; varsayılan `settings.EVREN_LLM_FAST_MODEL`.
+            dpi: PDF sayfaları için rasterizasyon yoğunluğu.
+            prompt: Transkripsiyon talimatı.
         """
         super().__init__(dpi=dpi, prompt=prompt)
         self.model = model or settings.EVREN_LLM_FAST_MODEL
 
     async def _transcribe(self, image: bytes) -> str:
-        """Send one page image to Evren as a multimodal chat message.
+        """Bir sayfa görüntüsünü Evren'e çok modlu bir chat mesajı olarak gönder.
 
         Args:
-            image: PNG bytes of a single page.
+            image: Tek bir sayfanın PNG byte'ları.
 
         Returns:
-            The transcribed text.
+            Transkribe edilen metin.
         """
         from app.ai.llms import get_llm_client
 

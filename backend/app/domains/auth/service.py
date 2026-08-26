@@ -8,13 +8,13 @@ logger = logging.getLogger(__name__)
 
 
 class AuthService:
-    """SOTA Service to authenticate credentials and issue JWT tokens."""
+    """Kimlik bilgilerini doğrulayan ve JWT token'ları veren SOTA servis."""
 
     def __init__(self, user_repository: UserRepository):
         self.user_repository = user_repository
 
     async def authenticate_user(self, schema: LoginRequest) -> TokenResponse:
-        """Authenticate user credentials and return access & refresh JWTs."""
+        """Kullanıcı kimlik bilgilerini doğrular ve access & refresh JWT'lerini döndürür."""
         user = await self.user_repository.get_by_username(schema.username)
 
         if not user:
@@ -40,13 +40,13 @@ class AuthService:
         )
 
     async def refresh_access_token(self, refresh_token: str) -> TokenResponse:
-        """Validate a refresh token and issue a new access token."""
+        """Bir refresh token'ı doğrular ve yeni bir access token verir."""
         try:
             payload = decode_token(refresh_token)
         except AuthenticationException:
             raise AuthenticationException(message="Invalid or expired refresh token.")
 
-        # Ensure it is a refresh token, not an access token
+        # Bunun bir access token değil, refresh token olduğundan emin ol
         if payload.get("type") != "refresh":
             raise AuthenticationException(message="Invalid token type. Refresh token expected.")
 
@@ -61,15 +61,14 @@ class AuthService:
         logger.info(f"Refreshing access token for user ID: {user.id}")
         new_access_token = create_access_token(
             subject=user.id,
-            # company_id must match authenticate_user's claim set: as of
-            # Faz 3, app.api.middleware.tenant.TenantContextMiddleware reads
-            # this claim to set the Postgres GUC row-level security keys
-            # off of (see app.infrastructure.database.session.get_db).
-            # Omitting it here was harmless before RLS existed -- a token
-            # refreshed through this path would silently lose its tenant
-            # scope and every subsequent RLS'd read would return zero rows,
-            # surfacing as a spurious "User not found" on the very next
-            # request.
+            # company_id, authenticate_user'ın claim kümesiyle eşleşmelidir: Faz 3
+            # itibarıyla app.api.middleware.tenant.TenantContextMiddleware, Postgres
+            # GUC satır düzeyi güvenlik (row-level security) anahtarlarını
+            # ayarlamak için bu claim'i okur (bkz. app.infrastructure.database.session.get_db).
+            # RLS mevcut olmadan önce burada bu claim'i atlamak zararsızdı -- bu yol
+            # üzerinden yenilenen bir token, tenant kapsamını sessizce kaybeder ve
+            # sonraki her RLS'li okuma sıfır satır döndürür; bu da bir sonraki
+            # istekte sahte bir "Kullanıcı bulunamadı" hatası olarak ortaya çıkar.
             extra_claims={"role": user.role, "username": user.username, "company_id": user.company_id}
         )
         new_refresh_token = create_refresh_token(subject=user.id)

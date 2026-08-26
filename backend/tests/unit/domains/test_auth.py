@@ -175,7 +175,7 @@ async def test_refresh_token_blacklisted():
     with patch("app.domains.auth.router.get_cache", return_value=mock_cache):
         with pytest.raises(AuthenticationException) as exc:
             await refresh_endpoint(schema=schema, request=MagicMock(), db=MagicMock())
-        assert "terminated" in str(exc.value.message)
+        assert "sonlandırıldı" in str(exc.value.message)
 
 @pytest.mark.asyncio
 async def test_refresh_token_success():
@@ -212,4 +212,4 @@ async def test_get_current_user_blacklisted():
     with patch("app.api.dependency.get_cache", return_value=mock_cache):
         with pytest.raises(AuthenticationException) as exc:
             await get_current_user(token=token, db=MagicMock())
-        assert "Session has been terminated" in str(exc.value.message)
+        assert "sonlandırıldı" in str(exc.value.message)

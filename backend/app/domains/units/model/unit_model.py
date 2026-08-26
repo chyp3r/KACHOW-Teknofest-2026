@@ -6,15 +6,16 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class UnitModel(Base, TimestampMixin):
-    """SQLAlchemy ORM model for a routable department/unit.
+    """Yönlendirilebilir bir departman/birim için SQLAlchemy ORM modeli.
 
-    Replaces the formerly hardcoded ``RoutingPolicy.units`` tuple -- managers
-    define and describe units here at runtime, and ``routing_graph`` reads
-    them fresh on every routing decision (see ``app.domains.units.provider``).
+    Eskiden sabit kodlanmış ``RoutingPolicy.units`` demetinin yerini alır --
+    yöneticiler birimleri burada, çalışma zamanında tanımlar ve açıklar,
+    ``routing_graph`` da her yönlendirme kararında bunları taze okur
+    (bkz. ``app.domains.units.provider``).
 
-    Company-scoped: two different companies may both have an "İnsan
-    Kaynakları" unit, so uniqueness is ``(company_id, name)``, not a bare
-    global ``name``.
+    Şirket kapsamlı: iki farklı şirket de "İnsan Kaynakları" birimine sahip
+    olabilir, bu yüzden benzersizlik salt global ``name`` değil,
+    ``(company_id, name)`` üzerinden sağlanır.
     """
 
     __tablename__ = "units"
@@ -25,12 +26,14 @@ class UnitModel(Base, TimestampMixin):
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
     name: Mapped[str] = mapped_column(String, index=True, nullable=False)
-    #: What the unit handles, in Turkish -- interpolated straight into the
-    #: routing prompt so the AI can tell units apart. Required: a unit with
-    #: no description gives the router nothing to match content against.
+    #: Birimin neyle ilgilendiği, Türkçe -- AI'ın birimleri ayırt edebilmesi
+    #: için doğrudan yönlendirme promptuna eklenir. Zorunludur: açıklaması
+    #: olmayan bir birim, yönlendiriciye içerikle eşleştirecek hiçbir şey
+    #: vermez.
     description: Mapped[str] = mapped_column(Text, nullable=False)
-    #: Inactive units are excluded from routing suggestions but kept (not
-    #: hard-deleted) so past drafts routed to them stay meaningful; `drafts.
-    #: destination` is a free-text column, not a foreign key, so nothing
-    #: else references this row by id.
+    #: Pasif birimler yönlendirme önerilerinden hariç tutulur ama (kalıcı
+    #: olarak silinmeden) korunur, böylece bu birimlere yönlendirilmiş
+    #: geçmiş taslaklar anlamlı kalır; `drafts.destination` bir yabancı
+    #: anahtar değil serbest metin kolonudur, dolayısıyla başka hiçbir şey
+    #: bu satıra id ile referans vermez.
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)

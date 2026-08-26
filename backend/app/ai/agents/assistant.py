@@ -13,24 +13,24 @@ from app.observability.ai_metrics import LLM_TOKENS
 
 logger = logging.getLogger(__name__)
 
-#: Two tool turns, not more. Each turn is a full local generation; a request
-#: that still hasn't converged to an answer after two rounds is more likely a
-#: model that keeps re-querying than one that needs a third data point, and a
-#: third attempt would blow the "assist" node's time budget for a case that
-#: rarely benefits from it.
+#: İki araç turu, daha fazla değil. Her tur tam bir yerel üretimdir; iki tur
+#: sonunda hâlâ bir yanıta yakınsamamış bir istek, üçüncü bir veri noktasına
+#: ihtiyaç duyan bir modelden çok tekrar tekrar sorgulayan bir model olma
+#: ihtimali daha yüksektir ve üçüncü bir deneme, bundan nadiren fayda gören
+#: bir vaka için "assist" node'unun zaman bütçesini patlatır.
 MAX_TOOL_TURNS = 2
 
 
 class AssistantAgent(BaseAgent):
-    """Answers conversationally, reaching for retrieval tools when it needs to.
+    """Sohbet şeklinde yanıt verir, gerektiğinde erişim (retrieval) araçlarına başvurur.
 
-    Replaces the previous split between ``ChatAgent`` (conversation only) and
-    ``DocumentQAAgent`` (retrieval-grounded, document only): the router used to
-    have to decide in advance which of the two a message needed, which is
-    exactly the decision a chunk of ``intent_rules.py``/``intent_scorer.py``
-    existed to arbitrate. Here the same agent handles both, and the model
-    itself decides per-turn whether answering needs a tool call -- see
-    ``run_stream``.
+    Önceki ``ChatAgent`` (yalnızca sohbet) ile ``DocumentQAAgent`` (erişim
+    temelli, yalnızca belge) ayrımının yerini alır: router daha önce bir
+    mesajın ikisinden hangisine ihtiyaç duyduğuna önceden karar vermek zorunda
+    kalıyordu, ki bu tam olarak ``intent_rules.py``/``intent_scorer.py``'nin
+    bir kısmının hakemlik etmesi için var olduğu karardı. Burada aynı ajan her
+    ikisini de ele alır ve modelin kendisi, tur bazında bir yanıtın araç
+    çağrısına ihtiyaç duyup duymadığına karar verir -- bkz. ``run_stream``.
     """
 
     def __init__(
@@ -38,18 +38,18 @@ class AssistantAgent(BaseAgent):
         llm_client: BaseLLMClient,
         prompt_manager: Optional[PromptManager] = None,
     ):
-        """Initialize the assistant agent.
+        """Asistan ajanını başlatır.
 
         Args:
-            llm_client: The LLM provider client. Must support
-                ``generate_with_tools`` when any tools are bound.
-            prompt_manager: Optional prompt manager override.
+            llm_client: LLM sağlayıcı istemcisi. Herhangi bir araç bağlandığında
+                ``generate_with_tools``'u desteklemelidir.
+            prompt_manager: Opsiyonel prompt yöneticisi override'ı.
         """
         manager = prompt_manager or get_prompt_manager()
         super().__init__(
             llm_client=llm_client,
             name="AssistantAgent",
-            description="Answers conversationally, calling tools for document/legislation lookups.",
+            description="Sohbet şeklinde yanıt verir, belge/mevzuat sorguları için araçları çağırır.",
             system_prompt=manager.get_template("assistant"),
         )
 
@@ -67,49 +67,50 @@ class AssistantAgent(BaseAgent):
         config: Optional[RunnableConfig] = None,
         node: str = "assist",
     ) -> AsyncIterator[str]:
-        """Run the tool loop, then stream the final answer token by token.
+        """Araç döngüsünü çalıştırır, ardından nihai yanıtı token token stream eder.
 
         Args:
-            query: The user's current message.
-            history: Prior conversation turns (already windowed by the caller).
-            history_summary: Rolling summary of turns older than the window.
-            document_context: Short description of the attached document (title/
-                summary), rendered into the system prompt so the model knows
-                one is attached even before it calls a tool. The tools
-                themselves supply the depth; this is only enough to decide
-                whether to reach for them.
-            security_boundary: A short Turkish note describing the
-                requester's clearance and the attached document's
-                confidentiality level (see
+            query: Kullanıcının mevcut mesajı.
+            history: Önceki konuşma turları (çağıran tarafından zaten pencerelenmiş).
+            history_summary: Pencereden daha eski turların kayan özeti.
+            document_context: Eklenmiş belgenin kısa açıklaması (başlık/özet),
+                sistem prompt'una render edilir; böylece model bir araç
+                çağırmadan önce bile bir belgenin ekli olduğunu bilir. Derinliği
+                araçların kendisi sağlar; bu yalnızca onlara başvurup
+                başvurmayacağına karar vermek için yeterlidir.
+            security_boundary: İsteği yapanın yetki seviyesini ve ekli belgenin
+                gizlilik düzeyini açıklayan kısa bir Türkçe not (bkz.
                 ``app.ai.workflows.planning_graph._build_security_boundary_note``).
-                A secondary, prompt-level layer only -- the deterministic
-                checks (``document_tools.py``'s deny-at-retrieval,
-                ``output_gate.py``) are what actually enforce the boundary;
-                this exists to catch the paraphrase case a regex can't see.
-            agent_identity: Rendered ``{{agent_identity}}`` text -- the
-                requesting company's own identity (see
-                ``app.ai.identity.injection.format_agent_identity``), or the
-                system default when no company profile is configured.
-            user_display_name: Rendered ``{{user_display_name}}`` text -- an
-                instruction to address the caller by name (see
-                ``app.ai.identity.injection.format_user_address``), or a
-                neutral fallback when no name is known.
-            tools: Tools bindable for this turn. Empty when nothing is
-                attached (no document, no legislation retriever) -- the loop
-                is then skipped entirely and this behaves like a plain chat.
-            config: Runnable config, forwarded to tool handlers that invoke a
-                sub-graph and used to emit ``tool_call`` progress events.
-            node: SSE node id these events are published under.
+                Yalnızca ikincil, prompt seviyesinde bir katman -- sınırı asıl
+                uygulayan deterministik kontrollerdir (``document_tools.py``'nin
+                erişimde reddi, ``output_gate.py``); bu, bir regex'in
+                yakalayamayacağı parafraz durumunu yakalamak için vardır.
+            agent_identity: Render edilmiş ``{{agent_identity}}`` metni -- isteği
+                yapan şirketin kendi kimliği (bkz.
+                ``app.ai.identity.injection.format_agent_identity``) veya
+                yapılandırılmış bir şirket profili yoksa sistem varsayılanı.
+            user_display_name: Render edilmiş ``{{user_display_name}}`` metni --
+                çağırana ismiyle hitap etme talimatı (bkz.
+                ``app.ai.identity.injection.format_user_address``) veya isim
+                bilinmiyorsa nötr bir yedek.
+            tools: Bu tur için bağlanabilir araçlar. Hiçbir şey ekli değilse
+                (belge yok, mevzuat erişimcisi yok) boştur -- bu durumda döngü
+                tamamen atlanır ve bu düz bir sohbet gibi davranır.
+            config: Bir alt grafiği tetikleyen araç işleyicilerine iletilen ve
+                ``tool_call`` ilerleme olaylarını yayınlamak için kullanılan
+                çalıştırılabilir yapılandırma.
+            node: Bu olayların yayınlandığı SSE node id'si.
 
         Yields:
-            Text chunks of the final answer.
+            Nihai yanıtın metin parçaları.
         """
-        # Deferred: app.ai.workflows.events lives under the app.ai.workflows
-        # package, whose __init__ eagerly imports planning_graph, which
-        # imports AssistantAgent -- a module-level import here would cycle
-        # back into this module before its own class body finished executing.
-        # Same reason planner.py imports BaseAgent inside a function instead
-        # of at module scope.
+        # Ertelenmiş import: app.ai.workflows.events, __init__'i eagerly
+        # planning_graph'ı import eden app.ai.workflows paketinin altında
+        # yaşar; planning_graph de AssistantAgent'ı import eder -- burada
+        # modül seviyesinde bir import, bu modülün kendi sınıf gövdesi
+        # tamamlanmadan önce buraya döngüsel olarak geri döner. planner.py'nin
+        # BaseAgent'ı modül kapsamında değil bir fonksiyon içinde import
+        # etmesinin nedeni de aynıdır.
         from app.ai.workflows.events import emit_tool_call
 
         context = {
@@ -129,12 +130,13 @@ class AssistantAgent(BaseAgent):
         tools_by_name = {tool.name: tool for tool in tools}
         lc_tools = [to_langchain_tool(tool) for tool in tools]
 
-        # Set only when a generate_with_tools turn ends the loop cleanly (no
-        # further tool calls) with a non-empty answer already in hand -- the
-        # common shape for a converged tool turn. Left None on every other
-        # exit (a turn's own call raised, MAX_TOOL_TURNS ran out with a tool
-        # call still pending, or no tools were bound at all) so those keep
-        # falling through to the real stream() call below exactly as before.
+        # Yalnızca bir generate_with_tools turu, elde zaten boş olmayan bir
+        # yanıt varken döngüyü temiz bir şekilde (başka araç çağrısı olmadan)
+        # bitirdiğinde set edilir -- yakınsamış bir araç turunun yaygın
+        # biçimi. Diğer her çıkışta (bir turun kendi çağrısı hata fırlattı,
+        # MAX_TOOL_TURNS bir araç çağrısı beklerken tükendi ya da hiç araç
+        # bağlanmadı) None bırakılır; böylece bunlar tam olarak eskisi gibi
+        # aşağıdaki gerçek stream() çağrısına düşmeye devam eder.
         final_response_content: Optional[str] = None
         for _ in range(MAX_TOOL_TURNS if lc_tools else 0):
             try:
@@ -176,13 +178,13 @@ class AssistantAgent(BaseAgent):
                     }
                 )
 
-        # Reuse the tool loop's own answer when it already converged instead
-        # of paying for a second full generation pass to say the same thing:
-        # on a real request this was the difference between two Ollama calls
-        # and three, and the third was what pushed the "assist" node past its
-        # node_budget ceiling (app/ai/policy/schema.py) often enough to matter.
-        # Falls through to the original unconditional stream() whenever there
-        # is no such answer yet (see final_response_content's own comment).
+        # Araç döngüsünün kendi yanıtı zaten yakınsadığında, aynı şeyi tekrar
+        # söylemek için ikinci bir tam üretim geçişine ödeme yapmak yerine onu
+        # yeniden kullan: gerçek bir istekte bu, iki Ollama çağrısı ile üç
+        # arasındaki farktı ve üçüncüsü, "assist" node'unu node_budget
+        # tavanının (app/ai/policy/schema.py) üzerine, önemli olacak sıklıkta
+        # itiyordu. Böyle bir yanıt henüz yoksa (bkz. final_response_content'in
+        # kendi yorumu) orijinal koşulsuz stream() çağrısına düşer.
         final_chunks: list[str] = []
         if final_response_content:
             final_chunks.append(final_response_content)
@@ -192,9 +194,9 @@ class AssistantAgent(BaseAgent):
                 final_chunks.append(chunk)
                 yield chunk
 
-        # Measured against `messages` as it stands right before the final
-        # call -- the largest the prompt gets this turn (tool turns already
-        # folded in), which is exactly the context-overflow risk moment.
+        # Nihai çağrıdan hemen önceki haliyle `messages`e göre ölçülür -- bu
+        # turda prompt'un ulaştığı en büyük boyut (araç turları zaten
+        # katlanmış), ki bu tam olarak bağlam taşması riski anıdır.
         prompt_text = "\n".join(msg.get("content", "") or "" for msg in messages)
         LLM_TOKENS.labels(agent=self.name, kind="prompt").inc(
             self.llm_client.count_tokens(prompt_text)

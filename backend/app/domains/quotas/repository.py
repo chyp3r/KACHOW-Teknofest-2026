@@ -9,7 +9,7 @@ from app.domains.quotas.model.usage_counter_model import UsageCounterModel
 
 
 class UsageCounterRepository:
-    """Repository for `usage_counters` (see `UsageCounterModel`)."""
+    """`usage_counters` için repository (bkz. `UsageCounterModel`)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -25,15 +25,16 @@ class UsageCounterRepository:
         return result.scalar_one_or_none()
 
     async def increment(self, company_id: str, metric: str, period: str, amount: int = 1) -> UsageCounterModel:
-        """Fetch-or-create `(company_id, metric, period)`'s counter and add
-        `amount` to it. Not a single atomic `UPSERT ... ON CONFLICT DO
-        UPDATE` -- the RLS-scoped `kachow_app` connection already serialises
-        per-request through the normal transaction/session lifecycle the
-        rest of this codebase relies on (see `QuotaService`'s module
-        docstring for the same reasoning `AuditLogRepository.append`
-        documents for its own read-then-write `seq` computation), and a
-        month's worth of concurrent uploads from one company is nowhere
-        near the volume where a lost update here would matter in practice.
+        """`(company_id, metric, period)`'in sayacını getir ya da oluştur ve
+        `amount` kadar ekle. Tek atomik bir `UPSERT ... ON CONFLICT DO
+        UPDATE` değildir -- RLS kapsamlı `kachow_app` bağlantısı, bu kod
+        tabanının geri kalanının dayandığı normal transaction/session
+        yaşam döngüsü üzerinden zaten istek başına serileştirir (aynı
+        mantık için `QuotaService`'in modül docstring'ine bakın;
+        `AuditLogRepository.append`'in kendi oku-sonra-yaz `seq`
+        hesaplaması için belgelediğiyle aynı), ve bir şirketten gelen bir
+        aylık eşzamanlı yüklemeler, buradaki kaybolan bir güncellemenin
+        pratikte önemli olacağı hacmin çok altındadır.
         """
         counter = await self.get(company_id, metric, period)
         if counter is None:
@@ -47,7 +48,7 @@ class UsageCounterRepository:
 
 
 class CompanyQuotaRepository:
-    """Repository for `company_quotas` (see `CompanyQuotaModel`)."""
+    """`company_quotas` için repository (bkz. `CompanyQuotaModel`)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db

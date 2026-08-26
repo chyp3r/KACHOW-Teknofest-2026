@@ -8,22 +8,23 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class ChatSessionModel(Base, TimestampMixin):
-    """One chat conversation, keyed by its LangGraph checkpointer thread_id.
+    """LangGraph checkpointer thread_id'siyle anahtarlanmış tek bir sohbet konuşması.
 
-    ``id`` stores the *composed* thread_id (``ChatService._thread_id``,
-    ``f"{user_id}:{session_id}"`` when authenticated) rather than the raw
-    client-supplied session_id, so a session row joins ``RunModel.thread_id``
-    on the same string. This table exists purely to answer "what has this
-    user talked about" (listing + display); the LangGraph checkpointer
-    remains the source of truth for resuming a paused workflow.
+    ``id``, ham istemci tarafından sağlanan session_id yerine *birleştirilmiş*
+    thread_id'yi saklar (``ChatService._thread_id``, kimlik doğrulanmışsa
+    ``f"{user_id}:{session_id}"``), böylece bir oturum satırı
+    ``RunModel.thread_id`` ile aynı dize üzerinden join edilebilir. Bu tablo
+    salt "bu kullanıcı ne konuştu" sorusunu (listeleme + görüntüleme)
+    yanıtlamak için var; duraklatılmış bir iş akışını devam ettirmek için
+    gerçek kaynak (source of truth) LangGraph checkpointer'ı olarak kalır.
     """
 
     __tablename__ = "chat_sessions"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: NOT NULL since migration `0016_recorder_tables_rls` -- carried from
-    #: `PlanningState.company_id` via `ChatService`'s turn-completion hook,
-    #: same as `user_id`.
+    #: `0016_recorder_tables_rls` migrasyonundan beri NOT NULL --
+    #: `PlanningState.company_id`'den `ChatService`'in tur-tamamlama hook'u
+    #: üzerinden taşınır, `user_id` ile aynı şekilde.
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
@@ -31,25 +32,25 @@ class ChatSessionModel(Base, TimestampMixin):
         String, ForeignKey("users.id"), nullable=True, index=True
     )
     document_id: Mapped[Optional[str]] = mapped_column(String, nullable=True, index=True)
-    #: First user message, truncated -- a cheap display label, not derived
-    #: from an LLM call.
+    #: Kırpılmış ilk kullanıcı mesajı -- LLM çağrısından türetilmeyen,
+    #: ucuz bir görüntüleme etiketi.
     title: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class ChatMessageModel(Base, TimestampMixin):
-    """One turn's worth of message (either side) within a `ChatSessionModel`.
+    """`ChatSessionModel` içinde bir turluk mesaj (her iki taraf da olabilir).
 
-    Written by ``app.domains.chat.chat_recorder`` after a turn completes --
-    never from the request-scoped DI path, since the SSE streaming endpoint's
-    worker task outlives the FastAPI dependency-injected session (see the
-    recorder module's own docstring).
+    Bir tur tamamlandıktan sonra ``app.domains.chat.chat_recorder`` tarafından
+    yazılır -- asla istek-kapsamlı DI yolundan değil, çünkü SSE streaming
+    endpoint'inin worker görevi, FastAPI'nin dependency-injected session'ından
+    daha uzun ömürlüdür (bkz. recorder modülünün kendi docstring'i).
     """
 
     __tablename__ = "chat_messages"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
-    #: Denormalized from the parent session; NOT NULL since `0016_recorder_
-    #: tables_rls` -- see `ChatSessionModel.company_id`.
+    #: Üst (parent) oturumdan denormalize edilmiştir; `0016_recorder_
+    #: tables_rls`'den beri NOT NULL -- bkz. `ChatSessionModel.company_id`.
     company_id: Mapped[str] = mapped_column(
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
@@ -60,6 +61,6 @@ class ChatMessageModel(Base, TimestampMixin):
     role: Mapped[str] = mapped_column(String, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False, default="")
     workflow_status: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    #: The assistant turn's ``ChatMessageResponse.details`` payload; unset
-    #: for user turns.
+    #: Asistan turunun ``ChatMessageResponse.details`` payload'ı; kullanıcı
+    #: turları için ayarlanmaz.
     details: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

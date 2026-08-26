@@ -15,7 +15,7 @@ TEXT_MIME_PREFIX = "text/"
 
 
 class PlainTextExtractor(BaseDocumentExtractor):
-    """Decodes already-textual uploads without invoking a document parser."""
+    """Halihazırda metinsel yüklemeleri bir belge ayrıştırıcı çağırmadan çözer."""
 
     name = "plain_text"
 
@@ -27,16 +27,16 @@ class PlainTextExtractor(BaseDocumentExtractor):
         mime_type: Optional[str] = None,
         raster_cache: Optional[dict] = None,
     ) -> ExtractedDocument:
-        """Decode the bytes as UTF-8, replacing undecodable sequences.
+        """Byte'ları, çözülemeyen dizileri değiştirerek UTF-8 olarak çöz.
 
         Args:
-            content: The raw document bytes.
-            file_name: Original file name (unused).
-            mime_type: Declared content type (unused).
-            raster_cache: Unused; this extractor never rasterises anything.
+            content: Ham belge byte'ları.
+            file_name: Orijinal dosya adı (kullanılmıyor).
+            mime_type: Bildirilen içerik türü (kullanılmıyor).
+            raster_cache: Kullanılmıyor; bu çıkarıcı hiçbir şeyi rasterize etmez.
 
         Returns:
-            The decoded text as a single page.
+            Tek sayfa olarak çözülen metin.
         """
         text = content.decode("utf-8", errors="replace")
         logger.info("PlainTextExtractor decoded %d characters.", len(text))
@@ -55,7 +55,7 @@ class PlainTextExtractor(BaseDocumentExtractor):
         file_name: Optional[str] = None,
         mime_type: Optional[str] = None,
     ) -> bool:
-        """Accept only declared text types or text extensions, never binary."""
+        """Yalnızca bildirilen metin türlerini veya metin uzantılarını kabul et, asla ikiliyi değil."""
         if has_pdf_magic_bytes(content):
             return False
         if mime_type and mime_type.startswith(TEXT_MIME_PREFIX):

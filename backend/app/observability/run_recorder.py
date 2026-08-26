@@ -1,18 +1,19 @@
-"""Best-effort persistence of each planning-graph run's decision trail.
+"""Her planning-graph run'ının karar izinin best-effort kalıcılaştırılması.
 
-The planning graph is compiled once per process (see
-``app.api.dependency.get_planning_graph``) and its nodes are plain closures
--- they never get a request-scoped ``AsyncSession`` the way a FastAPI
-endpoint does via ``Depends(get_db)``. Each function here opens and closes
-its own short-lived session instead, the same pattern already used for a
-one-off connectivity check (``app.infrastructure.database.session.
-verify_db_connection``).
+Planning graph her process için bir kez derlenir (bkz.
+``app.api.dependency.get_planning_graph``) ve node'ları düz closure'lardır
+-- bir FastAPI endpoint'inin ``Depends(get_db)`` üzerinden aldığı gibi
+istek kapsamlı bir ``AsyncSession`` asla almazlar. Buradaki her fonksiyon
+bunun yerine kendi kısa ömürlü session'ını açar ve kapatır; tek seferlik
+bir bağlantı kontrolünde (``app.infrastructure.database.session.
+verify_db_connection``) zaten kullanılan aynı desen.
 
-Every function swallows its own exceptions and only logs -- recording a run
-must never be the reason a chat turn fails. This mirrors how Langfuse
-tracing (``app.observability.tracer``) and every other secondary side effect
-in this codebase (event bus publishes, the document ownership registry)
-degrade to "not recorded" rather than raising.
+Her fonksiyon kendi exception'larını yutar ve sadece loglar -- bir run'ı
+kaydetmek bir sohbet turunun başarısız olmasının nedeni olmamalıdır. Bu,
+Langfuse tracing'in (``app.observability.tracer``) ve bu kod tabanındaki
+diğer her ikincil yan etkinin (event bus publish'leri, doküman sahiplik
+kaydı) hata fırlatmak yerine "kaydedilmedi" durumuna bozulma şeklini
+yansıtır.
 """
 
 import logging
@@ -42,24 +43,24 @@ async def start_run(
     clarification: Optional[dict[str, Any]],
     company_id: Optional[str] = None,
 ) -> None:
-    """Record a run's resolved plan at the moment planning completes.
+    """Planning tamamlandığı anda bir run'ın çözülmüş planını kaydeder.
 
     Args:
-        run_id: This turn's run id (see ``PlanningState.run_id``).
-        thread_id: The checkpointer thread this run belongs to.
-        user_id: The authenticated caller, when known.
-        document_id: The attached document, if any.
-        input_text: The user's message this turn.
+        run_id: Bu turun run id'si (bkz. ``PlanningState.run_id``).
+        thread_id: Bu run'ın ait olduğu checkpointer thread'i.
+        user_id: Kimliği doğrulanmış çağıran, biliniyorsa.
+        document_id: Varsa eklenen doküman.
+        input_text: Kullanıcının bu turdaki mesajı.
         intent, plan_steps, source, confidence, evidence, alternatives,
-            clarification: Every field of the ``PlanDecision``
-            ``resolve_plan`` produced (see
-            ``app.ai.workflows.planner.PlanDecision``).
-        company_id: The caller's tenant (``PlanningState.company_id``, set
-            by ``ChatService._invoke``). Threaded through so this INSERT
-            passes ``runs``' row-level-security ``WITH CHECK`` once that
-            table is migrated to it (see ``tenant_session``) -- ``None``
-            degrades to "not recorded" via the try/except below rather than
-            raising, same as any other recorder failure.
+            clarification: ``resolve_plan``'ın ürettiği ``PlanDecision``'ın
+            (bkz. ``app.ai.workflows.planner.PlanDecision``) her alanı.
+        company_id: Çağıranın tenant'ı (``ChatService._invoke`` tarafından
+            ayarlanan ``PlanningState.company_id``). Bu INSERT'in, o tablo
+            buna geçirildiğinde ``runs``'ın row-level-security
+            ``WITH CHECK``'ini geçmesi için taşınır (bkz. ``tenant_session``)
+            -- ``None``, diğer her recorder hatasında olduğu gibi hata
+            fırlatmak yerine aşağıdaki try/except üzerinden "kaydedilmedi"
+            durumuna bozulur.
     """
     if not settings.RUN_RECORDING_ENABLED:
         return
@@ -97,15 +98,17 @@ async def record_step(
     error: Optional[str] = None,
     company_id: Optional[str] = None,
 ) -> None:
-    """Record one plan step's outcome (see ``_execute_one_step``).
+    """Bir plan adımının sonucunu kaydeder (bkz. ``_execute_one_step``).
 
-    A no-op when ``run_id`` is empty -- a resumed run whose checkpoint
-    predates this field (or any state built without going through
-    ``planning_node``) has nothing to attach the step to.
+    ``run_id`` boş olduğunda hiçbir şey yapmaz -- checkpoint'i bu alandan
+    öncesine ait olan devam ettirilmiş bir run'ın (veya ``planning_node``
+    üzerinden geçmeden oluşturulan herhangi bir state'in) adımı
+    iliştirecek hiçbir şeyi yoktur.
 
     Args:
-        company_id: See :func:`start_run`'s docstring -- same reasoning,
-            denormalized onto ``run_steps`` the same way ``run_id`` is.
+        company_id: :func:`start_run`'ın docstring'ine bakın -- aynı
+            gerekçe, ``run_id``'nin olduğu gibi ``run_steps`` üzerine
+            denormalize edilmiştir.
     """
     if not settings.RUN_RECORDING_ENABLED or not run_id:
         return
@@ -128,18 +131,19 @@ async def record_step(
 
 
 async def end_run(*, run_id: str, status: str, company_id: Optional[str] = None) -> None:
-    """Close out a run's status once its terminal node runs.
+    """Terminal node çalıştığında bir run'ın durumunu kapatır.
 
-    A no-op when ``run_id`` is empty, same reasoning as :func:`record_step`.
-    Never fires for a run that paused at the human-in-the-loop gate and was
-    never resumed -- it stays "running", an honest reflection of an
-    abandoned run rather than a swept or timed-out one.
+    ``run_id`` boş olduğunda hiçbir şey yapmaz, :func:`record_step` ile
+    aynı gerekçe. Human-in-the-loop kapısında duraklayan ve bir daha
+    devam ettirilmeyen bir run için asla tetiklenmez -- "running" olarak
+    kalır; süpürülmüş veya zaman aşımına uğramış değil, terk edilmiş bir
+    run'ın dürüst bir yansımasıdır.
 
     Args:
-        company_id: See :func:`start_run`'s docstring. This is an UPDATE,
-            not an INSERT -- once ``runs`` is under row-level security, the
-            GUC this sets is what lets the row be *found* at all, not just
-            what a WITH CHECK validates.
+        company_id: :func:`start_run`'ın docstring'ine bakın. Bu bir INSERT
+            değil, bir UPDATE'tir -- ``runs`` row-level security altına
+            girdiğinde, bunun ayarladığı GUC sadece bir WITH CHECK'in
+            doğruladığı şey değil, satırın *bulunmasını* sağlayan şeydir.
     """
     if not settings.RUN_RECORDING_ENABLED or not run_id:
         return

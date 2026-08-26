@@ -23,50 +23,52 @@ from app.observability.run_recorder import end_run
 
 logger = logging.getLogger(__name__)
 
-#: The orchestrated flow runs several sub-graphs, so it gets a longer budget
-#: than a single analysis pass.
+#: Orkestrasyon akışı birden fazla alt-graf çalıştırdığı için tek bir analiz
+#: geçişinden daha uzun bir süre bütçesine sahiptir.
 ORCHESTRATION_TIMEOUT_SECONDS = settings.AI_WORKFLOW_TIMEOUT_SECONDS * 2
 
 DEFAULT_REPLY = "İşleminiz tamamlandı."
 INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var."
 
-#: Module-level, not a `ChatService` instance attribute (C13/C14, Faz 8):
-#: `api/dependency.get_chat_service` builds a fresh `ChatService` per
-#: request while the planning graph it wraps is a shared, lazily-built
-#: singleton (`get_planning_graph`'s own module-level `_planning_graph`) --
-#: an instance attribute would give every request its own empty lock
-#: registry and serialize nothing. Every entry point that can advance a
-#: session's graph (a fresh message or a resume, streamed or not) acquires
-#: the lock for the same `thread_id` before touching the checkpointer, so a
-#: double submission -- a fast double-click, a client retry racing the
-#: first request -- is serialized rather than racing two concurrent
-#: `ainvoke()` calls against the same checkpoint: the second call simply
-#: waits for the first to finish (recording included) and then acts on its
-#: settled state, instead of independently reading the same stale
-#: checkpoint and producing a second, divergent continuation (two
-#: `drafts` rows, two recorded chat turns).
+#: Modül seviyesinde, bir `ChatService` örnek özniteliği değil (C13/C14, Faz 8):
+#: `api/dependency.get_chat_service` her istek için yeni bir `ChatService`
+#: oluşturur; oysa sardığı planlama grafı paylaşılan, tembel oluşturulan bir
+#: singleton'dır (`get_planning_graph`'ın kendi modül seviyesindeki
+#: `_planning_graph`'ı) -- bir örnek özniteliği her isteğe kendi boş kilit
+#: kaydını verir ve hiçbir şeyi sıraya sokmaz. Bir oturumun grafını
+#: ilerletebilecek her giriş noktası (yeni bir mesaj ya da devam, akışlı ya
+#: da değil) checkpointer'a dokunmadan önce aynı `thread_id` için kilidi
+#: alır; böylece çift gönderim -- hızlı bir çift tıklama, ilk isteği yarışa
+#: sokan bir istemci yeniden denemesi -- aynı checkpoint'e karşı iki eşzamanlı
+#: `ainvoke()` çağrısını yarıştırmak yerine sıraya sokulur: ikinci çağrı
+#: sadece birincinin bitmesini (kayıt dahil) bekler ve ardından onun
+#: sonuçlanmış durumuna göre hareket eder; aynı bayat checkpoint'i bağımsız
+#: olarak okuyup ikinci, birbirinden sapan bir devam üretmek yerine (iki
+#: `drafts` satırı, iki kaydedilmiş sohbet turu).
 #:
-#: In-process only -- this does not serialize across multiple worker
-#: processes. `drafts`' own `(session_id, version)` unique index (migration
-#: 0028) is the cross-process backstop: a losing concurrent writer there
-#: gets a loud `IntegrityError` instead of a silent duplicate row.
+#: Yalnızca süreç içi -- bu, birden fazla worker süreci arasında sıraya
+#: sokma sağlamaz. `drafts` tablosunun kendi `(session_id, version)` benzersiz
+#: indeksi (migration 0028) süreçler arası yedek güvencedir: orada kaybeden
+#: eşzamanlı bir yazıcı, sessiz bir yinelenen satır yerine gürültülü bir
+#: `IntegrityError` alır.
 _session_locks: dict[str, asyncio.Lock] = {}
 
 
 def _session_lock(thread_id: str) -> asyncio.Lock:
-    """The lock serializing every graph-touching call for one session.
+    """Bir oturuma dokunan her grafik çağrısını sıraya sokan kilit.
 
-    Safe to call unsynchronized from multiple coroutines: everything here
-    is synchronous (no ``await``), so under asyncio's single-threaded event
-    loop it runs to completion without a concurrent call ever observing a
-    half-updated ``_session_locks``.
+    Birden fazla eşyordamdan senkronizasyonsuz çağrılması güvenlidir:
+    buradaki her şey eşzamanlıdır (``await`` yok), bu yüzden asyncio'nun
+    tek iş parçacıklı olay döngüsü altında, eşzamanlı bir çağrının yarım
+    güncellenmiş bir ``_session_locks`` görmesi mümkün olmadan tamamlanır.
 
-    Entries are deliberately never evicted: an unclaimed ``asyncio.Lock``
-    is a handful of bytes, and removing one safely (only once nothing holds
-    or is waiting on it) needs its own synchronization to avoid dropping a
-    lock a concurrent caller is mid-acquire on -- not worth it for a
-    registry bounded by "distinct sessions this process has ever seen",
-    nowhere near the per-turn, per-checkpoint growth ``draft_history`` has.
+    Kayıtlar kasıtlı olarak hiç tahliye edilmez: sahiplenilmemiş bir
+    ``asyncio.Lock`` birkaç bayttır ve birini güvenli şekilde kaldırmak
+    (yalnızca kimse onu tutmuyor veya beklemiyorken) kendi senkronizasyonunu
+    gerektirir -- eşzamanlı bir çağıranın alma işleminin ortasında olduğu bir
+    kilidi düşürmemek için. "Bu sürecin bugüne kadar gördüğü farklı oturumlar"
+    ile sınırlı bir kayıt için buna değmez; bu, ``draft_history``'nin
+    tur başına, checkpoint başına büyümesinin çok uzağındadır.
     """
     lock = _session_locks.get(thread_id)
     if lock is None:
@@ -76,13 +78,13 @@ def _session_lock(thread_id: str) -> asyncio.Lock:
 
 
 class ChatService:
-    """Orchestrates chat and AI workflows through the master planning graph."""
+    """Sohbet ve yapay zeka iş akışlarını ana planlama grafı üzerinden yönetir."""
 
     def __init__(self, planning_graph: Any) -> None:
-        """Initialise the service.
+        """Servisi başlatır.
 
         Args:
-            planning_graph: The compiled master planning workflow.
+            planning_graph: Derlenmiş ana planlama iş akışı.
         """
         self.planning_graph = planning_graph
 
@@ -95,41 +97,43 @@ class ChatService:
         revision_draft: Optional[DraftModel] = None,
         user_display_name: Optional[str] = None,
     ) -> ChatMessageResponse:
-        """Process a user message and return the completed (or paused) result.
+        """Bir kullanıcı mesajını işler ve tamamlanmış (ya da duraklatılmış) sonucu döndürür.
 
         Args:
-            request: The chat request.
-            user_id: The authenticated caller's id, when ``REQUIRE_AUTH`` is
-                on -- folded into the thread_id so one user cannot address
-                another's thread by guessing/reusing its session_id. ``None``
-                in the open demo/dev path, unchanged from before this
-                existed.
-            requester_clearance: The authenticated caller's resolved
-                ``SensitivityLevel.value`` (see
-                ``app.core.permissions.role_checker.clearance_for``), when
-                known. ``None`` in the open demo/dev path.
-            company_id: The authenticated caller's tenant -- carried into
-                the graph's own state (``PlanningState.company_id``) so the
-                run/draft/guardrail recorders can attribute their writes to
-                a company, the same way ``user_id`` already is.
-            revision_draft: Authorized persisted draft selected explicitly
-                as this turn's revision target, when any.
-            user_display_name: The authenticated caller's ``username`` (see
-                ``UserModel``), carried into ``PlanningState.
-                user_display_name`` so the assist agent can address the
-                caller by name (see ``app.ai.identity.injection.
-                format_user_address``). ``None`` in the open demo/dev path.
+            request: Sohbet isteği.
+            user_id: ``REQUIRE_AUTH`` açıkken kimliği doğrulanmış çağıranın
+                id'si -- bir kullanıcının başka birinin thread'ine
+                session_id'sini tahmin ederek/yeniden kullanarak
+                erişememesi için thread_id'nin içine katılır. Açık
+                demo/geliştirme yolunda ``None``, bu özellik var olmadan
+                önceki davranışla aynı.
+            requester_clearance: Kimliği doğrulanmış çağıranın çözümlenmiş
+                ``SensitivityLevel.value`` değeri (bkz.
+                ``app.core.permissions.role_checker.clearance_for``),
+                biliniyorsa. Açık demo/geliştirme yolunda ``None``.
+            company_id: Kimliği doğrulanmış çağıranın kiracısı (tenant) --
+                grafın kendi durumuna (``PlanningState.company_id``)
+                taşınır, böylece run/draft/guardrail kayıt edicileri
+                yazımlarını bir şirkete atfedebilir; ``user_id`` için
+                zaten yapıldığı gibi.
+            revision_draft: Bu turun revizyon hedefi olarak açıkça seçilmiş,
+                yetkilendirilmiş kalıcı taslak, varsa.
+            user_display_name: Kimliği doğrulanmış çağıranın ``username``
+                değeri (bkz. ``UserModel``), asist ajanının çağırana ismiyle
+                hitap edebilmesi için ``PlanningState.user_display_name``'e
+                taşınır (bkz. ``app.ai.identity.injection.
+                format_user_address``). Açık demo/geliştirme yolunda ``None``.
 
         Returns:
-            The orchestrated response.
+            Orkestre edilmiş yanıt.
 
         Raises:
-            AIException: If the workflow fails or exceeds its timeout.
+            AIException: İş akışı başarısız olursa veya zaman aşımını aşarsa.
         """
         thread_id = self._thread_id(request.session_id, user_id)
-        # C13/C14: serializes this whole turn (including the pause-state
-        # check inside `_invoke`) against any other call touching the same
-        # session -- see `_session_lock`'s own docstring.
+        # C13/C14: bu turun tamamını (`_invoke` içindeki duraklama-durumu
+        # kontrolü dahil) aynı oturuma dokunan başka herhangi bir çağrıya
+        # karşı sıraya sokar -- bkz. `_session_lock`'ın kendi docstring'i.
         async with _session_lock(thread_id):
             config = self._trace_config(thread_id, user_id, company_id)
             state = await self._invoke(
@@ -165,25 +169,26 @@ class ChatService:
         revision_draft: Optional[DraftModel] = None,
         user_display_name: Optional[str] = None,
     ) -> AsyncIterator[dict[str, Any]]:
-        """Process a user message, yielding progress events as they happen.
+        """Bir kullanıcı mesajını işler, ilerleme olaylarını gerçekleştikçe yayınlar.
 
-        The worker task is cancelled if the consumer stops iterating. Previously
-        the task was only awaited after the loop, so a client that disconnected
-        mid-stream left the graph running -- holding the local model busy for a
-        response nobody would receive.
+        Tüketici yinelemeyi durdurursa worker görevi iptal edilir. Daha önce
+        görev yalnızca döngüden sonra beklenirdi, bu yüzden akış ortasında
+        bağlantısı kopan bir istemci grafı çalışır durumda bırakıyordu --
+        kimsenin alamayacağı bir yanıt için yerel modeli meşgul tutarak.
 
         Args:
-            request: The chat request.
-            user_id: See :meth:`handle_message`.
-            requester_clearance: See :meth:`handle_message`.
-            company_id: See :meth:`handle_message`.
-            revision_draft: See :meth:`handle_message`.
-            user_display_name: See :meth:`handle_message`.
+            request: Sohbet isteği.
+            user_id: Bkz. :meth:`handle_message`.
+            requester_clearance: Bkz. :meth:`handle_message`.
+            company_id: Bkz. :meth:`handle_message`.
+            revision_draft: Bkz. :meth:`handle_message`.
+            user_display_name: Bkz. :meth:`handle_message`.
 
         Yields:
-            Progress and result events. The first event is always ``session``,
-            carrying the resolved ``thread_id`` -- generated server-side when
-            the caller didn't supply one -- so the client can resume later.
+            İlerleme ve sonuç olayları. İlk olay her zaman ``session``dır ve
+            çözümlenmiş ``thread_id``'yi taşır -- çağıran sağlamadığında
+            sunucu tarafında üretilir -- böylece istemci daha sonra devam
+            edebilir.
         """
         thread_id = self._thread_id(request.session_id, user_id)
         yield {"event": "session", "thread_id": thread_id}
@@ -192,7 +197,7 @@ class ChatService:
 
         async def run_graph() -> None:
             try:
-                # C13/C14: see handle_message's identical comment.
+                # C13/C14: handle_message'daki aynı yorumu bakınız.
                 async with _session_lock(thread_id):
                     config = self._trace_config(thread_id, user_id, company_id)
                     config.setdefault("configurable", {})["status_queue"] = queue
@@ -258,8 +263,9 @@ class ChatService:
         finally:
             if not task.done():
                 task.cancel()
-            # Surface a crash in the worker rather than swallowing it, but never
-            # let teardown of a cancelled task raise out of the generator.
+            # Worker'daki bir çökmeyi yutmak yerine yüzeye çıkar, ama iptal
+            # edilmiş bir görevin sonlanmasının generator'dan dışarı bir
+            # hata fırlatmasına asla izin verme.
             await asyncio.gather(task, return_exceptions=True)
 
     async def resume(
@@ -269,30 +275,31 @@ class ChatService:
         user_id: Optional[str] = None,
         company_id: Optional[str] = None,
     ) -> ChatMessageResponse:
-        """Resume a run paused at the human-in-the-loop gate and await its result.
+        """İnsan-döngüde kapısında duraklatılmış bir çalışmayı devam ettirir ve sonucunu bekler.
 
         Args:
-            session_id: The thread_id the paused run is waiting on.
-            request: The human's answer/decision.
-            user_id: The authenticated caller's id, when ``REQUIRE_AUTH`` is
-                on. Must match the user_id the thread was created under (see
-                :meth:`_thread_id`), or the resume is refused -- otherwise an
-                authenticated caller could resume another user's paused run
-                simply by knowing/guessing its session_id.
-            company_id: The authenticated caller's tenant, for the recorder
-                write below -- the graph's own ``company_id`` state field is
-                already set from the original ``handle_message`` invocation
-                and survives the checkpointer resume unchanged, so this is
-                only needed here for :func:`chat_recorder.record_turn`.
+            session_id: Duraklatılmış çalışmanın beklediği thread_id.
+            request: İnsanın yanıtı/kararı.
+            user_id: ``REQUIRE_AUTH`` açıkken kimliği doğrulanmış çağıranın
+                id'si. Thread'in oluşturulduğu user_id ile eşleşmelidir
+                (bkz. :meth:`_thread_id`), aksi halde devam işlemi
+                reddedilir -- yoksa kimliği doğrulanmış bir çağıran, sadece
+                session_id'yi bilerek/tahmin ederek başka bir kullanıcının
+                duraklatılmış çalışmasını devam ettirebilirdi.
+            company_id: Aşağıdaki kayıt edici yazımı için kimliği doğrulanmış
+                çağıranın kiracısı -- grafın kendi ``company_id`` durum alanı
+                zaten orijinal ``handle_message`` çağrısından ayarlanmıştır
+                ve checkpointer devamında değişmeden kalır, bu yüzden burada
+                yalnızca :func:`chat_recorder.record_turn` için gereklidir.
 
         Returns:
-            The orchestrated response, completed or paused again (e.g. when
-            some missing-information answers were left blank).
+            Orkestre edilmiş yanıt; tamamlanmış ya da tekrar duraklatılmış
+            (örn. bazı eksik bilgi yanıtları boş bırakıldığında).
 
         Raises:
-            AIException: If resuming fails or exceeds its timeout.
-            AuthorizationException: If ``session_id`` belongs to a different
-                user than ``user_id``.
+            AIException: Devam etme başarısız olursa veya zaman aşımını aşarsa.
+            AuthorizationException: ``session_id``, ``user_id``'den farklı
+                bir kullanıcıya aitse.
         """
         from langgraph.types import Command
 

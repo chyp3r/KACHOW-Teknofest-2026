@@ -1,23 +1,25 @@
 """arq job: LoRA/PEFT fine-tuning -- Faz C3, Aşama 3 (#191).
 
-Runs only inside the training worker container (`deploy/docker/worker.
-Dockerfile`, `compose.yml`'s `worker` service under `profiles: ["training"]`
--- never started by plain `docker compose up`, only via
-`scripts/start_training_worker.sh`). Unlike `app.domains.training.service.
-run_style_adapter_training` (which runs synchronously inside the
-triggering request -- see that module's own docstring for why a
-deterministic-diff-plus-one-LLM-call job is cheap enough for that), a LoRA
-run is genuinely long (potentially hours on a GPU host), so it is queued
-via `arq` (`app.workers.queue`) instead of blocking a request.
+Yalnızca training worker container'ı içinde çalışır (`deploy/docker/worker.
+Dockerfile`, `compose.yml`'ın `profiles: ["training"]` altındaki `worker`
+servisi -- düz `docker compose up` ile asla başlatılmaz, yalnızca
+`scripts/start_training_worker.sh` üzerinden). `app.domains.training.service.
+run_style_adapter_training`'in aksine (bu, tetikleyen isteğin içinde eş
+zamanlı çalışır -- deterministic-diff-artı-tek-LLM-çağrılı bir işin bunun
+için neden yeterince ucuz olduğu için o modülün kendi docstring'ine bakın),
+bir LoRA run'ı gerçekten uzundur (bir GPU host'ta potansiyel olarak
+saatler sürebilir), bu yüzden bir isteği bloklamak yerine `arq`
+(`app.workers.queue`) üzerinden kuyruğa alınır.
 
-Each DB touch opens its own short-lived `tenant_session`, same convention
-`app.domains.drafts.draft_recorder` and `app.domains.companies.provider`
-already use for out-of-request work -- this function runs entirely outside
-any request-scoped `Depends(get_db)`. A `TrainingRunModel` instance is
-never carried *mutated* across two `tenant_session` blocks (only its
-already-loaded plain columns are read after its own session closes, safe
-under `expire_on_commit=False` since it has no relationships) -- writing
-to it always re-fetches a fresh, session-attached copy first.
+Her DB dokunuşu kendi kısa ömürlü `tenant_session`'ını açar; bu,
+`app.domains.drafts.draft_recorder` ve `app.domains.companies.provider`'ın
+istek dışı işler için zaten kullandığı aynı kuraldır -- bu fonksiyon,
+istek kapsamlı herhangi bir `Depends(get_db)`'in tamamen dışında çalışır.
+Bir `TrainingRunModel` örneği asla iki `tenant_session` bloğu arasında
+*mutasyona uğramış* olarak taşınmaz (yalnızca zaten yüklenmiş düz sütunları,
+kendi session'ı kapandıktan sonra okunur; ilişkisi olmadığından
+`expire_on_commit=False` altında güvenlidir) -- ona yazmak her zaman önce
+taze, session'a bağlı bir kopyayı yeniden getirir.
 """
 
 import logging
@@ -41,27 +43,29 @@ from app.infrastructure.providers.ollama import OllamaClient
 
 logger = logging.getLogger(__name__)
 
-#: A candidate model whose average shadow-eval confidence score falls more
-#: than this many points below the current model's is treated as a
-#: regression -- see `_shadow_evaluate`'s own docstring for the full
-#: reasoning and its deliberately scoped-down design.
+#: Ortalama shadow-eval güven skoru, mevcut modelinkinden bu kadar puandan
+#: fazla düşen bir aday model regresyon olarak kabul edilir -- tam gerekçe
+#: ve bilinçli olarak sınırlandırılmış tasarım için `_shadow_evaluate`'in
+#: kendi docstring'ine bakın.
 SHADOW_EVAL_REGRESSION_MARGIN = 5.0
-#: How many held-out compiled samples the shadow eval generates drafts for
-#: -- small on purpose, since this calls a live Ollama server twice
-#: (current model + candidate model) per sample.
+#: Shadow eval'in kaç ayrılmış (held-out) derlenmiş örnek için taslak
+#: ürettiği -- bilinçli olarak küçük, çünkü bu örnek başına canlı bir
+#: Ollama sunucusunu iki kez çağırır (mevcut model + aday model).
 SHADOW_EVAL_SAMPLE_SIZE = 20
 
 
 async def run_lora_training_job(ctx: dict, company_id: str, run_id: str) -> Dict[str, Any]:
-    """The arq job function itself -- registered in `app.workers.queue.
-    WorkerSettings.functions`. `ctx` is arq's own per-job context (unused
-    here, no cross-job state needed).
+    """arq job fonksiyonunun kendisi -- `app.workers.queue.
+    WorkerSettings.functions` içinde kayıtlıdır. `ctx`, arq'ın kendi
+    iş-başına bağlamıdır (burada kullanılmaz, işler arası duruma gerek
+    yoktur).
 
-    Never raises: every failure path updates `training_runs.status` to
-    `"failed"` with `error` set and returns a result dict, so a run's
-    outcome is always visible via `GET /companies/{id}/training-runs` --
-    the same contract `run_style_adapter_training` already establishes for
-    the synchronous style-adapter path.
+    Asla exception fırlatmaz: her başarısızlık yolu `training_runs.status`'u
+    `error` ayarlanmış `"failed"` olarak günceller ve bir sonuç dict'i
+    döner, böylece bir run'ın sonucu her zaman
+    `GET /companies/{id}/training-runs` üzerinden görünür -- eş zamanlı
+    style-adapter yolu için `run_style_adapter_training`'in zaten
+    kurduğu aynı sözleşme.
     """
     async with tenant_session(company_id, is_root=False) as session:
         repository = TrainingRepository(session)
@@ -93,9 +97,10 @@ async def run_lora_training_job(ctx: dict, company_id: str, run_id: str) -> Dict
 async def _run_training(*, company_id: str, run_id: str, kind: str, slug: str) -> Dict[str, Any]:
     async with tenant_session(company_id, is_root=False) as session:
         service = TrainingService(TrainingRepository(session))
-        # Recompile first -- same reasoning as run_style_adapter_training's
-        # own docstring: a run's sample_count should reflect every vote
-        # cast up to this moment, not a stale table snapshot.
+        # Önce yeniden derle -- run_style_adapter_training'in kendi
+        # docstring'iyle aynı gerekçe: bir run'ın sample_count'u eski bir
+        # tablo anlık görüntüsünü değil, bu ana kadar verilmiş her oyu
+        # yansıtmalıdır.
         await service.compile_samples(company_id, training_run_id=run_id)
         pairs = await service.active_pairs_for_training(company_id)
 
@@ -166,20 +171,21 @@ async def _run_training(*, company_id: str, run_id: str, kind: str, slug: str) -
 
 
 async def _ollama_create(model_name: str, adapter_dir: str, base_model: str) -> None:
-    """Publish the adapter as a runnable Ollama model via the HTTP
-    `/api/create` endpoint -- not the `ollama` CLI. This worker container
-    has no local Ollama install; the CLI would also just shell out to
-    whatever host process actually runs Ollama (see `settings.
-    OLLAMA_BASE_URL`'s own docstring on why that is `host.docker.internal`
-    in dev, not a compose service), so the HTTP API is the only path that
-    works the same way regardless of where Ollama actually runs.
+    """Adapter'ı, HTTP `/api/create` uç noktası üzerinden çalıştırılabilir
+    bir Ollama modeli olarak yayınlar -- `ollama` CLI'ı değil. Bu worker
+    container'ında yerel bir Ollama kurulumu yoktur; CLI de zaten Ollama'yı
+    gerçekten çalıştıran host sürecine shell çağrısı yapardı (bunun dev'de
+    neden bir compose servisi değil `host.docker.internal` olduğu için
+    `settings.OLLAMA_BASE_URL`'in kendi docstring'ine bakın), bu yüzden
+    HTTP API, Ollama'nın gerçekte nerede çalıştığından bağımsız olarak
+    aynı şekilde çalışan tek yoldur.
 
-    `adapter_dir` must be a path the Ollama *server* process can itself
-    read -- if Ollama runs on a different host/volume than this worker
-    writes `TRAINING_ARTIFACTS_DIR` to, that directory needs to be a path
-    shared between them (e.g. the same bind mount on both sides). That is
-    a deployment-topology decision this function does not, and cannot,
-    make for you.
+    `adapter_dir`, Ollama *sunucu* sürecinin kendisinin okuyabileceği bir
+    yol olmalıdır -- Ollama, bu worker'ın `TRAINING_ARTIFACTS_DIR`'a
+    yazdığından farklı bir host/volume üzerinde çalışıyorsa, o dizinin
+    ikisi arasında paylaşılan bir yol olması gerekir (örn. her iki tarafta
+    da aynı bind mount). Bu, bu fonksiyonun sizin yerinize yapmadığı ve
+    yapamayacağı bir dağıtım-topolojisi kararıdır.
     """
     modelfile = f"FROM {base_model}\nADAPTER {adapter_dir}\n"
     async with httpx.AsyncClient(base_url=settings.OLLAMA_BASE_URL, timeout=120.0) as client:
@@ -192,28 +198,30 @@ async def _ollama_create(model_name: str, adapter_dir: str, base_model: str) -> 
 async def _shadow_evaluate(
     pairs: List[PreferencePair], *, current_model: str, candidate_model: str
 ) -> Dict[str, Any]:
-    """Compare the candidate model against the current one on a small
-    held-out sample, before letting a training run publish it.
+    """Bir training run'ının aday modeli yayınlamasına izin vermeden önce,
+    onu küçük bir ayrılmış (held-out) örnek üzerinde mevcut modelle
+    karşılaştırır.
 
-    Deliberately scoped down from a full A/B draft-quality comparison:
-    `evaluation.harness.draft_suite` measures the *deterministic verifier*
-    against a fixed gold set (no model call at all), so it cannot compare
-    two models' generations -- there is no existing harness for that. This
-    instead drives both models with a plain instruction built from each
-    held-out sample's `prompt_context` (not the full production writer.md
-    prompt -- replicating that faithfully is out of scope here) and scores
-    each output with the same deterministic `verify_draft` the real draft
-    pipeline uses. Only the confidence-score gap is compared -- since
-    neither call has a real source document, groundedness checks trivially
-    pass for both sides; what differs is the structural/format score,
-    which *is* a real signal a style-trained model should improve, not
-    regress.
+    Bilinçli olarak tam bir A/B taslak-kalitesi karşılaştırmasından
+    sınırlandırılmıştır: `evaluation.harness.draft_suite`,
+    *deterministik verifier*'ı sabit bir altın veri setine karşı ölçer
+    (hiç model çağrısı yapmaz), bu yüzden iki modelin üretimlerini
+    karşılaştıramaz -- bunun için mevcut bir harness yoktur. Bunun yerine
+    bu fonksiyon, her ayrılmış örneğin `prompt_context`'inden oluşturulan
+    düz bir talimatla her iki modeli de çalıştırır (tam üretim writer.md
+    prompt'u değil -- onu sadakatle çoğaltmak burada kapsam dışıdır) ve
+    her çıktıyı gerçek taslak pipeline'ının kullandığı aynı deterministik
+    `verify_draft` ile puanlar. Yalnızca güven-skoru farkı karşılaştırılır
+    -- çünkü hiçbir çağrının gerçek bir kaynak belgesi yoktur, temellendirme
+    (groundedness) kontrolleri her iki taraf için de önemsizce geçer; farklı
+    olan, stil-eğitimli bir modelin iyileştirmesi gereken, gerilememesi
+    gereken gerçek bir sinyal olan yapısal/biçim skorudur.
 
-    A model with no held-out samples to compare (e.g. every pair happened
-    to lack a `chosen` completion) is never marked as a regression --
-    there's no evidence against it, and refusing to ever publish would be
-    worse than publishing on faith the way a hand-authored adapter already
-    does.
+    Karşılaştıracak ayrılmış örneği olmayan bir model (örn. her çiftin
+    `chosen` tamamlaması eksik olduğunda) asla regresyon olarak
+    işaretlenmez -- ona karşı kanıt yoktur ve hiç yayınlamayı reddetmek,
+    elle yazılmış bir adapter'ın zaten yaptığı gibi güvene dayanarak
+    yayınlamaktan daha kötü olurdu.
     """
     held_out = [pair.chosen for pair in pairs if pair.chosen][:SHADOW_EVAL_SAMPLE_SIZE]
     if not held_out:

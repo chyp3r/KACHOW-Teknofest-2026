@@ -4,11 +4,11 @@ from app.api.exceptions.base import BaseAppException
 
 
 class ValidationException(BaseAppException):
-    """Exception raised when payload validation fails."""
+    """İstek gövdesi doğrulaması başarısız olduğunda fırlatılan istisna."""
 
     def __init__(
         self,
-        message: str = "Invalid request data.",
+        message: str = "Geçersiz istek verisi.",
         error_code: str = "VALIDATION_ERROR",
         details: Optional[Dict[str, Any]] = None,
     ):

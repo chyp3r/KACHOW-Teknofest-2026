@@ -1,21 +1,21 @@
-"""The transfer-specific policy gate -- narrows what the PDP already permitted.
+"""Transfer'e özgü politika kapısı -- PDP'nin zaten izin verdiğini daraltır.
 
-Mirrors `app.core.authz.engine`'s own shape (a pure decision object, no
-raising) but is deliberately a separate, smaller layer: `TransferPolicy`
-only ever *removes* permission the PDP already granted (self-send, an
-inactive/deleted recipient, insufficient clearance, a missing favorite on
-the AI channel) -- it never grants anything the PDP denied, and the two are
-never allowed to disagree about who owns a "yes". See `ArtifactTransferService.
-execute`'s own docstring for where this sits in the call order (PDP first,
-this second).
+`app.core.authz.engine`'in kendi şeklini yansıtır (fırlatma yapmayan, saf
+bir karar nesnesi) ancak bilinçli olarak ayrı, daha küçük bir katmandır:
+`TransferPolicy` yalnızca PDP'nin zaten verdiği izni *kaldırır* (kendine
+gönderim, aktif olmayan/silinmiş bir alıcı, yetersiz yetki, AI kanalında
+eksik bir favori) -- PDP'nin reddettiği hiçbir şeye asla izin vermez ve
+ikisinin "evet" sahipliği konusunda anlaşmazlığa düşmesine asla izin
+verilmez. Bunun çağrı sırasında nereye oturduğu için (önce PDP, sonra bu)
+`ArtifactTransferService.execute`'un kendi docstring'ine bakın.
 
-Tenant matching is deliberately *not* one of this policy's own checks: by
-the time `evaluate` runs, `recipient` was already loaded through
-`UserRepository.get_by_id_in_company(recipient_id, company_id)` -- a
-cross-tenant id resolves to `None` there and the caller raises
-`NotFoundException` before policy is ever consulted, the same "RLS/company-
-scoped lookup, not a business rule" pattern `PoolService`/`DraftShareService`
-already use.
+Kiracı (tenant) eşleşmesi bilinçli olarak bu politikanın kendi
+kontrollerinden biri *değildir*: `evaluate` çalıştığında, `recipient` zaten
+`UserRepository.get_by_id_in_company(recipient_id, company_id)` üzerinden
+yüklenmiştir -- kiracılar arası bir id orada `None`'a çözümlenir ve çağıran,
+politika hiç danışılmadan önce `NotFoundException` fırlatır; bu,
+`PoolService`/`DraftShareService`'in zaten kullandığı "iş kuralı değil,
+RLS/şirket kapsamlı arama" örüntüsünün aynısıdır.
 """
 
 from dataclasses import dataclass
@@ -30,20 +30,20 @@ from app.domains.users.repository import UserFavoriteRepository
 
 @dataclass(frozen=True)
 class TransferPolicyDecision:
-    """The verdict `ArtifactTransferService.execute` acts on.
+    """`ArtifactTransferService.execute`'un üzerine hareket ettiği karar.
 
     Attributes:
-        permit: Whether the transfer may proceed.
-        reason_code: A short machine tag for the first failing check
+        permit: Transferin devam edip edemeyeceği.
+        reason_code: İlk başarısız kontrol için kısa bir makine etiketi
             (`"self_transfer"`, `"recipient_inactive"`, `"clearance"`,
-            `"favorite_required"`), or `None` when `permit` is True.
-        message_tr: A ready-to-show Turkish explanation, or `None` when
-            `permit` is True.
-        cross_unit: Whether the recipient's primary unit differs from the
-            artifact's own destination unit -- computed regardless of
-            `permit`, since a caller building a confirmation prompt (Faz 4)
-            needs this even when everything else about the transfer is
-            fine.
+            `"favorite_required"`), ya da `permit` True olduğunda `None`.
+        message_tr: Doğrudan gösterilmeye hazır Türkçe bir açıklama, ya da
+            `permit` True olduğunda `None`.
+        cross_unit: Alıcının birincil biriminin belgenin kendi hedef
+            biriminden farklı olup olmadığı -- bir çağıranın bir onay
+            istemi (Faz 4) oluşturması, transfer hakkındaki her şey yolunda
+            olsa bile buna ihtiyaç duyduğundan, `permit`'ten bağımsız
+            olarak hesaplanır.
     """
 
     permit: bool
@@ -71,34 +71,35 @@ class TransferPolicy:
         artifact_sensitivity: Optional[SensitivityLevel] = None,
         artifact_destination_unit_id: Optional[str] = None,
     ) -> TransferPolicyDecision:
-        """Evaluate every deny rule in order, short-circuiting on the first hit.
+        """Her reddetme kuralını sırayla değerlendirir, ilk isabette kısa devre yapar.
 
         Args:
-            sender: The authenticated caller, already PDP-authorized to
-                transfer this specific artifact.
-            recipient: The target user, already resolved within
-                `company_id` (see this module's own docstring).
-            company_id: Tenant scope, for the cross-unit/favorite lookups.
-            channel: `"chat"` | `"ai"` | `"rest"` -- only `"ai"` requires
-                the recipient to already be a favorite (see the plan's
-                §2.3: the AI channel must not be able to send to someone
-                the user never explicitly trusted enough to favorite;
-                manual chat/REST sends carry no such requirement, since the
-                human is directly choosing the recipient by hand).
-            artifact_sensitivity: The document's confidentiality grade.
-                `None` for a draft -- drafts carry no clearance concept in
-                this system today, so the check is skipped entirely rather
-                than compared against a manufactured default.
-            artifact_destination_unit_id: The artifact's own routed unit
-                (`drafts.destination_unit_id`), when it has one, for the
-                cross-unit computation. `None` for a document (no
-                equivalent concept exists on `DocumentModel` today) or an
-                unrouted draft -- `cross_unit` then stays `False`, an
-                honest "can't be computed" rather than a guess.
+            sender: Bu belirli belgeyi transfer etmek için zaten
+                PDP-yetkili, kimliği doğrulanmış çağıran.
+            recipient: `company_id` içinde zaten çözümlenmiş hedef kullanıcı
+                (bkz. bu modülün kendi docstring'i).
+            company_id: Cross-unit/favori aramaları için kiracı kapsamı.
+            channel: `"chat"` | `"ai"` | `"rest"` -- yalnızca `"ai"`,
+                alıcının zaten bir favori olmasını gerektirir (bkz. planın
+                §2.3'ü: AI kanalı, kullanıcının açıkça favorilemeye
+                güvenmediği birine gönderim yapamamalıdır; manuel
+                chat/REST gönderimlerinde böyle bir gereklilik yoktur,
+                çünkü alıcıyı doğrudan elle seçen insandır).
+            artifact_sensitivity: Evrakın gizlilik derecesi. Bir taslak
+                için `None` -- taslaklar bugün bu sistemde yetki kavramı
+                taşımaz, dolayısıyla kontrol uydurma bir varsayılanla
+                karşılaştırılmak yerine tamamen atlanır.
+            artifact_destination_unit_id: Belgenin cross-unit hesaplaması
+                için, varsa kendi yönlendirilmiş birimi
+                (`drafts.destination_unit_id`). Bir evrak için `None`
+                (`DocumentModel`de bugün eşdeğer bir kavram yok) veya
+                yönlendirilmemiş bir taslak için -- bu durumda
+                `cross_unit` `False` kalır, bir tahmin yerine dürüst bir
+                "hesaplanamıyor" durumu.
 
         Returns:
-            A `TransferPolicyDecision`. `cross_unit` is always computed,
-            even on a `permit=False` decision.
+            Bir `TransferPolicyDecision`. `cross_unit`, `permit=False`
+            bir kararda bile her zaman hesaplanır.
         """
         cross_unit = await self._compute_cross_unit(
             recipient.id, company_id, artifact_destination_unit_id

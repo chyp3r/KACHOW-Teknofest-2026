@@ -1,32 +1,34 @@
-"""Reference phrasings each decision class is matched against semantically.
+"""Her karar sınıfının anlamsal olarak eşleştirildiği referans ifadeler.
 
-The lexical rules in ``intent_rules`` match surfaces literally, so they are
-blind to paraphrase by construction: every new way of saying "prepare a reply"
-has to be added by hand, and the measured baseline showed whole categories
-failing on phrasings nobody had thought to list. These prototypes are the
-semantic counterpart -- a handful of *examples* per class, compared by meaning
-rather than by substring.
+``intent_rules`` içindeki sözcüksel kurallar yüzeyleri harfiyen eşleştirir, bu
+yüzden yapıları gereği parafraza karşı kördürler: "cevap hazırla" demenin her
+yeni yolu elle eklenmelidir ve ölçülen taban çizgisi, kimsenin listelemeyi
+düşünmediği ifadelerde bütün kategorilerin başarısız olduğunu gösterdi. Bu
+prototipler bunun anlamsal karşılığıdır -- her sınıf için alt dizeye göre değil
+anlama göre karşılaştırılan bir avuç *örnek*.
 
-They are examples, not rules. The matcher never decides on a prototype alone
-(see ``semantic.prototype_matcher``): a hit needs both a high similarity and a
-clear gap to the runner-up, because "embedding similarity said so" is a much
-weaker warrant than "the user literally wrote 'taslak hazırla'". The lexical
-layer stays the fast path; this only runs where that layer abstained.
+Bunlar kural değil, örnektir. Eşleştirici hiçbir zaman tek başına bir
+prototipe dayanarak karar vermez (bkz. ``semantic.prototype_matcher``): bir
+isabet için hem yüksek bir benzerlik hem de bir sonrakine belirgin bir fark
+gerekir, çünkü "gömme benzerliği öyle dedi" gerekçesi "kullanıcı gerçekten
+'taslak hazırla' yazdı" gerekçesinden çok daha zayıftır. Sözcüksel katman hızlı
+yol olmaya devam eder; bu katman yalnızca o katmanın çekimser kaldığı yerde
+çalışır.
 
-Prototype *vectors* are precomputed into ``datasets/prototypes/`` by
-``scripts/build_prototypes.py``. Nothing here is embedded at request time
-except the user's own message.
+Prototip *vektörleri*, ``scripts/build_prototypes.py`` tarafından
+``datasets/prototypes/`` içine önceden hesaplanır. İstek anında kullanıcının
+kendi mesajı dışında burada hiçbir şey gömülmez (embed edilmez).
 """
 
 from typing import Mapping
 
 __all__ = ["PROTOTYPES", "FAMILIES", "prototype_texts"]
 
-#: Family -> label -> example phrasings.
+#: Aile -> etiket -> örnek ifadeler.
 #:
-#: Phrasings are chosen to be *different from* the lexical surfaces rather than
-#: to duplicate them. A prototype that repeats a phrase the rule table already
-#: matches adds nothing: that message never reaches this layer.
+#: İfadeler, sözcüksel yüzeyleri yinelemek yerine onlardan *farklı* olacak
+#: şekilde seçilir. Kural tablosunun zaten eşleştirdiği bir ifadeyi tekrar
+#: eden bir prototip hiçbir şey katmaz: o mesaj bu katmana asla ulaşmaz.
 PROTOTYPES: Mapping[str, Mapping[str, tuple[str, ...]]] = {
     "intent": {
         "draft": (
@@ -55,11 +57,12 @@ PROTOTYPES: Mapping[str, Mapping[str, tuple[str, ...]]] = {
             "Teşekkür ederim, çok yardımcı oldun.",
             "Daha önce ne konuşmuştuk, hatırlıyor musun?",
         ),
-        #: Added alongside the `revise` intent's lexical rules (see
-        #: `intent_rules.REVISE_RULES`, all gated on an active draft). Chosen to
-        #: be different phrasings from those surfaces, not restatements of
-        #: them -- a prototype that repeats a matched surface never reaches
-        #: this layer at all (see this module's own docstring).
+        #: `revise` niyetinin sözcüksel kurallarıyla birlikte eklendi (bkz.
+        #: `intent_rules.REVISE_RULES`, tümü aktif bir taslak koşuluna
+        #: bağlıdır). Bu yüzeylerin yeniden ifadesi değil, onlardan farklı
+        #: ifadeler olacak şekilde seçildi -- eşleşen bir yüzeyi tekrar eden
+        #: bir prototip bu katmana hiç ulaşmaz (bkz. bu modülün kendi
+        #: docstring'i).
         "revise": (
             "Bu taslağın tonunu biraz yumuşatır mısın?",
             "Son paragrafı tekrar ele alalım.",
@@ -88,22 +91,23 @@ PROTOTYPES: Mapping[str, Mapping[str, tuple[str, ...]]] = {
     },
 }
 
-#: The families the matcher knows about.
+#: Eşleştiricinin bildiği aileler.
 FAMILIES: tuple[str, ...] = tuple(PROTOTYPES)
 
 
 def prototype_texts(family: str) -> list[tuple[str, str]]:
-    """Flatten a family into ``(label, text)`` pairs in a stable order.
+    """Bir aileyi kararlı bir sırayla ``(etiket, metin)`` çiftlerine düzleştirir.
 
     Args:
-        family: The family name.
+        family: Ailenin adı.
 
     Returns:
-        Every prototype phrasing with the label it stands for, ordered so the
-        precomputed vector file is reproducible.
+        Her prototip ifadesi, temsil ettiği etiketle birlikte, önceden
+        hesaplanmış vektör dosyasının tekrar üretilebilir olmasını sağlayacak
+        şekilde sıralanmış olarak.
 
     Raises:
-        KeyError: For an unknown family.
+        KeyError: Bilinmeyen bir aile için.
     """
     labels = PROTOTYPES[family]
     return [

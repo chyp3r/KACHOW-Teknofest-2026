@@ -18,20 +18,21 @@ from app.domains.users.repository import UserRepository
 
 logger = logging.getLogger(__name__)
 
-#: The label every lazily-created personal default pool gets -- see
-#: `DocumentPoolRepository.get_or_create_default`.
+#: Tembel (lazy) olarak oluşturulan her kişisel varsayılan havuzun aldığı
+#: etiket -- bkz. `DocumentPoolRepository.get_or_create_default`.
 _PERSONAL_POOL_NAME = "Kişisel Havuz"
 
 
 class PoolService:
-    """Service executing evrak havuzu (document pool) business rules.
+    """Evrak havuzu (document pool) iş kurallarını yürüten servis.
 
-    Authorization here follows the same `bypasses_ownership` convention the
-    rest of the codebase used before the Faz 2 ABAC engine existed
-    (`app.core.authz`) -- pools are a polymorphic resource (`owner_type`
-    "user"|"unit"|"company"), which doesn't map cleanly onto that engine's
-    single-owner `Resource` shape without a larger extension; a reasonable
-    follow-up, not required for this feature to be correct today.
+    Buradaki yetkilendirme, Faz 2 ABAC motoru (`app.core.authz`) var
+    olmadan önce kod tabanının geri kalanının kullandığı aynı
+    `bypasses_ownership` kuralını izler -- havuzlar polimorfik bir
+    kaynaktır (`owner_type` "user"|"unit"|"company"), bu da o motorun
+    tek-sahipli `Resource` biçimine daha büyük bir genişleme olmadan
+    temiz biçimde eşlenmez; makul bir sonraki adım, ama bu özelliğin
+    bugün doğru olması için gerekli değil.
     """
 
     def __init__(
@@ -54,8 +55,9 @@ class PoolService:
         )
 
     def _assert_can_view_pool(self, pool: DocumentPoolModel, requester: UserModel) -> None:
-        """A pool's own owner may always view it; otherwise ADMIN/MANAGER/ROOT
-        (company-wide, same as document ownership -- see `bypasses_ownership`)."""
+        """Bir havuzun kendi sahibi her zaman görüntüleyebilir; aksi
+        takdirde ADMIN/MANAGER/ROOT (şirket geneli, belge sahipliğiyle
+        aynı -- bkz. `bypasses_ownership`)."""
         if pool.owner_type == "user" and pool.owner_id == requester.id:
             return
         if bypasses_ownership(requester):
@@ -83,14 +85,15 @@ class PoolService:
         note: Optional[str],
         company_id: str,
     ) -> PoolPushResultItem:
-        """Push `document` into `recipient`'s personal pool, honoring their clearance.
+        """`document`'ı `recipient`'ın kişisel havuzuna, yetkilerine saygı
+        göstererek push eder.
 
-        A `gizli` document pushed at a `hizmete_ozel` employee is refused
-        *for that recipient specifically* -- pushing to five people and
-        having it silently succeed for the one who shouldn't see it would
-        defeat the confidentiality ladder the rest of the system already
-        enforces; a partial result lets the caller see exactly who was
-        skipped and why, rather than a single all-or-nothing failure.
+        `hizmete_ozel` bir çalışana push edilen `gizli` bir belge *özel
+        olarak o alıcı için* reddedilir -- beş kişiye push edip
+        görmemesi gereken kişi için sessizce başarılı olması, sistemin
+        geri kalanının zaten uyguladığı gizlilik merdivenini bozardı;
+        kısmi bir sonuç, çağıranın tek bir hep-ya-da-hiç hatası yerine
+        tam olarak kimin atlandığını ve nedenini görmesini sağlar.
         """
         try:
             try:
@@ -125,24 +128,25 @@ class PoolService:
     async def file_transferred_document(
         self, *, document: DocumentModel, recipient: UserModel, sender: UserModel, company_id: str
     ) -> DocumentPoolItemModel:
-        """File `document` into `recipient`'s personal pool as an artifact
-        transfer, freezing its current metadata into `metadata_snapshot`
-        (see `DocumentPoolItemModel`'s own docstring for why -- the shared
-        blob is never mutated, but this row's metadata copy is what keeps
-        the recipient's view stable if the sender edits the source
-        afterward).
+        """`document`'ı bir artifact transferi olarak `recipient`'ın
+        kişisel havuzuna dosyalar, mevcut metadata'sını `metadata_snapshot`
+        içine dondurur (nedeni için `DocumentPoolItemModel`'in kendi
+        docstring'ine bakın -- paylaşılan blob asla mutasyona uğramaz,
+        ama bu satırın metadata kopyası, gönderen kaynağı sonradan
+        düzenlerse alıcının görünümünü sabit tutan şeydir).
 
-        Called only by `app.domains.transfers.ArtifactTransferService.
-        execute` -- clearance is already checked by `TransferPolicy`
-        before this runs, unlike `_push_one`'s own inline check for the
-        bulk-push flow, so this method trusts its caller and does not
-        re-check it.
+        Yalnızca `app.domains.transfers.ArtifactTransferService.execute`
+        tarafından çağrılır -- yetki, bu çalışmadan önce zaten
+        `TransferPolicy` tarafından kontrol edilmiştir, toplu-push akışı
+        için `_push_one`'ın kendi satır-içi kontrolünden farklı olarak,
+        bu yüzden bu metot çağıranına güvenir ve yeniden kontrol etmez.
 
-        Re-filing an already-transferred document (sent to the same
-        recipient again, by the same or a different sender) refreshes the
-        existing item's snapshot and `transferred_by` in place rather than
-        hitting `UNIQUE(pool_id, document_id)` -- the recipient has one
-        copy, and it reflects the latest transfer.
+        Zaten transfer edilmiş bir belgeyi yeniden dosyalamak (aynı
+        alıcıya, aynı veya farklı bir gönderen tarafından tekrar
+        gönderilmiş), `UNIQUE(pool_id, document_id)`'ye çarpmak yerine
+        mevcut öğenin snapshot'ını ve `transferred_by`'ını yerinde
+        tazeler -- alıcının bir kopyası vardır ve bu en son transferi
+        yansıtır.
         """
         pool = await self.get_or_create_personal_pool(recipient.id, company_id)
         snapshot = {
@@ -176,13 +180,14 @@ class PoolService:
     async def push(
         self, request: PoolPushRequest, sender: UserModel, company_id: str
     ) -> List[PoolPushResultItem]:
-        """Bulk-push one document into several recipients' (or a whole unit's) personal pools.
+        """Tek bir belgeyi birden çok alıcının (veya bir birimin tamamının)
+        kişisel havuzlarına toplu push eder.
 
         Args:
-            request: `recipient_ids` or `unit_id`, validated mutually
-                exclusive by the schema itself.
-            sender: The Admin/Manager pushing (role-gated at the router).
-            company_id: Scopes every lookup below.
+            request: `recipient_ids` veya `unit_id`, şemanın kendisi
+                tarafından karşılıklı dışlayıcı olarak doğrulanır.
+            sender: Push eden Admin/Manager (router'da rol ile kilitlenir).
+            company_id: Aşağıdaki her sorguyu kapsamlar.
         """
         document = await self.document_repository.get_by_id(request.document_id, company_id)
         if document is None:
@@ -216,7 +221,8 @@ class PoolService:
     async def push_to_pool(
         self, pool_id: str, document_id: str, note: Optional[str], sender: UserModel, company_id: str
     ) -> DocumentPoolItemModel:
-        """Push one document directly into a specific, already-known pool."""
+        """Tek bir belgeyi doğrudan belirli, önceden bilinen bir havuza
+        push eder."""
         pool = await self.pool_repository.get_by_id(pool_id, company_id)
         if pool is None:
             raise NotFoundException(message="Havuz bulunamadı.")

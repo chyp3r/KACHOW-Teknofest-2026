@@ -14,7 +14,7 @@ def ErrorResponse(
     details: Optional[Dict[str, Any]] = None,
     meta: Optional[Dict[str, Any]] = None,
 ) -> JSONResponse:
-    """Helper to return a standardized unified error JSONResponse."""
+    """Standartlaştırılmış, birleşik bir hata JSONResponse'u döndürmek için yardımcı fonksiyon."""
     meta_info = meta or {}
     if "timestamp" not in meta_info:
         meta_info["timestamp"] = datetime.now(timezone.utc).isoformat()

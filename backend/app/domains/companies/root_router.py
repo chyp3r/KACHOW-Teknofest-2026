@@ -1,7 +1,7 @@
-"""The root console -- system-wide reads, never scoped to a single company
-(see `app.domains.companies.root_repository`'s own module docstring for why
-that repository is separate from the per-company `AnalyticsRepository`).
-Every route here is Root-only.
+"""Root konsolu -- sistem geneli okumalar, hiçbir zaman tek bir şirkete
+kapsamlanmaz (bu repository'nin şirkete özel `AnalyticsRepository`'den
+neden ayrı olduğu için `app.domains.companies.root_repository`'nin kendi
+modül docstring'ine bakın). Buradaki her rota yalnızca Root'a özeldir.
 """
 
 from fastapi import APIRouter, Depends, Response
@@ -22,8 +22,8 @@ async def root_overview(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """System-wide counts: companies, users, documents, drafts, and run
-    status/error-rate breakdown, across every company at once."""
+    """Sistem geneli sayılar: tüm şirketler genelinde bir arada şirketler,
+    kullanıcılar, belgeler, taslaklar ve çalışma durumu/hata oranı dökümü."""
     repository = RootRepository(db)
     total_companies = await repository.total_companies()
     total_users = await repository.total_users()
@@ -52,7 +52,7 @@ async def root_company_stats(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Per-company rollup: identity plus user/document/draft counts."""
+    """Şirket başına toplu bakış: kimlik bilgisi artı kullanıcı/belge/taslak sayıları."""
     repository = RootRepository(db)
     return SuccessResponse(data=await repository.company_rollup())
 
@@ -62,10 +62,11 @@ async def root_user_stats(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Role breakdown and 7-day active count, system-wide -- see
-    `app.domains.analytics.repository.AnalyticsRepository.active_user_count`'s
-    docstring for what "active" means here (a `runs` row, not a tracked
-    login timestamp)."""
+    """Sistem geneli rol dökümü ve 7 günlük aktif kullanıcı sayısı --
+    burada "aktif" olmanın ne anlama geldiği için (izlenen bir giriş
+    zaman damgası değil, bir `runs` satırı)
+    `app.domains.analytics.repository.AnalyticsRepository.active_user_count`'un
+    docstring'ine bakın."""
     repository = RootRepository(db)
     by_role = dict(await repository.users_by_role())
     active_7d = await repository.active_user_count(days=7)
@@ -90,9 +91,10 @@ async def root_health(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """`GET /health?deep=true`'s full dependency probe, plus a per-company
-    last-activity view (root's own "which tenant looks stale" question,
-    which the plain health check has no concept of a tenant to answer)."""
+    """`GET /health?deep=true`'nin tam bağımlılık kontrolü, artı şirket
+    başına son etkinlik görünümü (root'a özgü "hangi kiracı bayat
+    görünüyor" sorusu -- düz sağlık kontrolünün yanıtlayacağı bir kiracı
+    kavramı yoktur)."""
     from app.domains.system.router import build_health_payload
 
     data, degraded = await build_health_payload(deep=True)

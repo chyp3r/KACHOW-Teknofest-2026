@@ -1,30 +1,31 @@
-"""The AI channel's confirmation lifecycle -- a row-level CAS state machine
-over `artifact_transfer_intents` (see `ArtifactTransferIntentModel`).
+"""AI kanalının onay yaşam döngüsü -- `artifact_transfer_intents` üzerinde
+satır seviyeli bir CAS durum makinesi (bkz. `ArtifactTransferIntentModel`).
 
 Plan §I:
 
     INTENT_DETECTED -> {AMBIGUOUS, RECIPIENT_RESOLVED, UNRESOLVED}
     RECIPIENT_RESOLVED -> {AWAITING_CONFIRMATION, POLICY_DENIED}
-    AWAITING_CONFIRMATION -> {CONFIRMED, CANCELLED}   (interrupt() in transfer_gate_node)
+    AWAITING_CONFIRMATION -> {CONFIRMED, CANCELLED}   (transfer_gate_node içindeki interrupt())
     CONFIRMED -> {TRANSFER_EXECUTED, FAILED}
 
-Every transition is a single `ArtifactTransferIntentRepository.cas_update`
-call -- `UPDATE ... WHERE state IN (:expected)`. A duplicate confirmation (two
-browser tabs, a replayed `interrupt()` resume) or a confirmation that arrives
-after `expires_at` resolves to "0 rows changed", never a race: this is what
-lets `planning_graph.transfer_gate_node`/`_step_transfer_execute` treat every
-call here as safe to make more than once. `POLICY_CHECKED` from the plan's
-diagram is not its own persisted state here -- computing the policy decision
-and persisting its outcome (`AWAITING_CONFIRMATION`/`POLICY_DENIED`) happen
-in the same call, so there is nothing a concurrent reader could observe
-in between.
+Her geçiş tek bir `ArtifactTransferIntentRepository.cas_update` çağrısıdır
+-- `UPDATE ... WHERE state IN (:expected)`. Tekrarlanan bir onay (iki
+tarayıcı sekmesi, tekrarlanan bir `interrupt()` resume) veya `expires_at`
+sonrasında gelen bir onay "0 satır değişti" sonucuna varır, asla bir yarış
+durumuna değil: `planning_graph.transfer_gate_node`/`_step_transfer_execute`
+buradaki her çağrıyı birden fazla kez yapmanın güvenli olduğu şeklinde ele
+alabilir, bunun nedeni budur. Plan diyagramındaki `POLICY_CHECKED` burada
+kendi başına kalıcı bir durum değildir -- politika kararının hesaplanması
+ve sonucunun kalıcı hale getirilmesi (`AWAITING_CONFIRMATION`/
+`POLICY_DENIED`) aynı çağrıda gerçekleşir, dolayısıyla eşzamanlı bir
+okuyucunun arada gözlemleyebileceği bir şey yoktur.
 
-`confirm()` is the TOCTOU guard the plan's §H calls for: it re-evaluates
-`TransferPolicy` from scratch (never trusts the snapshot taken when the
-intent was first resolved) and compares the freshly computed `policy_hash`
-against the one stored at `AWAITING_CONFIRMATION` time. A favorite removed,
-a recipient deactivated, or a clearance change in between fails the
-confirmation outright rather than silently trusting a stale decision.
+`confirm()`, planın §H'sinin talep ettiği TOCTOU korumasıdır: `TransferPolicy`'yi
+sıfırdan yeniden değerlendirir (intent ilk çözümlendiğinde alınan anlık
+görüntüye asla güvenmez) ve yeni hesaplanan `policy_hash`'i
+`AWAITING_CONFIRMATION` anında kaydedilenle karşılaştırır. Arada kaldırılan
+bir favori, devre dışı bırakılan bir alıcı veya bir yetki değişikliği,
+eski bir kararı sessizce güvenmek yerine onayı doğrudan başarısız kılar.
 """
 
 import hashlib
@@ -59,7 +60,7 @@ STATE_CANCELLED = "CANCELLED"
 STATE_TRANSFER_EXECUTED = "TRANSFER_EXECUTED"
 STATE_FAILED = "FAILED"
 
-#: States `cancel()` may still move out of -- every non-terminal state.
+#: `cancel()`'ın hâlâ çıkabileceği durumlar -- terminal olmayan her durum.
 _CANCELLABLE_STATES = (
     STATE_INTENT_DETECTED,
     STATE_AMBIGUOUS,
@@ -69,10 +70,11 @@ _CANCELLABLE_STATES = (
 
 
 class TransferIntentError(Exception):
-    """Raised whenever a requested transition isn't the intent's to make
-    right now -- a stale/duplicate confirmation, an expired intent, or a
-    TOCTOU policy mismatch. `reason` is a machine tag (mirrors
-    `TransferPolicyDecision.reason_code`); `message_tr` is ready to show.
+    """İstenen geçişin şu anda intent'e ait olmadığı her durumda fırlatılır
+    -- eskimiş/tekrarlanan bir onay, süresi dolmuş bir intent ya da bir
+    TOCTOU politika uyuşmazlığı. `reason` bir makine etiketidir
+    (`TransferPolicyDecision.reason_code`'u yansıtır); `message_tr`
+    doğrudan gösterilmeye hazırdır.
     """
 
     def __init__(self, reason: str, message_tr: str):
@@ -129,14 +131,14 @@ class TransferIntentService:
         candidate_recipients: tuple = (),
         ttl_seconds: Optional[int] = None,
     ) -> ArtifactTransferIntentModel:
-        """Open a new intent from the `propose_transfer` tool's resolution outcome.
+        """`propose_transfer` aracının çözümleme sonucundan yeni bir intent açar.
 
-        Exactly one of `resolved_recipient_id`/`candidate_recipients` should
-        be populated -- a single confident recipient match moves straight to
-        policy evaluation; more than one leaves the intent `AMBIGUOUS`,
-        waiting on `select_recipient`; neither leaves it `UNRESOLVED`, a
-        terminal state the caller reports to the user without ever pausing
-        the graph on it.
+        `resolved_recipient_id`/`candidate_recipients`'tan tam olarak biri
+        doldurulmuş olmalıdır -- tek ve emin bir alıcı eşleşmesi doğrudan
+        politika değerlendirmesine geçer; birden fazlası intent'i
+        `AMBIGUOUS` bırakır ve `select_recipient`'i bekler; hiçbiri yoksa
+        `UNRESOLVED` bırakır, bu da çağıranın grafiği hiç duraklatmadan
+        kullanıcıya bildirdiği terminal bir durumdur.
         """
         ttl = ttl_seconds if ttl_seconds is not None else settings.TRANSFER_CONFIRMATION_TTL_SECONDS
         if resolved_recipient_id:
@@ -170,7 +172,7 @@ class TransferIntentService:
     async def select_recipient(
         self, *, intent_id: str, company_id: str, recipient_id: str, requester: UserModel
     ) -> ArtifactTransferIntentModel:
-        """Resolve a disambiguation answer -- the human picked, not the model."""
+        """Bir belirsizlik giderme yanıtını çözümler -- seçimi model değil insan yaptı."""
         intent = await self.intent_repository.cas_update(
             intent_id,
             company_id,
@@ -187,12 +189,12 @@ class TransferIntentService:
     async def confirm(
         self, *, intent_id: str, company_id: str, requester: UserModel
     ) -> ArtifactTransferIntentModel:
-        """The TOCTOU-guarded transition to `CONFIRMED`.
+        """`CONFIRMED`'e TOCTOU korumalı geçiş.
 
-        Re-runs `TransferPolicy.evaluate` from scratch rather than trusting
-        `intent.policy_snapshot` -- the whole point of the hash comparison
-        below is that nothing between `AWAITING_CONFIRMATION` and this call
-        is assumed to still hold.
+        `intent.policy_snapshot`'a güvenmek yerine `TransferPolicy.evaluate`'i
+        sıfırdan yeniden çalıştırır -- aşağıdaki hash karşılaştırmasının
+        tüm amacı, `AWAITING_CONFIRMATION` ile bu çağrı arasında hiçbir
+        şeyin hâlâ geçerli olduğunun varsayılmamasıdır.
         """
         intent = await self.intent_repository.get_by_id(intent_id, company_id)
         if intent is None or intent.state != STATE_AWAITING_CONFIRMATION:
@@ -260,12 +262,13 @@ class TransferIntentService:
     async def execute(
         self, *, intent_id: str, company_id: str, sender: UserModel
     ) -> ArtifactTransferModel:
-        """Run the confirmed intent through `ArtifactTransferService`.
+        """Onaylanmış intent'i `ArtifactTransferService` üzerinden çalıştırır.
 
-        Raises `TransferIntentError("not_confirmed", ...)` for any intent
-        not currently `CONFIRMED` -- the graph's `_step_transfer_execute`
-        must never reach this without a real, server-verified confirmation
-        (see the plan's §H bypass-matrix: "Onaysız transfer -- imkânsız").
+        Şu anda `CONFIRMED` olmayan herhangi bir intent için
+        `TransferIntentError("not_confirmed", ...)` fırlatır -- grafiğin
+        `_step_transfer_execute`'u buraya gerçek, sunucu tarafından
+        doğrulanmış bir onay olmadan asla ulaşmamalıdır (bkz. planın §H
+        bypass matrisi: "Onaysız transfer -- imkânsız").
         """
         intent = await self.intent_repository.get_by_id(intent_id, company_id)
         if intent is None or intent.state != STATE_CONFIRMED:

@@ -1,12 +1,12 @@
-"""The single path every artifact (taslak/evrak) transfer goes through.
+"""Her belge (taslak/evrak) transferinin geçtiği tek yol.
 
-`ArtifactTransferService.execute` is called by every channel that moves an
-artifact from one user to another -- `DraftShareService.send` (the legacy
-REST endpoint, now a thin delegate), `POST /transfers/send` (the new
-chat-initiated manual send), and, from Faz 4 onward, the AI channel's
-`transfer_execute` node. There is no second implementation anywhere; see
-the plan's own architecture section for why this unification is the point
-of the whole feature, not an incidental refactor.
+`ArtifactTransferService.execute`, bir belgeyi bir kullanıcıdan diğerine
+taşıyan her kanal tarafından çağrılır -- `DraftShareService.send` (eski
+REST uç noktası, artık ince bir delege), `POST /transfers/send` (yeni,
+sohbetten başlatılan manuel gönderim) ve Faz 4'ten itibaren AI kanalının
+`transfer_execute` düğümü. Hiçbir yerde ikinci bir uygulama yok; bu
+birleştirmenin neden sıradan bir refactor değil de tüm özelliğin amacı
+olduğu için planın kendi mimari bölümüne bakın.
 """
 
 import logging
@@ -40,17 +40,18 @@ from app.observability import transfer_metrics
 
 logger = logging.getLogger(__name__)
 
-#: Cap on `GroupTransferCommand.recipient_ids` -- same order of magnitude as
-#: `app.domains.messaging.service.MAX_GROUP_PARTICIPANTS` (group chat's own
-#: ceiling), kept as a separate constant since a transfer fan-out isn't tied
-#: to any particular conversation's membership size.
+#: `GroupTransferCommand.recipient_ids` üzerindeki üst sınır --
+#: `app.domains.messaging.service.MAX_GROUP_PARTICIPANTS` (grup sohbetinin
+#: kendi tavanı) ile aynı büyüklük mertebesinde, bir transfer dağıtımı
+#: belirli bir konuşmanın üyelik boyutuna bağlı olmadığından ayrı bir
+#: sabit olarak tutulur.
 MAX_GROUP_TRANSFER_RECIPIENTS = 50
 
 
 @dataclass(frozen=True)
 class TransferCommand:
-    """Everything `ArtifactTransferService.execute` needs, independent of
-    which channel is calling it."""
+    """Hangi kanalın çağırdığından bağımsız olarak `ArtifactTransferService.
+    execute`'un ihtiyaç duyduğu her şey."""
 
     company_id: str
     sender: UserModel
@@ -58,14 +59,14 @@ class TransferCommand:
     #: "draft" | "document"
     artifact_kind: str
     source_artifact_id: str
-    #: Pinned draft version -- ignored for a document. `None` is resolved
-    #: to the artifact's own current version internally.
+    #: Sabitlenmiş taslak versiyonu -- bir evrak için yok sayılır. `None`,
+    #: dahili olarak belgenin kendi güncel versiyonuna çözümlenir.
     source_version: Optional[int] = None
     #: "chat" | "ai" | "rest"
     channel: str = "chat"
     idempotency_key: Optional[str] = None
-    #: Faz 4 only -- every channel this phase supports leaves these at
-    #: their defaults.
+    #: Yalnızca Faz 4 -- bu fazın desteklediği her kanal bunları
+    #: varsayılanlarında bırakır.
     ai_suggested: bool = False
     recommendation_source: Optional[str] = None
     recommendation_confidence: Optional[float] = None
@@ -73,12 +74,13 @@ class TransferCommand:
 
 @dataclass(frozen=True)
 class GroupTransferCommand:
-    """`ArtifactTransferService.execute_group`'s input -- the chat/REST-only
-    fan-out to several recipients at once (Faz 5, #205).
+    """`ArtifactTransferService.execute_group`'un girdisi -- yalnızca
+    sohbet/REST üzerinden birden fazla alıcıya aynı anda dağıtım
+    (Faz 5, #205).
 
-    Deliberately has no `channel` field: `execute_group` always calls
-    `execute()` with `channel="chat"` (see its own docstring for why the AI
-    channel never builds one of these).
+    Bilinçli olarak bir `channel` alanı yoktur: `execute_group` her zaman
+    `execute()`'u `channel="chat"` ile çağırır (AI kanalının bunlardan
+    birini neden asla oluşturmadığı için kendi docstring'ine bakın).
     """
 
     company_id: str
@@ -88,19 +90,20 @@ class GroupTransferCommand:
     artifact_kind: str
     source_artifact_id: str
     source_version: Optional[int] = None
-    #: Combined with each `recipient_id` (`f"{prefix}:{recipient_id}"`) to
-    #: derive a per-recipient idempotency key -- a single flat key can't be
-    #: reused across recipients, since each is its own `TransferCommand`/
-    #: `ArtifactTransferModel` row. `None` skips idempotency entirely, same
-    #: as `TransferCommand.idempotency_key`.
+    #: Alıcı başına bir idempotency anahtarı türetmek için her
+    #: `recipient_id` ile birleştirilir (`f"{prefix}:{recipient_id}"`) --
+    #: her biri kendi `TransferCommand`/`ArtifactTransferModel` satırı
+    #: olduğundan tek düz bir anahtar alıcılar arasında yeniden
+    #: kullanılamaz. `None`, `TransferCommand.idempotency_key` ile aynı
+    #: şekilde idempotency'yi tamamen atlar.
     idempotency_key_prefix: Optional[str] = None
 
 
 @dataclass(frozen=True)
 class GroupTransferResultItem:
-    """One recipient's outcome within a `execute_group` call -- mirrors
-    `app.domains.pools.schema.pool_schema.PoolPushResultItem`'s own
-    per-recipient partial-success shape."""
+    """Bir `execute_group` çağrısı içindeki tek bir alıcının sonucu --
+    `app.domains.pools.schema.pool_schema.PoolPushResultItem`'ın kendi
+    alıcı başına kısmi başarı şeklini yansıtır."""
 
     recipient_id: str
     #: "sent" | "denied" | "not_found" | "failed"
@@ -134,29 +137,32 @@ class ArtifactTransferService:
 
     @staticmethod
     async def _publish(event) -> None:
-        """Publish a domain event without letting listener failures break
-        the request. Same pattern as `DraftShareService._publish`."""
+        """Dinleyici hatalarının isteği bozmasına izin vermeden bir alan
+        (domain) olayı yayınlar. `DraftShareService._publish` ile aynı
+        örüntü."""
         try:
             await event_bus.publish(event)
         except Exception:
             logger.exception("Failed to publish event %s", getattr(event, "event_type", "?"))
 
     async def execute(self, cmd: TransferCommand) -> ArtifactTransferModel:
-        """Run one transfer end to end: idempotency -> authorize -> policy
-        -> snapshot -> record -> deliver -> best-effort audit/notify.
+        """Tek bir transferi uçtan uca çalıştırır: idempotency ->
+        yetkilendirme -> politika -> anlık görüntü -> kayıt -> teslimat ->
+        best-effort denetim/bildirim.
 
         Raises:
-            NotFoundException: The artifact or recipient doesn't resolve
-                within `cmd.company_id`.
-            AuthorizationException: The PDP denies `Action.ARTIFACT_
-                TRANSFER`, or `TransferPolicy` denies for a narrower reason
-                (self-send, inactive recipient, insufficient clearance, or
-                -- AI channel only -- the recipient isn't a favorite).
+            NotFoundException: Belge veya alıcı, `cmd.company_id` içinde
+                çözümlenmiyor.
+            AuthorizationException: PDP, `Action.ARTIFACT_TRANSFER`'ı
+                reddediyor ya da `TransferPolicy` daha dar bir nedenle
+                reddediyor (kendine gönderim, aktif olmayan alıcı,
+                yetersiz yetki veya -- yalnızca AI kanalı -- alıcı bir
+                favori değil).
 
         Returns:
-            The persisted `ArtifactTransferModel`. When `cmd.idempotency_key`
-            matches an existing transfer, that transfer is returned as-is
-            and nothing new is created.
+            Kalıcı hale getirilmiş `ArtifactTransferModel`. `cmd.
+            idempotency_key`, mevcut bir transferle eşleştiğinde, o
+            transfer olduğu gibi döndürülür ve yeni bir şey oluşturulmaz.
         """
         if cmd.idempotency_key:
             existing = await self.transfer_repository.get_by_idempotency_key(
@@ -279,27 +285,28 @@ class ArtifactTransferService:
         return transfer
 
     async def execute_group(self, cmd: GroupTransferCommand) -> list:
-        """Fan out one artifact to several recipients in one call -- the
-        chat/REST group-send path only (`POST /transfers/send-group`).
+        """Tek bir belgeyi tek bir çağrıda birden fazla alıcıya dağıtır --
+        yalnızca sohbet/REST grup gönderim yolu (`POST
+        /transfers/send-group`).
 
-        Deliberately unreachable from the AI channel: `app.ai.tools.
-        transfer_tools.propose_transfer` and `TransferGraphProvider` only
-        ever build a single-recipient `TransferCommand`/open a
-        single-recipient intent -- there is no group variant of either, and
-        this method is never called from `app.ai.*` (enforced by the
-        existing `app.ai.*` never imports `app.domains.*` boundary, not by
-        a runtime check here).
+        Bilinçli olarak AI kanalından erişilemez: `app.ai.tools.
+        transfer_tools.propose_transfer` ve `TransferGraphProvider` her
+        zaman yalnızca tek alıcılı bir `TransferCommand` oluşturur/tek
+        alıcılı bir intent açar -- her ikisinin de grup varyantı yoktur ve
+        bu metot `app.ai.*`'dan asla çağrılmaz (burada bir çalışma zamanı
+        kontrolüyle değil, mevcut `app.ai.*` asla `app.domains.*`'ı import
+        etmez sınırıyla uygulanır).
 
-        Each recipient goes through the exact same `execute()` this class
-        already exposes -- no second transfer implementation, same
-        principle `execute()`'s own docstring states -- so a denial for one
-        recipient (clearance, self-send, not active, ...) never blocks the
-        others. Mirrors `PoolService.push`/`_push_one`'s own per-recipient
-        partial-success shape.
+        Her alıcı, bu sınıfın zaten sunduğu tam olarak aynı `execute()`'tan
+        geçer -- ikinci bir transfer uygulaması yok, `execute()`'un kendi
+        docstring'inin belirttiği aynı ilke -- böylece bir alıcı için
+        reddetme (yetki, kendine gönderim, aktif değil, ...) diğerlerini
+        asla engellemez. `PoolService.push`/`_push_one`'ın kendi alıcı
+        başına kısmi başarı şeklini yansıtır.
 
         Raises:
-            ValidationException: `cmd.recipient_ids` is empty or exceeds
-                `MAX_GROUP_TRANSFER_RECIPIENTS`.
+            ValidationException: `cmd.recipient_ids` boş ya da
+                `MAX_GROUP_TRANSFER_RECIPIENTS`'i aşıyor.
         """
         if not cmd.recipient_ids:
             raise ValidationException(message="En az bir alıcı gerekli.")
@@ -369,11 +376,11 @@ class ArtifactTransferService:
             return SensitivityLevel.UNMARKED
 
     async def _fork_draft(self, draft: DraftModel, recipient: UserModel, company_id: str) -> str:
-        """The recipient's own, immediately-owned copy -- see the plan's
-        §D5: a `drafts` row is already an immutable version, so "snapshot"
-        means forking one, the same mechanism `create_version` already
-        gives every other revision. Counts against the recipient's own
-        draft quota, same as any other new draft."""
+        """Alıcının kendi, hemen sahiplenilen kopyası -- bkz. planın §D5'i:
+        bir `drafts` satırı zaten değişmez bir versiyondur, dolayısıyla
+        "anlık görüntü" birini çatallamak anlamına gelir, `create_version`'ın
+        diğer her revizyona zaten verdiği aynı mekanizma. Diğer her yeni
+        taslak gibi alıcının kendi taslak kotasından düşer."""
         if self.quota_service is not None:
             await self.quota_service.check_and_increment(company_id, DRAFTS_METRIC)
         forked = await self.draft_repository.create_version(

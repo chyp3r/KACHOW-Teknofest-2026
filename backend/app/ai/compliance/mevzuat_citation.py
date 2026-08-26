@@ -1,30 +1,33 @@
-"""Resolve a free-text legislation citation to a (kanun, madde) pair.
+"""Serbest metin bir mevzuat atfını bir (kanun, madde) çiftine çözer.
 
-Both `REQUIRED_FIELD_RULES` (`field_rule.py`) and the LLM's `mevzuat_references`
-cite legislation as prose -- "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar
-Hakkında Yönetmelik MADDE 15- (3)", "RYUEHY m.14", "Devlet Memurları Kanunu"
--- with no stable id anywhere. This module is the one place that turns such a
-string into the two identifiers a knowledge-graph node needs.
+Hem `REQUIRED_FIELD_RULES` (`field_rule.py`) hem de LLM'nin
+`mevzuat_references`'ı mevzuata düzyazı olarak atıfta bulunur -- "Resmî
+Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik MADDE 15- (3)",
+"RYUEHY m.14", "Devlet Memurları Kanunu" -- hiçbir yerde sabit bir kimlik
+olmadan. Bu modül, böyle bir string'i bir bilgi grafiği düğümünün ihtiyaç
+duyduğu iki tanımlayıcıya çeviren tek yerdir.
 
-`canonical_legislation` (`app.ai.verification.normalizers`) already does the
-*canonicalisation* half -- "madde 11" / "m. 11" / "m.11" all fold to the same
-"madde:11" -- but it matches a whole isolated span, not prose, and it keeps
-law and article in separate namespaces on purpose (a draft citing article
-4982 of *something* is not grounded by a source mentioning law 4982). A
-knowledge graph needs the opposite: the join between them. `resolve_citation`
-supplies that join, reusing `canonical_legislation` for the per-span
-canonicalisation and `LEGISLATION_PATTERN` (`draft_verifier.py`) for finding
-those spans inside prose -- its lookbehind guard against a document number's
-tail ("E-22222222-903-118 sayılı yazınız") matters here too, since `ilgi`-
-and `mevzuat`-style strings are full of document numbers.
+`canonical_legislation` (`app.ai.verification.normalizers`) *kanonikleştirme*
+yarısını zaten yapar -- "madde 11" / "m. 11" / "m.11" hepsi aynı "madde:11"e
+indirgenir -- ama bu, düzyazıyı değil tek başına izole bir aralığı eşleştirir
+ve kanunu ile maddeyi kasıtlı olarak ayrı isim alanlarında tutar (*herhangi
+bir şeyin* 4982 sayılı maddesine atıf yapan bir taslak, 4982 sayılı kanundan
+bahseden bir kaynak tarafından dayanaklandırılmış olmaz). Bir bilgi grafiği
+bunun tersini ister: ikisi arasındaki birleşimi. `resolve_citation`, düzyazı
+içindeki aralık başına kanonikleştirme için `canonical_legislation`'ı ve bu
+aralıkları düzyazı içinde bulmak için `LEGISLATION_PATTERN`'i
+(`draft_verifier.py`) yeniden kullanarak bu birleşimi sağlar -- bir belge
+numarasının kuyruğuna karşı geri bakış korumasının ("E-22222222-903-118
+sayılı yazınız") burada da önemi var, çünkü `ilgi`- ve `mevzuat`-tarzı
+string'ler belge numaralarıyla doludur.
 
-`citation_support` is the second consumer of the same join, for a different
-question: not "what does this citation refer to" but "is what it refers to
-actually present in the excerpts the model was given". This is what
-`suggest_mevzuat_node` (`document_analysis_graph.py`) checks a suggestion
-against before it reaches the API response -- the excerpts are the only
-legislation text the model saw, so a citation naming a law or article absent
-from all of them was not read off the retrieved text at all.
+`citation_support`, aynı birleşimin farklı bir soru için ikinci tüketicisidir:
+"bu atıf neye atıfta bulunuyor" değil, "atıfta bulunduğu şey modele verilen
+alıntılarda gerçekten var mı". Bu, `suggest_mevzuat_node`'un
+(`document_analysis_graph.py`) bir öneriyi API yanıtına ulaşmadan önce
+kontrol ettiği şeydir -- alıntılar modelin gördüğü tek mevzuat metnidir, bu
+yüzden hiçbirinde bulunmayan bir kanun veya madde adlandıran bir atıf,
+alınan metinden hiç okunmamıştır.
 """
 
 from dataclasses import dataclass
@@ -35,16 +38,18 @@ from langchain_core.documents import Document
 from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
 from app.ai.verification.normalizers import _fold, canonical_legislation
 
-#: Duplicated from `app.ai.retrieval.mcp_mevzuat.CURATED_LEGISLATION` rather
-#: than imported: that module pulls in langchain, BM25 and the MCP registry,
-#: and its own docstring says "Never touches compliance." Duplication with a
-#: sync test (see test_mevzuat_citation.py) is this repo's own established
-#: answer to exactly this tradeoff -- `_LegislationRef`'s docstring documents
-#: doing the same thing for the same reason, one level further out.
+#: `app.ai.retrieval.mcp_mevzuat.CURATED_LEGISLATION`'dan import edilmek
+#: yerine kopyalandı: o modül langchain, BM25 ve MCP kayıt defterini de
+#: beraberinde getiriyor, ve kendi docstring'i "Never touches compliance."
+#: (Uygunluğa asla dokunmaz) diyor. Bir eşitleme testiyle (bkz.
+#: test_mevzuat_citation.py) kopyalama, bu repo'nun tam olarak bu ödünleşim
+#: için kendi yerleşik cevabıdır -- `_LegislationRef`'in docstring'i, bir
+#: seviye daha dışarıda aynı şeyi aynı nedenle yaptığını belgeler.
 #:
-#: The single source both `LAW_TITLES` (folded title -> number, for matching)
-#: and `KANUN_TITLE` (number -> display title, for a graph node's label) are
-#: derived from, so the title string itself is never written twice.
+#: Hem `LAW_TITLES`'in (indirgenmiş başlık -> numara, eşleştirme için) hem de
+#: `KANUN_TITLE`'ın (numara -> görüntülenen başlık, bir grafik düğümünün
+#: etiketi için) türetildiği tek kaynak, böylece başlık string'i asla iki kez
+#: yazılmaz.
 _CURATED_LAW: tuple[tuple[str, str], ...] = (
     ("2646", "Resmî Yazışmalarda Uygulanacak Usul ve Esaslar Hakkında Yönetmelik"),
     ("3071", "Dilekçe Hakkının Kullanılmasına Dair Kanun"),
@@ -55,17 +60,18 @@ _CURATED_LAW: tuple[tuple[str, str], ...] = (
     ("5070", "Elektronik İmza Kanunu"),
 )
 
-#: Folded title -> law number; a folded citation string is checked for
-#: containing one of these as a substring, so `RYUEHY`'s title (no number in
-#: it at all) resolves the same way a "3071 sayılı ..." title does.
+#: İndirgenmiş başlık -> kanun numarası; indirgenmiş bir atıf string'i bunlardan
+#: birini alt-dize olarak içerip içermediği için kontrol edilir, bu yüzden
+#: `RYUEHY`'nin başlığı (içinde hiç numara yok) tıpkı "3071 sayılı ..." başlığı
+#: gibi çözülür.
 LAW_TITLES: dict[str, str] = {_fold(title): number for number, title in _CURATED_LAW}
 
-#: Law number -> display title, for labelling a Kanun graph node.
+#: Kanun numarası -> görüntülenen başlık, bir Kanun grafik düğümünü etiketlemek için.
 KANUN_TITLE: dict[str, str] = dict(_CURATED_LAW)
 
-#: Abbreviations observed in real `mevzuat_references` output that don't
-#: appear anywhere in the law's own title, so a title-substring match can
-#: never catch them.
+#: Gerçek `mevzuat_references` çıktısında gözlemlenen, kanunun kendi
+#: başlığında hiçbir yerde geçmeyen kısaltmalar; bu yüzden bir başlık-alt-dize
+#: eşleşmesi bunları asla yakalayamaz.
 LAW_ALIASES: dict[str, str] = {
     _fold("RYUEHY"): "2646",
 }
@@ -73,13 +79,14 @@ LAW_ALIASES: dict[str, str] = {
 
 @dataclass(frozen=True)
 class CitationRef:
-    """The law number and article number resolved from one citation string.
+    """Bir atıf string'inden çözülen kanun numarası ve madde numarası.
 
-    Both are plain identifiers (``"2646"``, ``"17"``), not the prefixed
-    ``"kanun:2646"``/``"madde:17"`` form `canonical_legislation` returns --
-    the knowledge-graph builder composes them together into a single node id
-    (`madde:{kanun}:{madde}`), which needs the law number available as a
-    plain value rather than re-parsed out of a prefixed string.
+    Her ikisi de düz tanımlayıcılardır (``"2646"``, ``"17"``),
+    `canonical_legislation`'ın döndürdüğü önekli ``"kanun:2646"``/``"madde:17"``
+    biçiminde değil -- bilgi grafiği oluşturucusu bunları tek bir düğüm
+    kimliğinde (`madde:{kanun}:{madde}`) birleştirir; bu da kanun numarasının
+    önekli bir string'den yeniden ayrıştırılmak yerine düz bir değer olarak
+    mevcut olmasını gerektirir.
     """
 
     kanun: Optional[str]
@@ -87,9 +94,9 @@ class CitationRef:
 
 
 def _resolve_kanun(text: str, folded: str) -> Optional[str]:
-    """Find the law number a citation refers to, trying the most explicit
-    signal first: an actual "N sayılı" number in the text outranks a title
-    match, which outranks an abbreviation."""
+    """Bir atfın referans verdiği kanun numarasını bulur; en açık sinyali
+    önce dener: metindeki gerçek bir "N sayılı" numarası bir başlık
+    eşleşmesinden, o da bir kısaltmadan önce gelir."""
     for match in LEGISLATION_PATTERN.finditer(text):
         canonical = canonical_legislation(match.group(0))
         if canonical and canonical.startswith("kanun:"):
@@ -115,12 +122,12 @@ def _resolve_madde(text: str) -> Optional[str]:
 
 
 def _resolve_all_madde(text: str) -> set[str]:
-    """Collect every article number mentioned anywhere in a longer passage.
+    """Daha uzun bir pasajda herhangi bir yerde bahsedilen her madde numarasını toplar.
 
-    `_resolve_madde` deliberately stops at the first match -- right for a
-    short one-citation string, wrong for a whole excerpt, which typically
-    spans several consecutive articles. `citation_support` needs every one
-    an excerpt mentions, not just the first.
+    `_resolve_madde` kasıtlı olarak ilk eşleşmede durur -- kısa, tek atıflı
+    bir string için doğru, ama genellikle birkaç ardışık maddeyi kapsayan
+    tüm bir alıntı için yanlış. `citation_support`, sadece ilkine değil bir
+    alıntının bahsettiği her birine ihtiyaç duyar.
     """
     found: set[str] = set()
     for match in LEGISLATION_PATTERN.finditer(text):
@@ -131,18 +138,20 @@ def _resolve_all_madde(text: str) -> set[str]:
 
 
 def resolve_citation(text: str) -> CitationRef:
-    """Resolve a free-text legislation citation to a law and article number.
+    """Serbest metin bir mevzuat atfını bir kanun ve madde numarasına çözer.
 
     Args:
-        text: The citation as written, e.g. from `FieldRule.mevzuat` or an
-            LLM-produced `mevzuat_references[].mevzuat` string.
+        text: Yazıldığı şekliyle atıf, ör. `FieldRule.mevzuat`'tan veya
+            LLM tarafından üretilmiş bir `mevzuat_references[].mevzuat`
+            string'inden.
 
     Returns:
-        A `CitationRef` with either field `None` when that half of the
-        citation could not be resolved -- never raises, since the source
-        text is always either a hand-written constant (which the rule-table
-        contract test in test_mevzuat_citation.py holds to full resolution)
-        or unreliable model output (which is expected to sometimes fail).
+        Atfın o yarısı çözülemediğinde ilgili alanı `None` olan bir
+        `CitationRef` -- asla hata fırlatmaz, çünkü kaynak metin her zaman ya
+        elle yazılmış bir sabittir (ki test_mevzuat_citation.py'deki kural
+        tablosu sözleşme testi bunu tam çözünürlüğe zorunlu tutar) ya da
+        güvenilmez model çıktısıdır (ki bunun bazen başarısız olması
+        beklenir).
     """
     folded = _fold(text)
     return CitationRef(kanun=_resolve_kanun(text, folded), madde=_resolve_madde(text))
@@ -150,14 +159,14 @@ def resolve_citation(text: str) -> CitationRef:
 
 @dataclass(frozen=True)
 class CitationSupport:
-    """Whether a citation's law and article are actually present in a set of
-    retrieved legislation excerpts.
+    """Bir atfın kanunu ve maddesinin, alınan bir mevzuat alıntıları
+    kümesinde gerçekten mevcut olup olmadığı.
 
-    ``article_supported`` is vacuously ``True`` when the citation names no
-    article at all -- a law-only citation ("Devlet Memurları Kanunu") makes no
-    article-level claim for the excerpts to fail, so there is nothing to
-    contradict. Callers that only need the combined verdict should use
-    `grounded`, not either flag alone.
+    Atıf hiç madde adlandırmadığında ``article_supported`` anlamsız biçimde
+    ``True``'dur -- yalnızca kanun adlandıran bir atıf ("Devlet Memurları
+    Kanunu") alıntıların başarısız olabileceği bir madde düzeyinde iddia
+    içermez, bu yüzden çelişecek bir şey yoktur. Sadece birleşik sonuca
+    ihtiyaç duyan çağıranlar tek bir bayrak yerine `grounded`'ı kullanmalıdır.
     """
 
     law_supported: bool
@@ -165,32 +174,33 @@ class CitationSupport:
 
     @property
     def grounded(self) -> bool:
-        """The single pass/fail verdict: both halves of the citation hold."""
+        """Tek geçti/kaldı sonucu: atfın her iki yarısı da geçerli."""
         return self.law_supported and self.article_supported
 
 
 def citation_support(citation: str, excerpts: Sequence[Document]) -> CitationSupport:
-    """Check a legislation citation against the excerpts it was supposedly drawn from.
+    """Bir mevzuat atfını, güya kendisinden çıkarıldığı alıntılara karşı kontrol eder.
 
-    Resolves the citation the same way `resolve_citation` resolves any other
-    citation string. Resolves each excerpt independently: its law from
-    `metadata["mevzuat"]` (the corpus's own title, via the same title/alias
-    matching `_resolve_kanun` already does for prose) and *every* article
-    number mentioned anywhere in its `page_content` (`_resolve_all_madde` --
-    an excerpt chunk commonly spans several consecutive articles, unlike a
-    short citation string).
+    Atfı, `resolve_citation`'ın diğer her atıf string'ini çözdüğü gibi çözer.
+    Her alıntıyı bağımsız olarak çözer: kanununu `metadata["mevzuat"]`'tan
+    (külliyatın kendi başlığı, `_resolve_kanun`'un düzyazı için zaten yaptığı
+    aynı başlık/kısaltma eşleştirmesi üzerinden) ve `page_content`'inde
+    herhangi bir yerde bahsedilen *her* madde numarasını (`_resolve_all_madde`
+    -- bir alıntı parçası, kısa bir atıf string'inin aksine genellikle
+    birkaç ardışık maddeyi kapsar).
 
     Args:
-        citation: A `mevzuat_references[].mevzuat`-style citation string.
-        excerpts: The legislation passages retrieved for this document --
-            the only source the citation could legitimately have come from.
+        citation: Bir `mevzuat_references[].mevzuat` tarzı atıf string'i.
+        excerpts: Bu belge için alınan mevzuat pasajları -- atfın meşru
+            olarak gelebileceği tek kaynak.
 
     Returns:
-        `CitationSupport` reporting whether the citation's law and article
-        are each backed by at least one excerpt. A citation that resolves to
-        neither a law nor an article (`resolve_citation` found nothing
-        checkable) is reported as wholly unsupported regardless of the
-        excerpts -- it names no authority to verify against.
+        Atfın kanununun ve maddesinin her birinin en az bir alıntıyla
+        desteklenip desteklenmediğini bildiren `CitationSupport`. Ne bir
+        kanuna ne de bir maddeye çözülen bir atıf (`resolve_citation`
+        kontrol edilebilir hiçbir şey bulamadı) alıntılardan bağımsız olarak
+        tamamen desteklenmemiş olarak raporlanır -- karşılaştırılacak
+        hiçbir otorite adlandırmaz.
     """
     ref = resolve_citation(citation)
     if ref.kanun is None and ref.madde is None:

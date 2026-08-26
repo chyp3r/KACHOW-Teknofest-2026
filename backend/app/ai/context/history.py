@@ -1,12 +1,12 @@
-"""Budget-aware selection of verbatim conversation turns.
+"""Birebir (değiştirilmemiş) konuşma turlarının bütçe farkındalıklı seçimi.
 
-A separate mechanism from ``ContextBuilder``'s string blocks: conversation
-history is injected into the assist agent as a list of role/content
-messages (see ``AssistantAgent.run_stream``), not substituted into a single
-prompt string, so it doesn't fit ``ContextBlock``'s ``render() -> str``
-shape. Replaces the previous fixed ``HISTORY_WINDOW`` (always exactly 12
-turns) with a window that shrinks when the rest of the prompt is already
-large and grows when it isn't.
+``ContextBuilder``'ın string bloklarından ayrı bir mekanizma: konuşma
+geçmişi, tek bir prompt string'ine yerleştirilmek yerine assist ajanına
+rol/içerik mesajlarından oluşan bir liste olarak enjekte edilir (bkz.
+``AssistantAgent.run_stream``), bu yüzden ``ContextBlock``'ın
+``render() -> str`` biçimine uymaz. Önceki sabit ``HISTORY_WINDOW``'un
+(her zaman tam olarak 12 tur) yerine, prompt'un geri kalanı zaten büyükse
+küçülen, değilse büyüyen bir pencere koyar.
 """
 
 from typing import Callable
@@ -23,28 +23,29 @@ def select_history_window(
     min_turns: int = 2,
     max_turns: int | None = None,
 ) -> list[dict[str, str]]:
-    """Pick the most recent turns that fit the remaining budget.
+    """Kalan bütçeye sığan en yeni turları seçer.
 
-    Greedy from the most recent turn backwards -- recency is what pronoun/
-    ellipsis resolution needs (see the module this replaced), so a turn that
-    doesn't fit is one to drop, not one to truncate mid-message.
+    En yeni turdan geriye doğru açgözlü (greedy) bir seçim -- zamirlerin/
+    eksiltili ifadelerin çözümlenmesi için gereken şey yakınlıktır (bkz. bu
+    modülün yerini aldığı eski modül), bu yüzden sığmayan bir tur mesajın
+    ortasından kırpılacak değil, tamamen düşürülecek bir turdur.
 
     Args:
-        history: Prior turns, oldest first.
-        remaining_budget_tokens: Tokens left for history after every other
-            block in the same prompt has been accounted for.
-        count_tokens: The active client's token estimator.
-        min_turns: Always include at least this many recent turns (or fewer
-            if `history` itself is shorter), even if that exceeds the
-            budget -- a very tight budget should degrade the prompt, not
-            make the assistant amnesiac after every single reply.
-        max_turns: Cap on how many recent turns to consider at all, before
-            budget is even applied. Defaults to `MemoryPolicy.history_window`
-            (today's fixed value), so a generous budget still doesn't pull
-            in the entire retained backlog.
+        history: Önceki turlar, en eskiden başlayarak.
+        remaining_budget_tokens: Aynı prompt'taki diğer her blok
+            hesaplandıktan sonra geçmiş için kalan token sayısı.
+        count_tokens: Aktif istemcinin token tahmin edicisi.
+        min_turns: Bütçeyi aşsa bile her zaman en az bu kadar yeni turu
+            dahil eder (`history`'nin kendisi daha kısaysa daha azını) --
+            çok sıkı bir bütçe prompt'u kötüleştirmeli, asistanı her tek
+            cevaptan sonra hafızasız bırakmamalı.
+        max_turns: Bütçe uygulanmadan önce bile kaç yeni turun dikkate
+            alınacağına dair üst sınır. Varsayılan olarak
+            `MemoryPolicy.history_window` (bugünkü sabit değer), böylece
+            bol bir bütçe bile tutulan tüm geçmişi içine çekmez.
 
     Returns:
-        The selected turns, oldest first.
+        Seçilen turlar, en eskiden başlayarak.
     """
     cap = max_turns if max_turns is not None else _DEFAULT_MAX_TURNS
     candidates = history[-cap:] if cap > 0 else []

@@ -1,18 +1,19 @@
-"""Magic-byte file validation and resource-exhaustion safeguards for uploads.
+"""Yüklenen dosyalar için magic-byte doğrulaması ve kaynak tükenmesi önlemleri.
 
-``DocumentService._validate_upload`` (before this module) only checked file
-extension and the client-declared ``Content-Type`` header -- both are strings
-the uploader controls and neither says anything about what the bytes actually
-are. A file renamed from ``.docx`` to ``.doc`` (Word's old OLE2 format is not
-even in ``ALLOWED_DOCUMENT_EXTENSIONS`` -- only the modern zip-based formats
-carry archive-bomb risk) sails through unexamined. This module reads the
-actual bytes: does the content's signature match what the extension claims,
-and if it is an archive, does it expand to something a single upload has no
-business becoming.
+``DocumentService._validate_upload`` (bu modülden önce) yalnızca dosya
+uzantısını ve istemcinin bildirdiği ``Content-Type`` başlığını kontrol
+ediyordu -- ikisi de yükleyicinin kontrol ettiği string'lerdir ve hiçbiri
+baytların gerçekte ne olduğu hakkında bir şey söylemez. ``.docx``'ten
+``.doc``'a yeniden adlandırılmış bir dosya (Word'ün eski OLE2 formatı
+``ALLOWED_DOCUMENT_EXTENSIONS`` içinde bile değildir -- yalnızca modern
+zip tabanlı formatlar arşiv bombası riski taşır) incelenmeden geçer. Bu
+modül gerçek baytları okur: içeriğin imzası uzantının iddia ettiğiyle
+eşleşiyor mu, ve bir arşivse, tek bir yüklemenin dönüşmesi makul olmayan
+bir şeye mi genişliyor.
 
-Built entirely on dependencies already in ``requirements.txt``
-(``pypdfium2``, ``Pillow``, the standard library's ``zipfile``) -- no new
-dependency for a check that runs on every upload.
+Tamamen ``requirements.txt``'te zaten bulunan bağımlılıklar üzerine kurulu
+(``pypdfium2``, ``Pillow``, standart kütüphanenin ``zipfile``'ı) -- her
+yüklemede çalışan bir kontrol için yeni bir bağımlılık eklenmedi.
 """
 
 import io
@@ -37,10 +38,11 @@ try:  # pragma: no cover - exercised via patching in tests
 except ImportError:  # pragma: no cover
     Image = None
 
-#: Ceilings chosen to comfortably exceed any real official document while
-#: still bounding worst-case memory/CPU a single upload can force -- not
-#: measured against a specific attack sample, just generous enough that no
-#: legitimate resmi yazışma or ek ever approaches them.
+#: Gerçek herhangi bir resmi belgeyi rahatça aşacak, ama yine de tek bir
+#: yüklemenin zorlayabileceği en kötü durum bellek/CPU'sunu sınırlayacak
+#: şekilde seçilmiş üst sınırlar -- belirli bir saldırı örneğine göre
+#: ölçülmedi, sadece hiçbir meşru resmi yazışma veya ekin bunlara
+#: yaklaşmayacağı kadar cömert.
 MAX_PDF_PAGES = 500
 MAX_IMAGE_PIXELS = 60_000_000  # ~60 megapixels
 MAX_ARCHIVE_UNCOMPRESSED_BYTES = 200 * 1024 * 1024  # 200 MB
@@ -48,17 +50,19 @@ MAX_ARCHIVE_COMPRESSION_RATIO = 100
 MAX_ARCHIVE_ENTRIES = 2000
 
 _IMAGE_EXTENSIONS = frozenset({"png", "jpg", "jpeg", "tif", "tiff"})
-#: Old binary Word format's file signature (m.10's letterhead has no bearing
-#: on this -- this is the container format, not the document content).
+#: Eski ikili Word formatının dosya imzası (bunun m.10'un antetli kağıdıyla
+#: bir ilgisi yok -- bu, belge içeriği değil, konteyner formatıdır).
 _OLE2_MAGIC = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
-#: Shared by zip, and every zip-based Office format (docx/xlsx/pptx) --
-#: relevant here because none of those extensions are in
-#: ALLOWED_DOCUMENT_EXTENSIONS, so a zip-based file can only have arrived by
-#: being renamed to one of the extensions that is (".doc").
+#: Zip ve tüm zip tabanlı Office formatları (docx/xlsx/pptx) tarafından
+#: paylaşılır -- burada önemlidir çünkü bu uzantıların hiçbiri
+#: ALLOWED_DOCUMENT_EXTENSIONS içinde değildir, dolayısıyla zip tabanlı bir
+#: dosya ancak izin verilen uzantılardan birine (".doc") yeniden
+#: adlandırılarak gelmiş olabilir.
 _ZIP_MAGIC = b"PK\x03\x04"
-#: Archive member extensions that indicate a nested archive -- a docx/xlsx
-#: member is always plain XML, never another archive, so one appearing here
-#: is exactly the nesting escalation a decompression bomb relies on.
+#: İç içe geçmiş bir arşivi işaret eden arşiv üyesi uzantıları -- bir
+#: docx/xlsx üyesi her zaman düz XML'dir, asla başka bir arşiv değildir,
+#: dolayısıyla burada biri görünmesi tam olarak bir dekompresyon bombasının
+#: dayandığı iç içe geçme eskalasyonudur.
 _NESTED_ARCHIVE_SUFFIXES = (".zip", ".docx", ".xlsx", ".pptx", ".rar", ".7z", ".gz")
 
 
@@ -72,7 +76,7 @@ def _is_image_bytes(content: bytes) -> bool:
 
 
 class FileIntegrityResult(BaseModel):
-    """Outcome of a magic-byte / resource-exhaustion check on one upload."""
+    """Tek bir yükleme üzerindeki magic-byte / kaynak tükenmesi kontrolünün sonucu."""
 
     ok: bool
     reason: str = Field(default="")
@@ -80,9 +84,9 @@ class FileIntegrityResult(BaseModel):
 
 def _check_pdf(content: bytes) -> FileIntegrityResult:
     if pdfium is None:  # pragma: no cover - depends on optional dependency
-        # No parser available to check with -- the extraction chain will
-        # fail identically downstream with its own, already-good error
-        # message, so let it through to that rather than duplicating it here.
+        # Kontrol edecek bir ayrıştırıcı yok -- çıkarma zinciri zaten kendi
+        # iyi hata mesajıyla aşağı akışta aynı şekilde başarısız olacak,
+        # bunu burada tekrarlamak yerine oraya geçmesine izin ver.
         return FileIntegrityResult(ok=True)
     try:
         document = pdfium.PdfDocument(content)
@@ -111,8 +115,9 @@ def _check_image(content: bytes) -> FileIntegrityResult:
     try:
         with Image.open(io.BytesIO(content)) as image:
             image.verify()
-        # verify() leaves the file object unusable for further decoding per
-        # Pillow's own docs; reopen to read dimensions safely.
+        # Pillow'un kendi dokümantasyonuna göre verify() dosya nesnesini
+        # başka bir çözümleme için kullanılamaz hale getirir; boyutları
+        # güvenle okumak için yeniden aç.
         with Image.open(io.BytesIO(content)) as image:
             width, height = image.size
     except Exception as exc:
@@ -132,15 +137,15 @@ def _check_image(content: bytes) -> FileIntegrityResult:
 
 
 def _check_archive(content: bytes) -> FileIntegrityResult:
-    """Reject a zip-based upload that would decompress to something absurd.
+    """Açıldığında saçma bir boyuta ulaşacak zip tabanlı bir yüklemeyi reddet.
 
     Args:
-        content: Raw bytes already confirmed to start with the zip signature.
+        content: Zip imzasıyla başladığı zaten doğrulanmış ham baytlar.
 
     Returns:
-        ``ok=False`` on too many entries, an oversized decompressed payload,
-        a suspicious compression ratio, or a nested archive member -- the
-        four classic decompression-bomb shapes.
+        Çok fazla girdi, aşırı büyük açılmış içerik, şüpheli bir sıkıştırma
+        oranı veya iç içe geçmiş bir arşiv üyesi durumunda ``ok=False`` --
+        dekompresyon bombasının dört klasik biçimi.
     """
     try:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
@@ -186,25 +191,25 @@ def _check_archive(content: bytes) -> FileIntegrityResult:
 def check_file_integrity(
     content: bytes, *, file_name: str, content_type: Optional[str] = None
 ) -> FileIntegrityResult:
-    """Validate that an upload's bytes actually match its claimed type.
+    """Bir yüklemenin baytlarının gerçekten iddia ettiği türle eşleştiğini doğrula.
 
-    Runs before the existing extension/MIME allow-list check in
-    ``DocumentService._validate_upload`` closes the gap that check leaves
-    open: extension and ``Content-Type`` are both strings the uploader
-    supplies and neither is verified against the actual bytes.
+    ``DocumentService._validate_upload`` içindeki mevcut uzantı/MIME
+    izin-listesi kontrolünden önce çalışır ve o kontrolün bıraktığı boşluğu
+    kapatır: uzantı ve ``Content-Type`` ikisi de yükleyicinin sağladığı
+    string'lerdir ve hiçbiri gerçek baytlara karşı doğrulanmaz.
 
     Args:
-        content: Raw uploaded bytes.
-        file_name: Original file name, used only for its extension.
-        content_type: Declared MIME type (currently unused here -- the
-            allow-list check already accepts either a matching extension or
-            a matching MIME type, so this check only needs the extension to
-            know which signature to expect).
+        content: Ham yüklenen baytlar.
+        file_name: Yalnızca uzantısı için kullanılan orijinal dosya adı.
+        content_type: Bildirilen MIME türü (şu anda burada kullanılmıyor --
+            izin-listesi kontrolü zaten eşleşen bir uzantıyı veya eşleşen bir
+            MIME türünü kabul ediyor, dolayısıyla bu kontrol hangi imzanın
+            beklendiğini bilmek için yalnızca uzantıya ihtiyaç duyar).
 
     Returns:
-        ``ok=True`` when the content is consistent with its claimed type and
-        within the resource-exhaustion ceilings; ``ok=False`` with a Turkish
-        ``reason`` otherwise.
+        İçerik iddia ettiği türle tutarlıysa ve kaynak tükenmesi üst
+        sınırları içindeyse ``ok=True``; aksi halde Türkçe bir ``reason``
+        ile ``ok=False``.
     """
     extension = os.path.splitext(file_name)[1].lower().lstrip(".")
 
@@ -225,10 +230,11 @@ def check_file_integrity(
         return _check_image(content)
 
     if extension == "doc":
-        # Genuine old-format .doc is OLE2. A zip-based file under this
-        # extension is only explicable as a renamed docx/xlsx/pptx -- accept
-        # it structurally, but archive-bomb check it exactly as if its real
-        # extension had been declared.
+        # Gerçek eski formattaki .doc, OLE2'dir. Bu uzantı altındaki zip
+        # tabanlı bir dosya yalnızca yeniden adlandırılmış bir
+        # docx/xlsx/pptx olarak açıklanabilir -- yapısal olarak kabul et,
+        # ama gerçek uzantısı bildirilmiş gibi arşiv bombası kontrolünden
+        # aynen geçir.
         if content[:8] == _OLE2_MAGIC:
             return FileIntegrityResult(ok=True)
         if content[:4] == _ZIP_MAGIC:
@@ -239,8 +245,9 @@ def check_file_integrity(
         )
 
     if extension == "txt":
-        # A text upload whose bytes are actually a disguised binary format
-        # is exactly the spoofing gap this module exists to close.
+        # Baytları aslında gizlenmiş bir ikili format olan bir metin
+        # yüklemesi, tam olarak bu modülün var olma nedeni olan sahtecilik
+        # boşluğudur.
         if (
             has_pdf_magic_bytes(content)
             or content[:8] == _OLE2_MAGIC
@@ -253,6 +260,6 @@ def check_file_integrity(
             )
         return FileIntegrityResult(ok=True)
 
-    # Any other extension is already rejected by the allow-list check this
-    # runs alongside; nothing further to validate here.
+    # Diğer tüm uzantılar, bunun yanında çalıştığı izin-listesi kontrolü
+    # tarafından zaten reddedilir; burada doğrulanacak başka bir şey yok.
     return FileIntegrityResult(ok=True)

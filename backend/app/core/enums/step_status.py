@@ -2,11 +2,12 @@ from enum import StrEnum
 
 
 class StepStatus(StrEnum):
-    """Outcome of a single plan step or draft revision, as reported over SSE.
+    """SSE üzerinden raporlandığı şekliyle tek bir plan adımı veya taslak revizyonunun sonucu.
 
-    A `StrEnum` member compares and serialises exactly like the bare string
-    literal it replaces, so a sub-graph (e.g. draft_graph) that still returns
-    plain strings needs no changes to compare equal here.
+    Bir `StrEnum` üyesi, yerine geçtiği düz dize literali ile tam olarak
+    aynı şekilde karşılaştırılır ve serileştirilir, bu yüzden hâlâ düz
+    dizeler döndüren bir alt grafik (örn. draft_graph), burada eşit
+    karşılaştırmak için hiçbir değişikliğe ihtiyaç duymaz.
     """
 
     IN_PROGRESS = "IN_PROGRESS"

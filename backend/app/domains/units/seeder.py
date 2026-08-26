@@ -1,19 +1,21 @@
-"""Best-effort bootstrap of the default routable units.
+"""Varsayılan yönlendirilebilir birimlerin best-effort önyükleme (bootstrap) işlemi.
 
-Mirrors `app.domains.users.seeder.seed_default_users`: a fresh deployment
-otherwise starts with an empty `units` table, and an empty table means every
-routing decision short-circuits to "no unit, needs human approval" (see
-`app.ai.workflows.routing_graph`) until an admin manually creates units
-through `POST /units`. Seeding the units the system shipped with before this
-domain existed keeps behaviour unchanged on a fresh environment.
+`app.domains.users.seeder.seed_default_users`'ı yansıtır: aksi takdirde
+taze bir dağıtım (deployment) boş bir `units` tablosuyla başlar ve boş bir
+tablo, bir admin `POST /units` üzerinden manuel olarak birim oluşturana
+kadar her yönlendirme kararının "birim yok, insan onayı gerekiyor"
+durumuna kısa devre yapması demektir (bkz. `app.ai.workflows.routing_graph`).
+Bu domain var olmadan önce sistemin geldiği birimleri seed etmek, taze bir
+ortamda davranışı değiştirmeden korur.
 
-Idempotent by design: each unit is checked by name before it is created, so
-re-running this on every startup never duplicates a row. Each unit gets its
-own short-lived session, same reasoning as the users seeder -- one
-conflicting name must not block the others from being seeded.
+Tasarım gereği idempotent: her birim oluşturulmadan önce adına göre
+kontrol edilir, bu yüzden her başlatmada tekrar çalıştırmak asla bir
+satırı çoğaltmaz. Her birim kendi kısa ömürlü oturumunu alır, users
+seeder ile aynı gerekçe -- çakışan bir ad diğerlerinin seed edilmesini
+engellememelidir.
 
-Every function swallows its own exceptions and only logs -- seeding must
-never be the reason the API fails to boot.
+Her fonksiyon kendi istisnalarını yutar ve sadece loglar -- seed işlemi
+API'nin ayağa kalkmama sebebi olmamalıdır.
 """
 
 import logging
@@ -64,11 +66,11 @@ def _seed_units() -> list[_SeedUnit]:
 
 
 async def _seed_one(unit: _SeedUnit, company_id: str) -> bool:
-    """Create one unit for `company_id` if it doesn't already exist.
+    """`company_id` için, henüz yoksa bir birim oluşturur.
 
     Returns:
-        True if a new row was created, False if a unit with that name
-        already existed and nothing was done.
+        Yeni bir satır oluşturulduysa True; o isimde bir birim zaten
+        varsa ve hiçbir şey yapılmadıysa False.
     """
     async with tenant_session(company_id) as session:
         repository = UnitRepository(session)
@@ -89,16 +91,16 @@ async def _seed_one(unit: _SeedUnit, company_id: str) -> bool:
 
 
 async def seed_default_units(company_id: str) -> None:
-    """Create the default routable units for `company_id`, skipping any that
-    already exist.
+    """`company_id` için varsayılan yönlendirilebilir birimleri oluşturur,
+    zaten var olanları atlar.
 
-    A no-op when `settings.SEED_DEFAULT_UNITS` is off. Safe to call on every
-    startup.
+    `settings.SEED_DEFAULT_UNITS` kapalıyken hiçbir şey yapmaz. Her
+    başlatmada çağrılması güvenlidir.
 
     Args:
-        company_id: The company to seed units into -- units are
-            company-scoped, so this must run once per company that wants
-            the default set (today, only the demo company; see
+        company_id: Birimlerin seed edileceği şirket -- birimler şirket
+            kapsamlıdır, bu yüzden bu, varsayılan seti isteyen her şirket
+            için bir kez çalışmalıdır (bugün sadece demo şirket; bkz.
             `app.domains.companies.seeder`).
     """
     if not settings.SEED_DEFAULT_UNITS:

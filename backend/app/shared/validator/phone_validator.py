@@ -5,9 +5,9 @@ PHONE_REGEX = re.compile(
 )
 
 def validate_phone(phone: str) -> str:
-    """Validate phone number format based on E.164 standard.
-    
-    Raises ValueError if format is invalid.
+    """Telefon numarası biçimini E.164 standardına göre doğrular.
+
+    Biçim geçersizse ValueError fırlatır.
     """
     cleaned = re.sub(r"\s+", "", phone)
     if not PHONE_REGEX.match(cleaned):

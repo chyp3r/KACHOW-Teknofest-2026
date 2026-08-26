@@ -63,68 +63,73 @@ from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE, LLM_TOKEN
 
 logger = logging.getLogger(__name__)
 
-#: The "balanced" reasoning-level preset carries today's pre-existing
-#: defaults verbatim (see app.ai.reasoning_levels), so deriving these two
-#: constants from it -- rather than duplicating the literals -- makes
-#: "balanced reproduces today's behaviour exactly" a structural guarantee
-#: instead of something that can drift out of sync.
+#: "balanced" reasoning-level preset'i, bugünkü mevcut varsayılanları
+#: olduğu gibi taşır (bkz. app.ai.reasoning_levels); bu iki sabiti
+#: literal'leri tekrarlamak yerine ondan türetmek, "balanced bugünkü
+#: davranışı birebir yeniden üretir" garantisini, zamanla birbirinden
+#: sapabilecek bir şey yerine yapısal bir garantiye dönüştürür.
 _BALANCED_PRESET = get_reasoning_level_preset(ReasoningLevel.BALANCED)
 
-#: Generation budget for a draft. An official letter with header, body and
-#: signature block runs 600-1200 tokens; the old global cap of 1024 truncated
-#: the longer ones mid-sentence.
+#: Bir taslak için üretim bütçesi. Antetli, gövdeli ve imza bloklu resmi
+#: bir yazı 600-1200 token sürer; eski global tavan olan 1024, daha uzun
+#: yazıları cümle ortasında kesiyordu.
 DRAFT_MAX_TOKENS = _BALANCED_PRESET.draft_max_tokens
 
-#: One initial generation plus at most one revision. Each attempt is a full
-#: local generation (~25-30s); a third attempt would blow the ~90s draft
-#: latency budget and rarely succeeds where the second one didn't. The
-#: "deep" reasoning level raises this bound for callers willing to trade
-#: latency for another repair pass -- see app.ai.reasoning_levels.
+#: Bir ilk üretim artı en fazla bir revizyon. Her deneme tam bir yerel
+#: üretimdir (~25-30sn); üçüncü bir deneme ~90sn'lik taslak gecikme
+#: bütçesini aşar ve ikincisinin başaramadığı yerde nadiren başarır. "deep"
+#: reasoning seviyesi, gecikmeyi ek bir onarım geçişiyle takas etmeye razı
+#: çağıranlar için bu sınırı yükseltir -- bkz. app.ai.reasoning_levels.
 MAX_DRAFT_ATTEMPTS = _BALANCED_PRESET.max_draft_attempts
 
-#: Minimum growth (characters) between two "draft" partial_result previews
-#: sent to the client while the writer streams. Large enough that a 60-90s
-#: generation still only pays for a few dozen queue round-trips, small
-#: enough that the waiting-state UI (Faz B) has something new to show every
-#: few seconds rather than sitting on the first preview the whole time.
+#: Writer akış halindeyken istemciye gönderilen iki "draft" partial_result
+#: önizlemesi arasındaki minimum büyüme (karakter cinsinden). 60-90sn'lik
+#: bir üretim yine de yalnızca birkaç düzine kuyruk gidiş-dönüşüne mal
+#: olacak kadar büyük, bekleme durumu arayüzünün (Faz B) ilk önizlemede
+#: oturup kalmak yerine birkaç saniyede bir yeni bir şey göstermesine
+#: yetecek kadar küçük.
 _PARTIAL_PREVIEW_CHUNK_CHARS = 200
 
 
 class DraftState(TypedDict, total=False):
-    """LangGraph state for the drafting workflow."""
+    """Taslak oluşturma iş akışı için LangGraph durumu."""
 
     source_document: str
     classification: dict[str, Any]
-    #: Today's date (see app.ai.workflows.dates.today_tr), resolved once by
-    #: the caller before the graph runs and never re-derived inside it --
-    #: this is what the writer's own "Tarih:" line must always use, and the
-    #: only date value ever injected into the brief rather than asked
-    #: about. Absent/empty degrades to no date guidance at all (an older
-    #: caller that hasn't been updated to pass it), not a crash.
+    #: Bugünün tarihi (bkz. app.ai.workflows.dates.today_tr), graph
+    #: çalışmadan önce çağıran tarafından bir kez çözümlenir ve içeride
+    #: asla yeniden türetilmez -- writer'ın kendi "Tarih:" satırının her
+    #: zaman kullanması gereken ve brief'e sorulmak yerine doğrudan
+    #: enjekte edilen tek tarih değeri budur. Boş/yok olması hiçbir tarih
+    #: yönlendirmesi olmamasına düşer (bunu geçirecek şekilde güncellenmemiş
+    #: eski bir çağıran), çökmeye değil.
     today: str
-    #: The user's own drafting request, unmodified by orchestrator
-    #: boilerplate -- see ``resolve_correspondence_type``'s ``user_request``
-    #: argument for why this must be kept separate from ``instructions``.
+    #: Kullanıcının kendi taslak talebi, orkestratör kalıp metniyle
+    #: değiştirilmemiş -- bunun neden `instructions`'dan ayrı tutulması
+    #: gerektiği için ``resolve_correspondence_type``'ın ``user_request``
+    #: argümanına bakın.
     user_request: str
     correspondence_type: str
     correspondence_type_source: str
-    #: Free-text genre label ("itiraz dilekçesi") when the user asked for a
-    #: specific genre outside the four spec'd CorrespondenceType values.
-    #: Empty for a core type. See ``correspondence.resolve_correspondence_type``.
+    #: Kullanıcı, dört spesifiye edilmiş CorrespondenceType değeri dışında
+    #: belirli bir tür istediğinde ("itiraz dilekçesi") serbest metin tür
+    #: etiketi. Temel bir tür için boş. Bkz.
+    #: ``correspondence.resolve_correspondence_type``.
     correspondence_sub_genre: str
     context: str
     instructions: str
-    #: This turn's own `instructions` plus every earlier user turn's own
-    #: message text and any settled writing-brief slot answer this session
-    #: (see `_build_instruction_haystack`) -- what `verify_node` hands
-    #: `verify_draft` as `instructions=` so a name/date/institution the
-    #: user supplied in an *earlier* turn of a multi-turn negotiation is
-    #: still recognised as the user's own word, not scored as an
-    #: ungrounded `dayanaksiz_iddia` merely for not being repeated
-    #: verbatim in the latest message. Falls back to plain `instructions`
-    #: when empty (an older caller, or one not yet updated to populate
-    #: this -- see `app.ai.workflows.revise_graph`, wired in a later
-    #: phase) so nothing regresses to "no instruction grounding at all".
+    #: Bu turun kendi `instructions`'ı artı önceki her kullanıcı turunun
+    #: kendi mesaj metni ve bu oturumdaki her yerleşmiş yazım-briefi slot
+    #: cevabı (bkz. `_build_instruction_haystack`) -- `verify_node`'un
+    #: `verify_draft`'a `instructions=` olarak verdiği şey budur, böylece
+    #: kullanıcının çok turlu bir müzakerenin *önceki* bir turunda verdiği
+    #: bir isim/tarih/kurum, son mesajda birebir tekrarlanmadığı için
+    #: dayanaksız bir `dayanaksiz_iddia` olarak puanlanmak yerine yine de
+    #: kullanıcının kendi sözü olarak tanınır. Boşsa düz `instructions`'a
+    #: geri döner (bunu doldurmak üzere henüz güncellenmemiş eski bir
+    #: çağıran -- bkz. `app.ai.workflows.revise_graph`, sonraki bir fazda
+    #: bağlanacak) böylece hiçbir şey "hiç talimat temellendirmesi yok"
+    #: durumuna gerilemez.
     instruction_haystack: str
     draft: str
     previous_draft: str
@@ -139,101 +144,107 @@ class DraftState(TypedDict, total=False):
     repair_items: list[dict[str, Any]]
     pii_findings: list[dict[str, Any]]
     missing_information: list[dict[str, Any]]
-    #: The full, auditable rule breakdown behind confidence_score -- report's
-    #: own findings plus everything merge_verdicts folds in (PII, guessed
-    #: correspondence type, missing mevzuat context, judge findings). See
-    #: app.ai.verification.confidence_rules.
+    #: confidence_score'un arkasındaki tam, denetlenebilir kural dökümü --
+    #: report'un kendi bulguları artı merge_verdicts'in kattığı her şey
+    #: (PII, tahmin edilen yazışma türü, eksik mevzuat bağlamı, judge
+    #: bulguları). Bkz. app.ai.verification.confidence_rules.
     applied_rules: list[dict[str, Any]]
     attempt_history: list[dict[str, Any]]
-    #: The best-scoring attempt's full result snapshot seen so far this turn
-    #: (see app.ai.workflows.attempt_tracking) -- kept so a repair pass that
-    #: makes the draft *worse*, or that crashes outright, cannot ship a
-    #: worse or blank result than an earlier attempt already produced (C2,
-    #: C3). Absent on the first attempt.
+    #: Bu turda şimdiye kadar görülen en yüksek puanlı denemenin tam sonuç
+    #: anlık görüntüsü (bkz. app.ai.workflows.attempt_tracking) -- taslağı
+    #: *kötüleştiren* ya da tamamen çöken bir onarım geçişinin, önceki bir
+    #: denemenin çoktan ürettiğinden daha kötü veya boş bir sonuç
+    #: göndermesini engellemek için tutulur (C2, C3). İlk denemede yok.
     best_attempt: dict[str, Any]
-    #: Set only when a repair pass crashed/timed out and writer_node fell
-    #: back to `best_attempt` instead of failing the whole turn (C3) --
-    #: tells route_after_writer this is already a fully verified result, so
-    #: it should route straight to "end" rather than back through "verify".
+    #: Yalnızca bir onarım geçişi çöktüğünde/zaman aşımına uğradığında ve
+    #: writer_node tüm turu başarısız saymak yerine `best_attempt`'e geri
+    #: döndüğünde ayarlanır (C3) -- route_after_writer'a bunun zaten tam
+    #: doğrulanmış bir sonuç olduğunu, dolayısıyla "verify"den tekrar
+    #: geçmek yerine doğrudan "end"e yönlendirmesi gerektiğini söyler.
     restored_from_best_attempt: bool
     status: str
     error: str
     attempts: int
     brief: str
-    #: Final slot answers from the pre-draft writing-brief gate (see
-    #: app.ai.workflows.writing_brief) -- who's writing, who it's going to,
-    #: anlatım/kapanış. Rendered into `brief` (the writer's actual prompt
-    #: text) by `_build_brief`; kept here too, untouched, so the resulting
-    #: draft_result carries it forward for SessionFocus.DraftVersion (see
-    #: planning_graph._draft_version_from_result) and a later `revise` turn.
+    #: Taslak öncesi yazım-briefi geçidinden (bkz. app.ai.workflows.
+    #: writing_brief) gelen nihai slot cevapları -- kim yazıyor, kime
+    #: gidiyor, anlatım/kapanış. `_build_brief` tarafından `brief`'e
+    #: (writer'ın gerçek prompt metni) işlenir; burada da dokunulmadan
+    #: tutulur, böylece ortaya çıkan draft_result bunu SessionFocus.
+    #: DraftVersion (bkz. planning_graph._draft_version_from_result) ve
+    #: sonraki bir `revise` turu için taşır.
     writing_brief: dict[str, Any]
-    #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); see
-    #: app.ai.reasoning_levels.get_reasoning_level_preset. Absent or unknown
-    #: resolves to "balanced", so older callers that never set it are
-    #: unaffected.
+    #: Bu koşum için hız-kalite dengesi katmanı ("fast"/"balanced"/"deep");
+    #: bkz. app.ai.reasoning_levels.get_reasoning_level_preset. Yok veya
+    #: bilinmiyorsa "balanced"a çözümlenir, dolayısıyla bunu hiç
+    #: ayarlamamış eski çağıranlar etkilenmez.
     reasoning_level: str
-    #: Few-shot style examples retrieved for this draft (see
-    #: retrieve_examples_node), each a plain dict with "text",
-    #: "correspondence_type", "niyet", "kurum", "baslik". Set once before the
-    #: first writer pass and left untouched by revise_node, so a repair
-    #: attempt sees the same examples as the original draft rather than
-    #: re-querying. Empty (never absent) when retrieval is disabled, finds
-    #: nothing, or fails -- few-shot is a quality boost, not a dependency.
+    #: Bu taslak için alınan few-shot stil örnekleri (bkz.
+    #: retrieve_examples_node), her biri "text", "correspondence_type",
+    #: "niyet", "kurum", "baslik" alanlı düz bir dict. İlk writer
+    #: geçişinden önce bir kez ayarlanır ve revise_node tarafından
+    #: dokunulmadan bırakılır, böylece bir onarım denemesi yeniden
+    #: sorgulamak yerine orijinal taslakla aynı örnekleri görür. Alma
+    #: devre dışıysa, hiçbir şey bulamazsa veya başarısız olursa boş
+    #: (asla yok) -- few-shot bir bağımlılık değil, bir kalite artışıdır.
     style_examples: list[dict[str, Any]]
-    #: Which tenant this draft is for -- read by ``writer_node`` to resolve
-    #: this company's runtime style adapter (Faz C2, see ``adapter_provider``
-    #: on ``create_draft_graph``). Absent/empty behaves exactly like no
-    #: adapter configured, never an error.
+    #: Bu taslağın hangi kiracı için olduğu -- ``writer_node`` tarafından
+    #: bu şirketin çalışma zamanı stil adaptörünü çözmek için okunur (Faz
+    #: C2, bkz. ``create_draft_graph``'daki ``adapter_provider``). Yok/boş
+    #: olması hiçbir adaptör yapılandırılmamış gibi davranır, asla hata
+    #: vermez.
     company_id: str
-    #: The resolved adapter (``CompanyAdapter.to_dict()``), set once by
-    #: ``writer_node`` on the first attempt and carried forward so
-    #: ``verify_node`` can fold ``preferred_examples`` into the same
-    #: ``ornek_sizintisi`` leak check ``style_examples`` already goes
-    #: through, without re-resolving it a second time.
+    #: Çözümlenmiş adaptör (``CompanyAdapter.to_dict()``), ilk denemede
+    #: ``writer_node`` tarafından bir kez ayarlanır ve taşınır, böylece
+    #: ``verify_node`` ``preferred_examples``'ı ikinci kez yeniden
+    #: çözümlemeden ``style_examples``'ın zaten geçtiği aynı
+    #: ``ornek_sizintisi`` sızıntı kontrolüne katabilir.
     company_adapter: dict[str, Any]
-    #: The resolved mandatory rule set (``CompanyRuleSet.to_dict()``), set
-    #: once by ``writer_node`` on the first attempt and carried forward so
-    #: ``verify_node`` can render the same rules block for the judge without
-    #: re-resolving. Absent/empty behaves like no rules configured, never
-    #: an error.
+    #: Çözümlenmiş zorunlu kural kümesi (``CompanyRuleSet.to_dict()``),
+    #: ilk denemede ``writer_node`` tarafından bir kez ayarlanır ve
+    #: taşınır, böylece ``verify_node`` yeniden çözümlemeden judge için
+    #: aynı kurallar bloğunu render edebilir. Yok/boş olması hiçbir kural
+    #: yapılandırılmamış gibi davranır, asla hata vermez.
     company_rules: dict[str, Any]
-    #: The resolved identity profile (``CompanyProfile.to_dict()``), set
-    #: once by ``validate_input_node`` (its ``display_name``/``letterhead``/
-    #: ``default_signer_title`` are already baked into ``brief``'s own
-    #: "KURUM KİMLİĞİ" section there) and carried forward so ``verify_node``
-    #: can pass the same values to ``verify_draft`` as ``trusted_facts``
-    #: without re-resolving. Absent/empty behaves like no profile
-    #: configured, never an error.
+    #: Çözümlenmiş kimlik profili (``CompanyProfile.to_dict()``),
+    #: ``validate_input_node`` tarafından bir kez ayarlanır (``display_
+    #: name``/``letterhead``/``default_signer_title`` zaten ``brief``'in
+    #: kendi "KURUM KİMLİĞİ" bölümüne işlenmiştir) ve taşınır, böylece
+    #: ``verify_node`` aynı değerleri yeniden çözümlemeden ``verify_
+    #: draft``'a ``trusted_facts`` olarak geçirebilir. Yok/boş olması
+    #: hiçbir profil yapılandırılmamış gibi davranır, asla hata vermez.
     company_profile: dict[str, Any]
-    #: The attached document's storage path -- the same id
-    #: ``app.ai.tools.document_tools``'s ``search_document`` tool scopes its
-    #: own query to, via the ``document_qa`` Qdrant collection each chunk is
-    #: tagged with at upload time (see ``DocumentService._index_for_qa``).
-    #: Absent/empty behaves exactly like no document attached: retrieval is
-    #: skipped, never an error.
+    #: Eklenen belgenin depolama yolu -- ``app.ai.tools.document_tools``'un
+    #: ``search_document`` aracının, yükleme sırasında her parçanın
+    #: etiketlendiği ``document_qa`` Qdrant koleksiyonu üzerinden kendi
+    #: sorgusunu kapsadığı aynı id. Yok/boş olması tam olarak hiçbir belge
+    #: eklenmemiş gibi davranır: alma atlanır, asla hata vermez.
     document_id: str
-    #: Verbatim excerpts retrieved from the attached document for this draft
-    #: (see ``retrieve_source_chunks_node``), each a plain dict with "text"
-    #: and "metadata". The writer already sees the document's short
-    #: AI-generated summary via ``_build_brief``'s section 2 -- these are the
-    #: source's own words instead, so a draft can quote a specific figure,
-    #: clause or name the summary compressed away. Set once before the first
-    #: writer pass and left untouched by revise_node, same lifecycle as
-    #: ``style_examples``. Empty (never absent) when retrieval is disabled,
-    #: no document is attached, finds nothing, or fails -- grounding quality,
-    #: never a dependency the draft turn can fail on.
+    #: Bu taslak için eklenen belgeden alınan birebir alıntılar (bkz.
+    #: ``retrieve_source_chunks_node``), her biri "text" ve "metadata"
+    #: alanlı düz bir dict. Writer, belgenin kısa AI tarafından üretilmiş
+    #: özetini zaten ``_build_brief``'in 2. bölümünden görür -- bunlar
+    #: bunun yerine kaynağın kendi sözleridir, böylece bir taslak özetin
+    #: kısalttığı belirli bir rakamı, maddeyi veya ismi alıntılayabilir.
+    #: İlk writer geçişinden önce bir kez ayarlanır ve revise_node
+    #: tarafından dokunulmadan bırakılır, ``style_examples`` ile aynı
+    #: yaşam döngüsü. Alma devre dışıysa, hiçbir belge eklenmemişse,
+    #: hiçbir şey bulamazsa veya başarısız olursa boş (asla yok) --
+    #: temellendirme kalitesidir, taslak turunun başarısız olabileceği
+    #: bir bağımlılık asla değildir.
     source_chunks: list[dict[str, Any]]
 
 
 def _format_classification(classification: dict[str, Any]) -> str:
-    """Serialize analysis output for grounded agent prompts.
+    """Temellendirilmiş agent prompt'ları için analiz çıktısını serileştirir.
 
     Args:
-        classification: The analysis result, which may contain LangChain
-            Documents and Pydantic models alongside plain values.
+        classification: Düz değerlerin yanı sıra LangChain Document'ları ve
+            Pydantic modelleri içerebilen analiz sonucu.
 
     Returns:
-        Pretty-printed JSON, or a repr when the structure resists serialization.
+        Düzgün biçimlendirilmiş JSON, ya da yapı serileştirmeye direnirse
+        bir repr.
     """
     if not classification:
         return "Sınıflandırma bilgisi sağlanmadı."
@@ -257,7 +268,7 @@ def _format_classification(classification: dict[str, Any]) -> str:
 
 
 def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
-    """Return the extracted header fields as a plain dict."""
+    """Çıkarılan başlık alanlarını düz bir dict olarak döndürür."""
     fields = classification.get("fields", {})
     if hasattr(fields, "model_dump"):
         return fields.model_dump()
@@ -265,20 +276,21 @@ def _coerce_fields(classification: dict[str, Any]) -> dict[str, Any]:
 
 
 def _format_entities(entities: Any) -> str:
-    """Render the document analysis's flat NER-style entity list for the brief.
+    """Belge analizinin düz NER-tarzı varlık listesini brief için render eder.
 
-    ``EvrakField.entities`` (person/institution/date/amount/product names,
-    see ``app.ai.compliance.evrak_field``) was already being extracted at
-    document-analysis time but never once read by this module -- a request
-    like "bu CV'de çalıştığı kurumları belirt" had no way to see the
-    employer names the analysis step already found, so the writer left a
-    ``[BİLGİ EKSİK: ...]`` placeholder and the human gate asked the user a
-    question the document itself already answered. Comma-joined, not
-    numbered or typed (the source list carries no per-entity category), so
-    the writer must still cross-check each name against the rest of the
-    brief/RAG excerpts before using it -- this section is a hint of what to
-    look for, not itself a substitute for the "yalnızca brief'te bulunan
-    bilgileri kullan" grounding rule.
+    ``EvrakField.entities`` (kişi/kurum/tarih/tutar/ürün adları, bkz.
+    ``app.ai.compliance.evrak_field``) belge analizi sırasında zaten
+    çıkarılıyordu ama bu modül tarafından hiçbir zaman okunmuyordu -- "bu
+    CV'de çalıştığı kurumları belirt" gibi bir istek, analiz adımının
+    çoktan bulduğu işveren isimlerini görmenin bir yolunu bulamıyordu, bu
+    yüzden writer bir ``[BİLGİ EKSİK: ...]`` yer tutucusu bırakıyor ve
+    human gate, belgenin kendisinin zaten cevapladığı bir soruyu kullanıcıya
+    soruyordu. Virgülle ayrılmış, numaralandırılmamış veya tiplendirilmemiş
+    (kaynak liste varlık-başına bir kategori taşımıyor), bu yüzden writer
+    kullanmadan önce yine de her ismi brief'in/RAG alıntılarının geri
+    kalanıyla çapraz kontrol etmelidir -- bu bölüm nereye bakılacağına dair
+    bir ipucudur, "yalnızca brief'te bulunan bilgileri kullan" temellendirme
+    kuralının yerine geçmez.
     """
     if not isinstance(entities, (list, tuple)):
         return "(tespit edilmedi)"
@@ -286,12 +298,13 @@ def _format_entities(entities: Any) -> str:
     return ", ".join(names) if names else "(tespit edilmedi)"
 
 
-#: Which placeholder an identity-slot leak (see
-#: `app.ai.verification.draft_verifier._check_identity_slot_leaks`) converts
-#: to, by rule id -- the same placeholder text `writer.md` itself tells the
-#: writer to use for that slot when the real value is unknown, so a
-#: converted leak is indistinguishable from an ordinary unfilled field to
-#: everything downstream (`build_missing_info_request`/`apply_answers`).
+#: Bir kimlik-slotu sızıntısının (bkz.
+#: `app.ai.verification.draft_verifier._check_identity_slot_leaks`), kural
+#: id'sine göre hangi yer tutucuya dönüştüğü -- gerçek değer bilinmediğinde
+#: `writer.md`'nin o slot için writer'a kullanmasını söylediği aynı yer
+#: tutucu metin, böylece dönüştürülmüş bir sızıntı, akış aşağısındaki her
+#: şey için (`build_missing_info_request`/`apply_answers`) sıradan
+#: doldurulmamış bir alandan ayırt edilemez hale gelir.
 _IDENTITY_LEAK_PLACEHOLDER: dict[str, str] = {
     "gonderen_muhatap_karisikligi": "[Gönderen kurumun adı]",
     "karsi_taraf_kimlik_sizintisi": "[İmzalayacak yetkilinin adı ve soyadı]",
@@ -301,37 +314,38 @@ _IDENTITY_LEAK_PLACEHOLDER: dict[str, str] = {
 def _convert_identity_leaks_to_placeholders(
     draft_text: str, identity_slot_leaks: list[UnsupportedClaim]
 ) -> tuple[str, bool]:
-    """Turn an exact-match identity-slot leak into a normal, askable
-    placeholder instead of building a second resolution path for one
-    specific defect kind.
+    """Birebir eşleşen bir kimlik-slotu sızıntısını, belirli bir kusur türü
+    için ikinci bir çözümleme yolu inşa etmek yerine normal, sorulabilir bir
+    yer tutucuya dönüştürür.
 
-    The counterparty's own institution/signatory ending up in our antet or
-    signature block (see ``draft_verifier._check_identity_slot_leaks``) is
-    not a blank the human gate already knows how to ask about -- it is a
-    *wrong* value sitting where a placeholder should be. Replacing the
-    exact leaked text with the same placeholder ``writer.md`` itself uses
-    for that slot lets the existing missing-information gate
-    (``build_missing_info_request``/``apply_answers``) ask "bu yazıyı kimin
-    adına, kime yazıyoruz?" the same way it already asks about any other
-    unfilled field -- a second, parallel resolution mechanism was never
-    needed.
+    Karşı tarafın kendi kurumunun/imza sahibinin bizim antetimizde veya
+    imza bloğumuzda ortaya çıkması (bkz. ``draft_verifier.
+    _check_identity_slot_leaks``), human gate'in zaten nasıl soracağını
+    bildiği bir boşluk değildir -- bir yer tutucunun olması gereken yerde
+    oturan *yanlış* bir değerdir. Sızan birebir metni, ``writer.md``'nin o
+    slot için kullandığı aynı yer tutucuyla değiştirmek, mevcut eksik-bilgi
+    geçidinin (``build_missing_info_request``/``apply_answers``) "bu yazıyı
+    kimin adına, kime yazıyoruz?" diye tıpkı başka herhangi bir
+    doldurulmamış alan hakkında sorduğu gibi sormasını sağlar -- ikinci,
+    paralel bir çözümleme mekanizmasına hiçbir zaman gerek olmadı.
 
-    Only ever replaces an **exact** literal occurrence of the leaked value
-    (the common shape this fixes -- the counterparty's name copied
-    verbatim, exactly the reported bug). A value ``_check_identity_slot_
-    leaks`` only matched via the tolerant token-overlap fallback has no
-    single exact span to replace safely; it is left in the text and still
-    lowers the score/forces approval (see ``confidence_rules.RULES``), just
-    without an interactive question for that specific occurrence.
+    Yalnızca sızan değerin **birebir** literal bir geçişini değiştirir (bu
+    düzelttiği yaygın durum -- karşı tarafın adının birebir kopyalanması,
+    tam olarak bildirilen hata). ``_check_identity_slot_leaks``'in yalnızca
+    toleranslı token-örtüşmesi fallback'i üzerinden eşleştirdiği bir değerin
+    güvenle değiştirilecek tek bir kesin aralığı yoktur; metinde bırakılır
+    ve yine de puanı düşürür/onayı zorunlu kılar (bkz. ``confidence_rules.
+    RULES``), yalnızca o belirli geçiş için etkileşimli bir soru olmadan.
 
     Args:
-        draft_text: The draft text to transform.
-        identity_slot_leaks: ``VerificationReport.identity_slot_leaks`` from
-            a prior ``verify_draft`` pass.
+        draft_text: Dönüştürülecek taslak metni.
+        identity_slot_leaks: Önceki bir ``verify_draft`` geçişinden
+            ``VerificationReport.identity_slot_leaks``.
 
     Returns:
-        The (possibly transformed) draft text, and whether anything was
-        actually replaced -- the caller re-verifies only when it was.
+        (Muhtemelen dönüştürülmüş) taslak metni ve gerçekten bir şeyin
+        değiştirilip değiştirilmediği -- çağıran yalnızca değiştirildiğinde
+        yeniden doğrular.
     """
     changed = False
     for leak in identity_slot_leaks:
@@ -350,37 +364,37 @@ def _build_instruction_haystack(
     prior_user_turns: Sequence[str] = (),
     brief_answers: dict[str, Any] | None = None,
 ) -> str:
-    """Compose everything a claim may legitimately trace to as "the user's
-    own word", for ``verify_draft``'s instruction-only-claims split.
+    """``verify_draft``'in yalnızca-talimattan-gelen-iddialar ayrımı için,
+    bir iddianın meşru olarak "kullanıcının kendi sözü" sayılabileceği her
+    şeyi bir araya getirir.
 
-    Before this, ``verify_draft`` only ever saw the current turn's own
-    ``instructions``. A name/date/institution the user supplied in an
-    *earlier* turn of the same multi-turn negotiation -- very ordinary
-    ("Berkay bey stajını bizim şirketimizde tamamlamış." one turn, "şimdi
-    cevap yazısı hazırla" the next) -- scored as an ungrounded
-    ``dayanaksiz_iddia`` (-12) purely for not being repeated verbatim in
-    the latest message, even though the user plainly did supply it this
-    session. Settled writing-brief answers (see
-    ``app.ai.workflows.writing_brief`` -- human-approved, per
-    ``_build_brief``'s own section 8) are folded in for the same reason: a
-    value typed into the writing-brief card is exactly as trusted as one
-    typed into the chat box.
+    Bundan önce ``verify_draft`` yalnızca mevcut turun kendi
+    ``instructions``'ını görüyordu. Kullanıcının aynı çok turlu
+    müzakerenin *önceki* bir turunda verdiği bir isim/tarih/kurum -- çok
+    sıradan bir durum ("Berkay bey stajını bizim şirketimizde
+    tamamlamış." bir turda, "şimdi cevap yazısı hazırla" bir sonrakinde)
+    -- kullanıcı bu oturumda açıkça verdiği halde, salt son mesajda birebir
+    tekrarlanmadığı için dayanaksız bir ``dayanaksiz_iddia`` (-12) olarak
+    puanlanıyordu. Yerleşmiş yazım-briefi cevapları (bkz. ``app.ai.
+    workflows.writing_brief`` -- insan onaylı, ``_build_brief``'in kendi 8.
+    bölümüne göre) de aynı nedenle katılır: yazım-briefi kartına yazılan
+    bir değer, sohbet kutusuna yazılan bir değer kadar güvenilirdir.
 
-    Kept separate from the writer's own ``instructions`` prompt input on
-    purpose -- the writer should still only ever see *this turn's* request
-    in brief section 7; stuffing prior turns in there would confuse "what
-    to do now" with "what was said before", a problem this haystack does
-    not have since it is never rendered into a prompt, only compared
-    against.
+    Writer'ın kendi ``instructions`` prompt girdisinden bilerek ayrı
+    tutulur -- writer, brief bölüm 7'de yine de yalnızca *bu turun*
+    isteğini görmelidir; önceki turları oraya doldurmak "şimdi ne
+    yapılacağı" ile "önce ne söylendiği"ni karıştırırdı, bu haystack'in
+    sahip olmadığı bir sorun, çünkü asla bir prompt'a render edilmez,
+    yalnızca karşılaştırılır.
 
     Args:
-        instructions: This turn's own drafting instructions.
-        prior_user_turns: Earlier turns' own message text, this session,
-            oldest first.
-        brief_answers: The settled writing-brief slot answers, if any.
+        instructions: Bu turun kendi taslak talimatları.
+        prior_user_turns: Bu oturumdaki önceki turların kendi mesaj
+            metinleri, en eskiden yeniye.
+        brief_answers: Yerleşmiş yazım-briefi slot cevapları, varsa.
 
     Returns:
-        The combined haystack text.
+        Birleştirilmiş haystack metni.
     """
     parts = [instructions, *prior_user_turns]
     if brief_answers:
@@ -396,54 +410,52 @@ def _build_brief(
     today: str = "",
     profile: CompanyProfile | None = None,
 ) -> str:
-    """Compose the grounding brief handed to the writer.
+    """Writer'a verilen temellendirme brief'ini oluşturur.
 
     Args:
-        classification: Analysis output for the incoming document.
-        context: Retrieved legislation excerpts.
-        instructions: The user's drafting instructions.
-        writing_brief: Resolved pre-draft writing-style slots (see
-            app.ai.workflows.writing_brief) -- who's writing, who it's
-            going to, anlatım/kapanış. Rendered as section 7, marked as
-            human-approved source information: this is what fixes the
-            "KACMAK ekibi olarak" bug, where the only proper noun in the
-            user's own text had no declared direction and the writer put
-            it in the one slot this brief used to describe (Muhatap).
-        today: The date this draft is being written on (see
-            app.ai.workflows.dates.today_tr), never a fact extracted from
-            the document. Rendered as section 0 -- the writer's own
-            "Tarih:" line must copy this verbatim rather than leave a
-            placeholder or ask the human, since it is never missing
-            information, only information nobody thought to hand it before.
-        profile: The requesting company's identity profile (see
-            ``app.ai.identity.company_profile.CompanyProfile``), or None.
-            Rendered as section 9 when non-empty (see
-            ``format_identity_brief_section``) -- this is the primary,
-            system-verified identity for whoever is writing this letter.
-            ``app.ai.workflows.writing_brief.resolve_brief`` already
-            consults the same profile (via ``app.ai.identity.parties.
-            resolve_party_context``) when resolving section 8's own "Yazan
-            Taraf" slot, so by the time this renders, section 8 normally
-            already reflects this same identity -- this section restates it
-            explicitly for the writer's antet/imza rendering, not as a
-            fallback the writing brief overrides, but as the same fact
-            stated in the place the writer looks for header/signature
-            specifics.
+        classification: Gelen belge için analiz çıktısı.
+        context: Alınan mevzuat alıntıları.
+        instructions: Kullanıcının taslak talimatları.
+        writing_brief: Çözümlenmiş taslak-öncesi yazım-stili slotları (bkz.
+            app.ai.workflows.writing_brief) -- kim yazıyor, kime gidiyor,
+            anlatım/kapanış. Bölüm 7 olarak render edilir, insan onaylı
+            kaynak bilgi olarak işaretlenir: "KACMAK ekibi olarak" hatasını
+            çözen şey budur -- kullanıcının kendi metnindeki tek özel adın
+            beyan edilmiş bir yönü yoktu ve writer onu bu brief'in tanımladığı
+            tek slota (Muhatap) koydu.
+        today: Bu taslağın yazıldığı tarih (bkz. app.ai.workflows.dates.
+            today_tr), asla belgeden çıkarılan bir olgu değil. Bölüm 0
+            olarak render edilir -- writer'ın kendi "Tarih:" satırı bunu
+            bir yer tutucu bırakmak veya insana sormak yerine birebir
+            kopyalamalıdır, çünkü bu asla eksik bilgi değildir, yalnızca
+            daha önce kimsenin vermeyi düşünmediği bilgidir.
+        profile: İsteği yapan şirketin kimlik profili (bkz. ``app.ai.
+            identity.company_profile.CompanyProfile``), ya da None. Boş
+            değilse bölüm 9 olarak render edilir (bkz. ``format_identity_
+            brief_section``) -- bu, bu mektubu yazanın birincil, sistem
+            tarafından doğrulanmış kimliğidir. ``app.ai.workflows.
+            writing_brief.resolve_brief``, bölüm 8'in kendi "Yazan Taraf"
+            slotunu çözerken zaten aynı profile (``app.ai.identity.parties.
+            resolve_party_context`` üzerinden) başvurur, dolayısıyla bu
+            render edildiğinde bölüm 8 normalde zaten aynı kimliği
+            yansıtır -- bu bölüm bunu writer'ın antet/imza render'ı için
+            açıkça yineler, yazım briefinin geçersiz kıldığı bir fallback
+            olarak değil, writer'ın başlık/imza detayları için baktığı
+            yerde belirtilen aynı olgu olarak.
 
     Returns:
-        The brief text.
+        Brief metni.
     """
     fields = _coerce_fields(classification)
     missing = classification.get("missing_fields") or []
     missing_labels = ", ".join(
         item.get("label", "") for item in missing if isinstance(item, dict)
     )
-    # Only point at section 9 by name when it will actually be rendered
-    # below (see format_identity_brief_section's own "" when empty
-    # convention) -- referencing a section that doesn't exist in this
-    # brief would be a dangling pointer, and would also leak the literal
-    # string "KURUM KİMLİĞİ" into every brief regardless of whether a
-    # profile is configured.
+    # Bölüm 9'a isimle yalnızca aşağıda gerçekten render edilecekse işaret
+    # et (bkz. format_identity_brief_section'ın boşken "" döndürme kuralı)
+    # -- bu brief'te var olmayan bir bölüme atıf yapmak sarkan bir işaretçi
+    # olurdu ve ayrıca profil yapılandırılmış olsun olmasın "KURUM
+    # KİMLİĞİ" literal string'ini her brief'e sızdırırdı.
     us_pointer = (
         "bölüm 9 KURUM KİMLİĞİ ve bölüm 8 Yazım Briefi'ndeki 'Yazan Taraf' satırıdır"
         if profile is not None and not profile.is_empty
@@ -499,26 +511,28 @@ def _build_brief(
 
 
 def _anti_fabrication_rules(is_other: bool) -> str:
-    """The writer's own no-hallucination rules, shared with the repair prompt.
+    """Writer'ın kendi halüsinasyon-önleme kuralları, repair prompt'uyla
+    paylaşılır.
 
-    Before this, the *first* writer pass carried these rules (see
-    ``writer_node``'s own inline block) but ``_build_repair_prompt`` did not
-    -- a repair pass only forbade touching sentences outside the defect
-    list, never forbade inventing new facts inside the ones it *was*
-    fixing. ``missing_structure`` defects specifically require writing new
-    content (e.g. "add the missing Konu line"), which is exactly the
-    situation a reviser with no anti-fabrication rule at all will fill with
-    a guess -- and, per ``merge_verdicts``'s "best attempt wins" framing
-    (see Faz 5), a fabricated guess could win over a correctly-flagged
-    placeholder from an earlier attempt.
+    Bundan önce *ilk* writer geçişi bu kuralları taşıyordu (bkz.
+    ``writer_node``'un kendi satır içi bloğu) ama ``_build_repair_prompt``
+    taşımıyordu -- bir repair geçişi yalnızca kusur listesi dışındaki
+    cümlelere dokunmayı yasaklıyordu, *düzelttiği* cümlelerin içinde yeni
+    olgular uydurmayı hiç yasaklamıyordu. ``missing_structure`` kusurları
+    özellikle yeni içerik yazmayı gerektirir (örn. "eksik Konu satırını
+    ekle"), bu da hiç halüsinasyon-önleme kuralı olmayan bir reviser'ın
+    tam olarak bir tahminle dolduracağı durumdur -- ve ``merge_verdicts``'in
+    "en iyi deneme kazanır" çerçevesine göre (bkz. Faz 5), uydurulmuş bir
+    tahmin, önceki bir denemenin doğru şekilde işaretlenmiş bir yer
+    tutucusunu geçebilirdi.
 
     Args:
-        is_other: Whether this is the lenient ``other_official``
-            correspondence type, which is allowed conventional boilerplate.
+        is_other: Bunun, geleneksel kalıp metne izin verilen esnek
+            ``other_official`` yazışma türü olup olmadığı.
 
     Returns:
-        The rule bullet list, identical for the writer's first pass and
-        every repair pass after it.
+        Kural madde listesi, writer'ın ilk geçişi ile sonraki her repair
+        geçişi için özdeş.
     """
     if is_other:
         return (
@@ -541,29 +555,30 @@ def _anti_fabrication_rules(is_other: bool) -> str:
 def _build_repair_prompt(
     state: DraftState, adapter_block: str = "", rules_block: str = ""
 ) -> str:
-    """Compose the targeted repair prompt handed to the reviser.
+    """Reviser'a verilen hedefli onarım prompt'unu oluşturur.
 
-    Sends the full brief rather than a defect-conditional slice of it. The
-    brief is already a condensed representation (a few thousand characters at
-    most -- the writer never sees the raw ``source_document`` either, only
-    this brief), so brief + previous draft + defect list stays comfortably
-    inside the model's context window with room to spare for the output.
+    Kusura göre koşullu bir dilim yerine tam brief'i gönderir. Brief zaten
+    yoğunlaştırılmış bir temsildir (en fazla birkaç bin karakter -- writer
+    ham ``source_document``'ı da hiç görmez, yalnızca bu brief'i görür), bu
+    yüzden brief + önceki taslak + kusur listesi, çıktı için yer bırakarak
+    modelin bağlam penceresi içinde rahatça kalır.
 
     Args:
-        state: Current draft state, expected to carry ``previous_draft`` and
-            ``repair_items`` from the preceding verify/revise pass.
-        adapter_block: Rendered company style-preference block (see
-            ``format_adapter_block``), or "".
-        rules_block: Rendered company mandatory-rules block (see
-            ``format_rules_block``), or "" -- placed *before* the style
-            block, since a mandatory rule outranks a learned style
-            preference. A rule violation is exactly the kind of defect that
-            reaches this prompt as a numbered ``repair_items`` entry (see
-            ``llm_judge.REVISABLE_JUDGE_KINDS``), so it is also the
-            company-facts equivalent of ``adapter_block`` here.
+        state: Önceki verify/revise geçişinden ``previous_draft`` ve
+            ``repair_items`` taşıması beklenen mevcut taslak durumu.
+        adapter_block: Render edilmiş şirket stil-tercihi bloğu (bkz.
+            ``format_adapter_block``), ya da "".
+        rules_block: Render edilmiş şirket zorunlu-kurallar bloğu (bkz.
+            ``format_rules_block``), ya da "" -- stil bloğundan *önce*
+            yerleştirilir, çünkü zorunlu bir kural öğrenilmiş bir stil
+            tercihinin üzerindedir. Bir kural ihlali, bu prompt'a numaralı
+            bir ``repair_items`` girdisi olarak ulaşan tam olarak bu türden
+            bir kusurdur (bkz. ``llm_judge.REVISABLE_JUDGE_KINDS``), bu
+            yüzden burada ``adapter_block``'un şirket-olguları eşdeğeridir
+            de.
 
     Returns:
-        The repair prompt.
+        Onarım prompt'u.
     """
     defects = state.get("repair_items") or []
     numbered = "\n".join(
@@ -571,11 +586,11 @@ def _build_repair_prompt(
         + (f" -> Öneri: {item.get('suggested_fix')}" if item.get("suggested_fix") else "")
         for index, item in enumerate(defects, start=1)
     )
-    # C16: a strict sub-genre (itiraz dilekçesi, muvafakatname, taahhütname,
-    # vekâletname, tutanak -- see is_strict_sub_genre's own docstring) keeps
-    # the anti-fabrication rules even though its type resolves to
-    # other_official; only a genuinely generic "diğer resmî yazışma" gets
-    # the "you may supply reasonable conventional completions" leniency.
+    # C16: katı bir alt-tür (itiraz dilekçesi, muvafakatname, taahhütname,
+    # vekâletname, tutanak -- bkz. is_strict_sub_genre'ın kendi docstring'i),
+    # türü other_official'a çözümlense bile halüsinasyon-önleme kurallarını
+    # korur; yalnızca gerçekten genel bir "diğer resmî yazışma", "makul
+    # geleneksel tamamlamalar yapabilirsin" esnekliğini alır.
     is_other = state.get("correspondence_type") == "other_official" and not is_strict_sub_genre(
         state.get("correspondence_sub_genre", "")
     )
@@ -600,21 +615,20 @@ def _build_repair_prompt(
 
 
 def _format_style_examples(style_examples: list[dict[str, Any]] | None) -> str:
-    """Render retrieved few-shot style examples as a prompt block.
+    """Alınan few-shot stil örneklerini bir prompt bloğu olarak render eder.
 
-    Returns "" (not an empty section) when there are none -- an "### ÜSLUP
-    REFERANS ÖRNEKLERİ" header with nothing under it would read to the model
-    as a missing-context signal, not as "no examples were retrieved this
-    time".
+    Hiç örnek yoksa "" döndürür (boş bir bölüm değil) -- altında hiçbir şey
+    olmayan bir "### ÜSLUP REFERANS ÖRNEKLERİ" başlığı, modele "bu sefer
+    örnek alınamadı" değil, eksik-bağlam sinyali olarak okunurdu.
 
-    The examples are real letters pulled from
-    ``datasets/resmi_yazisma/ornekler.jsonl`` via ``ExampleRetriever`` --
-    genuine institution names, dates and case numbers, not synthetic
-    placeholders. The block explicitly tells the model they are a style
-    reference only, never a source of fact, and the boundary is enforced a
-    second time downstream by ``draft_verifier``'s ``ornek_sizintisi`` check
-    (deterministic, not prompt-only) precisely because a prompt instruction
-    alone is not a guarantee.
+    Örnekler, ``ExampleRetriever`` aracılığıyla ``datasets/resmi_yazisma/
+    ornekler.jsonl``'dan çekilen gerçek mektuplardır -- sentetik yer
+    tutucular değil, gerçek kurum adları, tarihler ve dosya numaraları.
+    Blok, modele bunların yalnızca bir stil referansı olduğunu, asla bir
+    olgu kaynağı olmadığını açıkça söyler ve bu sınır, akış aşağısında
+    ``draft_verifier``'ın ``ornek_sizintisi`` kontrolü (deterministik,
+    yalnızca prompt'a dayalı değil) tarafından ikinci kez uygulanır, tam
+    olarak tek başına bir prompt talimatının bir garanti olmaması nedeniyle.
     """
     if not style_examples:
         return ""

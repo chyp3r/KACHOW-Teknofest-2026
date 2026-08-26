@@ -13,15 +13,16 @@ logger = logging.getLogger(__name__)
 
 
 class EvrenClient(BaseLLMClient):
-    """Client for Evren, the TEKNOFEST-provided hosted inference API.
+    """TEKNOFEST tarafından sağlanan barındırılan çıkarım API'si Evren için istemci.
 
-    OpenAI-compatible (bearer token, ``/v1/chat/completions``), served on
-    shared H200 hardware -- the online counterpart to ``OllamaClient``. Same
-    method surface, same caching-by-parameter-set shape, same
-    ``method="function_calling"`` pin for structured/tool output (Evren's own
-    troubleshooting docs confirm the underlying vLLM engine's native
-    tool-calling is the reliable structured-output path, same trade Ollama's
-    custom-renderer models needed).
+    OpenAI uyumlu (bearer token, ``/v1/chat/completions``), paylaşılan H200
+    donanımında sunulur -- ``OllamaClient``'ın çevrimiçi karşılığı. Aynı
+    metod yüzeyi, aynı parametre-seti-başına önbellekleme şekli,
+    yapılandırılmış/araç çıktısı için aynı ``method="function_calling"``
+    sabitlemesi (Evren'in kendi sorun giderme dokümanları, altta yatan vLLM
+    motorunun yerel araç çağırmasının güvenilir yapılandırılmış çıktı yolu
+    olduğunu doğrular; Ollama'nın özel-render modellerinin ihtiyaç duyduğu
+    aynı takas).
     """
 
     def __init__(
@@ -34,27 +35,30 @@ class EvrenClient(BaseLLMClient):
         max_tokens: int = 4096,
         request_timeout: float | None = None,
     ):
-        """Initialize the Evren client.
+        """Evren istemcisini başlat.
 
         Args:
-            base_url: Evren's OpenAI-compatible API root, e.g.
+            base_url: Evren'in OpenAI uyumlu API kökü, örn.
                 ``https://evren-llmapi.ssyz.org.tr/v1``.
-            model: One of Evren's model aliases (e.g. "llm-fast", "llm-large",
-                "guard", "router").
-            api_key: Team bearer token. Required in practice -- Evren rejects
-                unauthenticated requests -- but not validated here so a
-                missing key fails at the first real call with Evren's own
-                401, not at client construction.
-            temperature: Default sampling temperature.
-            reasoning: Whether to request thinking mode (``enable_thinking``).
-                Evren's own docs discourage this and document a failure mode
-                (empty response, ``finish_reason="length"``) when enabled
-                without enough ``max_tokens`` headroom -- callers opting in
-                (the DEEP reasoning-level preset) already budget for it.
-            max_tokens: Default maximum number of generated tokens.
-            request_timeout: Per-request timeout in seconds. Defaults to
-                ``settings.EVREN_REQUEST_TIMEOUT_SECONDS`` -- Evren's own
-                documented recommendation (up to 1800s on shared hardware).
+            model: Evren'in model takma adlarından biri (örn. "llm-fast",
+                "llm-large", "guard", "router").
+            api_key: Takım bearer token'ı. Pratikte gereklidir -- Evren
+                kimliği doğrulanmamış istekleri reddeder -- ama burada
+                doğrulanmaz, bu yüzden eksik bir anahtar istemci
+                oluşturulurken değil, ilk gerçek çağrıda Evren'in kendi
+                401'iyle başarısız olur.
+            temperature: Varsayılan örnekleme sıcaklığı.
+            reasoning: Düşünme modunun (``enable_thinking``) istenip
+                istenmeyeceği. Evren'in kendi dokümanları bunu caydırır ve
+                yeterli ``max_tokens`` payı olmadan etkinleştirildiğinde bir
+                başarısızlık modu (boş yanıt, ``finish_reason="length"``)
+                belgeler -- buna katılan çağıranlar (DEEP reasoning-level
+                ön ayarı) bunun için zaten bütçe ayırır.
+            max_tokens: Varsayılan maksimum üretilen token sayısı.
+            request_timeout: İstek başına saniye cinsinden zaman aşımı.
+                Varsayılan ``settings.EVREN_REQUEST_TIMEOUT_SECONDS`` --
+                Evren'in kendi belgelenmiş önerisi (paylaşılan donanımda
+                1800s'ye kadar).
         """
         self.base_url = base_url
         self.api_key = api_key
@@ -85,17 +89,17 @@ class EvrenClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> ChatOpenAI:
-        """Return a configured Evren client, reusing one per parameter set.
+        """Yapılandırılmış bir Evren istemcisi döndür, parametre seti başına bir tane yeniden kullanarak.
 
         Args:
-            temperature: Sampling temperature for this call.
-            max_tokens: Generation budget, falling back to the client default.
-            **kwargs: Extra options. ``reasoning`` is consumed here and
-                translated to ``enable_thinking``; anything else is forwarded
-                to ``ChatOpenAI``.
+            temperature: Bu çağrı için örnekleme sıcaklığı.
+            max_tokens: Üretim bütçesi; istemci varsayılanına düşer.
+            **kwargs: Ekstra seçenekler. ``reasoning`` burada tüketilir ve
+                ``enable_thinking``'e çevrilir; geri kalan her şey
+                ``ChatOpenAI``'a iletilir.
 
         Returns:
-            A cached or newly built ``ChatOpenAI``.
+            Önbelleklenmiş veya yeni oluşturulmuş bir ``ChatOpenAI``.
         """
         reasoning = kwargs.pop("reasoning", self.reasoning)
         num_predict = max_tokens if max_tokens is not None else self.max_tokens
@@ -111,19 +115,20 @@ class EvrenClient(BaseLLMClient):
         if cacheable and cache_key in self._client_cache:
             return self._client_cache[cache_key]
 
-        # enable_thinking must be sent explicitly on every call, never
-        # omitted. Verified live against the real API: llm-large defaults to
-        # thinking-mode ON for a sufficiently complex prompt even when this
-        # key is absent entirely -- reproduced directly with the production
-        # writer prompt (9.7k-char system + 5.3k-char user message), which
-        # burned the full 2048-token budget on hidden reasoning_content and
-        # returned finish_reason="length" with zero actual content. Omitting
-        # this key is not the same as disabling reasoning, which is why the
-        # earlier version (only sending it when reasoning=True) produced
-        # empty drafts by default. Both the top-level and vLLM's
-        # chat_template_kwargs-nested spellings are sent since Evren's docs
-        # don't pin down which one the deployed engine reads -- verified
-        # live that both are honoured.
+        # enable_thinking her çağrıda açıkça gönderilmeli, asla atlanmamalı.
+        # Gerçek API'ye karşı canlı doğrulandı: llm-large, bu anahtar
+        # tamamen yokken bile yeterince karmaşık bir prompt için
+        # düşünme-modunu varsayılan olarak AÇIK bırakır -- üretim writer
+        # prompt'uyla (9.7k karakter sistem + 5.3k karakter kullanıcı
+        # mesajı) doğrudan tekrarlandı, bu da tüm 2048-token bütçesini
+        # gizli reasoning_content'te tüketti ve sıfır gerçek içerikle
+        # finish_reason="length" döndürdü. Bu anahtarı atlamak, reasoning'i
+        # devre dışı bırakmakla aynı şey değildir, bu yüzden önceki sürüm
+        # (yalnızca reasoning=True olduğunda gönderiyordu) varsayılan
+        # olarak boş taslaklar üretiyordu. Hem üst düzey hem de vLLM'nin
+        # chat_template_kwargs iç içe yazımı gönderilir çünkü Evren'in
+        # dokümanları dağıtılan motorun hangisini okuduğunu netleştirmiyor
+        # -- canlı doğrulandı ki her ikisi de onurlandırılıyor.
         extra_body: dict[str, Any] = {
             "enable_thinking": reasoning,
             "chat_template_kwargs": {"enable_thinking": reasoning},
@@ -150,7 +155,7 @@ class EvrenClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> str:
-        """Generate response from a list of messages using Evren."""
+        """Evren kullanarak bir mesaj listesinden yanıt üret."""
         temp = temperature if temperature is not None else self.temperature
 
         client = self._build_client(temp, max_tokens, **kwargs)
@@ -177,7 +182,7 @@ class EvrenClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[str]:
-        """Stream response chunk-by-chunk using Evren."""
+        """Evren kullanarak yanıtı parça parça akıt."""
         temp = temperature if temperature is not None else self.temperature
 
         client = self._build_client(temp, max_tokens, **kwargs)
@@ -199,18 +204,19 @@ class EvrenClient(BaseLLMClient):
         temperature: float | None = None,
         **kwargs: Any,
     ) -> Any:
-        """Generate structured output validated against a Pydantic model.
+        """Bir Pydantic modeline karşı doğrulanmış yapılandırılmış çıktı üret.
 
-        Thinking mode is forced off, same reason as ``OllamaClient``: reasoning
-        tokens precede the JSON body, consume the token budget, and Evren's
-        own troubleshooting docs document exactly this failure mode (empty
-        content, ``finish_reason="length"``) for structured/short outputs.
+        Düşünme modu, ``OllamaClient`` ile aynı nedenle zorla kapatılır:
+        reasoning token'ları JSON gövdesinden önce gelir, token bütçesini
+        tüketir, ve Evren'in kendi sorun giderme dokümanları
+        yapılandırılmış/kısa çıktılar için tam olarak bu başarısızlık
+        modunu (boş içerik, ``finish_reason="length"``) belgeler.
 
-        ``method="function_calling"`` is pinned rather than relying on
-        ``with_structured_output``'s ``"json_schema"`` default, mirroring
-        ``OllamaClient.generate_structured`` -- native tool-calling is the
-        structured-output path verified to work reliably against
-        vLLM-served Qwen models.
+        ``with_structured_output``'un ``"json_schema"`` varsayılanına
+        güvenmek yerine ``method="function_calling"`` sabitlenir,
+        ``OllamaClient.generate_structured``'ı yansıtarak -- yerel araç
+        çağırma, vLLM-sunulan Qwen modellerine karşı güvenilir çalıştığı
+        doğrulanan yapılandırılmış çıktı yoludur.
         """
         temp = temperature if temperature is not None else self.temperature
         max_tokens = kwargs.pop("max_tokens", None)
@@ -245,11 +251,11 @@ class EvrenClient(BaseLLMClient):
         max_tokens: int | None = None,
         **kwargs: Any,
     ) -> ToolCallResponse:
-        """Generate one turn of a tool-calling exchange via ``bind_tools``.
+        """``bind_tools`` aracılığıyla bir araç çağırma alışverişinin bir turunu üret.
 
-        Thinking mode is forced off for the same reason ``generate_structured``
-        forces it off: reasoning tokens would precede the tool-call payload
-        and can consume the generation budget before it.
+        Düşünme modu, `generate_structured`'ın kapattığı aynı nedenle
+        zorla kapatılır: reasoning token'ları araç çağrısı yükünden önce
+        gelir ve ondan önce üretim bütçesini tüketebilir.
         """
         temp = temperature if temperature is not None else self.temperature
         kwargs.setdefault("reasoning", False)
@@ -283,14 +289,15 @@ class EvrenClient(BaseLLMClient):
         )
 
     async def warm_up(self) -> bool:
-        """No-op: Evren is a remote, shared-hardware service.
+        """No-op: Evren uzak, paylaşılan donanımlı bir servistir.
 
-        Unlike a local Ollama instance, there is no model to load into
-        process memory, and sending a speculative request on startup would
-        just spend a fraction of a rate-limited team quota for no benefit.
+        Yerel bir Ollama örneğinin aksine, süreç belleğine yüklenecek bir
+        model yoktur, ve başlangıçta spekülatif bir istek göndermek,
+        hiçbir faydası olmadan hız sınırlı takım kotasının bir kısmını
+        harcardı.
 
         Returns:
-            Always True.
+            Her zaman True.
         """
         logger.info(
             "Skipping warm-up for Evren model '%s' (remote provider).",

@@ -1,12 +1,13 @@
-"""The revise flow's public entry point: ``run_revise``.
+"""Revize akışının genel giriş noktası: ``run_revise``.
 
-A thin façade over ``app.ai.workflows.revise_graph``'s compiled LangGraph
-workflow -- parsing (``app.ai.revision.instruction``), conditional
-re-retrieval, targeted rewrite, verify/repair loop and conflict audit all
-live there now (see that module's docstring for the full topology). This
-module exists so every existing caller and test that imports
-``parse_revision_instruction``, ``locate_target``, ``_merge`` or
-``run_revise`` from ``app.ai.workflows.revise`` keeps working unchanged.
+``app.ai.workflows.revise_graph``'ın derlenmiş LangGraph iş akışı üzerine
+ince bir cephe -- ayrıştırma (``app.ai.revision.instruction``), koşullu
+yeniden getirme, hedefe yönelik yeniden yazım, doğrulama/onarım döngüsü ve
+çelişki denetimi artık orada yaşıyor (tam topoloji için o modülün
+docstring'ine bakın). Bu modül, ``app.ai.workflows.revise`` üzerinden
+``parse_revision_instruction``, ``locate_target``, ``_merge`` veya
+``run_revise`` içe aktaran her mevcut çağıran ve testin değişmeden
+çalışmaya devam etmesi için var.
 """
 
 import logging
@@ -38,9 +39,9 @@ from app.core.enums.step_status import StepStatus
 
 logger = logging.getLogger(__name__)
 
-#: Re-exported for callers (and tests) that imported these from this module
-#: before parsing moved to app.ai.revision.instruction, and before the flow
-#: itself moved to a compiled sub-graph.
+#: Ayrıştırma app.ai.revision.instruction'a taşınmadan ve akışın kendisi
+#: derlenmiş bir alt grafiğe taşınmadan önce bunları bu modülden içe aktaran
+#: çağıranlar (ve testler) için yeniden dışa aktarılmıştır.
 __all__ = [
     "EditDirective",
     "Operation",
@@ -74,88 +75,94 @@ async def run_revise(
     profile_provider: Optional[ProfileProvider] = None,
     today: str = "",
 ) -> dict[str, Any]:
-    """Produce a targeted revision of the active draft.
+    """Aktif taslağın hedefe yönelik bir revizyonunu üretir.
 
-    Returns a dict shaped like ``draft_graph``'s own output (``status``,
-    ``draft``, ``correspondence_type``, ``confidence_score``,
+    ``draft_graph``'ın kendi çıktısıyla aynı şekilde bir sözlük döndürür
+    (``status``, ``draft``, ``correspondence_type``, ``confidence_score``,
     ``combined_score``, ``verification``, ``judge``, ``missing_information``,
     ``requires_human_approval``, ``classification``, ``context``,
-    ``source_document``) so downstream code -- ``human_gate_node``,
-    ``_step_routing``, and ``focus_node``'s versioning -- treats a revised
-    draft uniformly with a freshly generated one. Additionally carries
-    ``conflicts``, ``conflict_notes``, ``changelog``, ``pii_findings``,
-    ``repair_items``, ``attempt_history``, ``retrieval_meta`` and
-    ``instruction_origin``, all new in the sub-graph version of this flow.
+    ``source_document``), böylece alt akıştaki kod -- ``human_gate_node``,
+    ``_step_routing`` ve ``focus_node``'un sürümlemesi -- revize edilmiş bir
+    taslağı yeni üretilmiş biriyle aynı şekilde ele alır. Ayrıca bu akışın
+    alt grafik sürümünde yeni olan ``conflicts``, ``conflict_notes``,
+    ``changelog``, ``pii_findings``, ``repair_items``, ``attempt_history``,
+    ``retrieval_meta`` ve ``instruction_origin`` alanlarını da taşır.
 
     Args:
-        active_draft: The draft version being revised, carrying its own
-            grounding (``classification``/``context``/``source_document``/
-            ``style_examples``/``correspondence_type_source``) forward from
-            when it was written.
-        instructions: The user's revise request, unparsed.
-        correspondence_type: Falls back to ``active_draft``'s own type when
-            the caller has nothing more specific (there is nothing to
-            re-resolve here -- revise never re-classifies).
-        llm_client: Quality-tier client.
-        fast_llm_client: Fast-tier client, used for the optional judge and
-            the conflict auditor. Falls back to ``llm_client`` when omitted,
-            same as draft_graph.
-        reasoning_level: Selects the judge's on/off default the same way
-            draft_graph's reflexion loop does.
-        config: Runnable config, forwarded into the sub-graph so its nodes'
-            own ``emit_token``/``emit_node_*`` calls reach the SSE queue
-            (see ``app.ai.workflows.events.child_config``).
-        emit_token_fn: Unused -- kept only so existing callers that still
-            pass ``emit_token_fn=emit_token`` do not need to change. Token
-            streaming now happens inside the sub-graph itself via ``config``.
-        mevzuat_retriever: Optional retriever for conditional legislation
-            re-retrieval (see ``app.ai.revision.retrieval``).
-        revise_graph: A pre-compiled graph to invoke instead of building one
-            from ``llm_client``/``fast_llm_client``/``mevzuat_retriever`` --
-            lets a caller building many revisions (or a test) compile once.
-        instruction_origin: ``"user_turn"`` for an ordinary revise turn,
-            ``"human_gate"`` when this call is answering the approval gate's
-            own "revizyon iste" action (see ``planning_graph.gate_revise_node``).
-            Carried straight through into the result so
-            ``SessionFocus.compute_focus_update`` can tell them apart.
-        company_id: Which tenant this revision is for -- resolves this
-            company's runtime style adapter (Faz C2). None skips adapter
-            resolution entirely, same as omitting ``adapter_provider``.
-        adapter_provider: Async callable resolving a company's adapter (see
-            ``app.domains.companies.provider.get_company_adapter``),
-            forwarded to ``create_revise_graph`` when this call builds its
-            own graph. Ignored when ``revise_graph`` is supplied pre-built
-            -- that graph's own adapter_provider (or lack of one) already
-            applies.
-        rules_provider: Async callable resolving a company's mandatory
-            drafting rules (see
-            ``app.domains.companies.provider.get_company_rules``),
-            forwarded to ``create_revise_graph`` the same way
-            ``adapter_provider`` is (C27) -- without this, a caller that
-            builds its own graph through this fallback (rather than
-            passing a pre-built ``revise_graph``, the way every caller in
-            this codebase today happens to) silently lost the company's
-            mandatory rules on every revision, even though the original
-            draft enforced them. Ignored when ``revise_graph`` is supplied
-            pre-built -- that graph's own rules_provider already applies.
-        profile_provider: Async callable resolving a company's identity
-            profile (see
-            ``app.domains.companies.provider.get_company_profile``),
-            forwarded the same way (Faz 6). Ignored when ``revise_graph``
-            is supplied pre-built.
-        today: The date this revision is happening on (see
-            app.ai.workflows.dates.today_tr), forwarded so
-            revise_graph.verify_node's own date-placeholder backstop can
-            fill a "Tarih:" placeholder if the rewrite pass reintroduces
-            one -- an ordinary revision keeps the original draft's date
-            unchanged (see revise_graph's own anti-date-change rule) and
-            never needs this, but a rewrite that legitimately regenerates
-            the header still must not turn into a question to the user.
+        active_draft: Revize edilen taslak sürümü; yazıldığı andan itibaren
+            kendi zemin bilgisini (``classification``/``context``/
+            ``source_document``/``style_examples``/
+            ``correspondence_type_source``) taşır.
+        instructions: Kullanıcının ayrıştırılmamış revizyon isteği.
+        correspondence_type: Çağıranın daha spesifik bir şey vermediği
+            durumlarda ``active_draft``'ın kendi tipine düşer (burada yeniden
+            çözümlenecek bir şey yok -- revize asla yeniden sınıflandırma
+            yapmaz).
+        llm_client: Kalite katmanı istemcisi.
+        fast_llm_client: İsteğe bağlı hakem ve çelişki denetleyicisi için
+            kullanılan hızlı katman istemcisi. Belirtilmezse draft_graph ile
+            aynı şekilde ``llm_client``'a düşer.
+        reasoning_level: draft_graph'ın reflexion döngüsüyle aynı şekilde
+            hakemin açık/kapalı varsayılanını seçer.
+        config: Alt grafiğe iletilen çalıştırılabilir yapılandırma; böylece
+            düğümlerin kendi ``emit_token``/``emit_node_*`` çağrıları SSE
+            kuyruğuna ulaşır (bkz. ``app.ai.workflows.events.child_config``).
+        emit_token_fn: Kullanılmıyor -- yalnızca hâlâ
+            ``emit_token_fn=emit_token`` geçen mevcut çağıranların
+            değişmemesi için tutuluyor. Token akışı artık ``config``
+            üzerinden alt grafiğin kendi içinde gerçekleşiyor.
+        mevzuat_retriever: Koşullu mevzuat yeniden getirme için isteğe bağlı
+            getirici (bkz. ``app.ai.revision.retrieval``).
+        revise_graph: ``llm_client``/``fast_llm_client``/``mevzuat_retriever``
+            üzerinden bir tane inşa etmek yerine çağrılacak önceden derlenmiş
+            bir grafik -- birçok revizyon inşa eden bir çağıranın (veya bir
+            testin) bir kez derlemesine olanak tanır.
+        instruction_origin: Sıradan bir revize turu için ``"user_turn"``,
+            bu çağrı onay kapısının kendi "revizyon iste" eylemine
+            (bkz. ``planning_graph.gate_revise_node``) yanıt verdiğinde
+            ``"human_gate"``. ``SessionFocus.compute_focus_update``'in
+            bunları ayırt edebilmesi için doğrudan sonuca taşınır.
+        company_id: Bu revizyonun hangi kiracı için olduğu -- bu şirketin
+            çalışma zamanı stil adaptörünü çözer (Faz C2). None,
+            ``adapter_provider``'ı atlamakla aynı şekilde adaptör çözümünü
+            tamamen atlar.
+        adapter_provider: Bir şirketin adaptörünü çözen asenkron çağrılabilir
+            (bkz. ``app.domains.companies.provider.get_company_adapter``);
+            bu çağrı kendi grafiğini inşa ettiğinde ``create_revise_graph``'a
+            iletilir. ``revise_graph`` önceden inşa edilmiş olarak
+            verildiğinde göz ardı edilir -- o grafiğin kendi
+            adapter_provider'ı (veya yokluğu) zaten geçerlidir.
+        rules_provider: Bir şirketin zorunlu yazım kurallarını çözen asenkron
+            çağrılabilir (bkz.
+            ``app.domains.companies.provider.get_company_rules``);
+            ``adapter_provider`` ile aynı şekilde ``create_revise_graph``'a
+            iletilir (C27) -- bu olmadan, bu geri düşüş yoluyla kendi
+            grafiğini inşa eden bir çağıran (önceden inşa edilmiş bir
+            ``revise_graph`` geçirmek yerine -- bu kod tabanındaki her
+            çağıranın bugün yaptığı gibi), her revizyonda şirketin zorunlu
+            kurallarını sessizce kaybederdi, oysa orijinal taslak bunları
+            uygulamıştı. ``revise_graph`` önceden inşa edilmiş olarak
+            verildiğinde göz ardı edilir -- o grafiğin kendi rules_provider'ı
+            zaten geçerlidir.
+        profile_provider: Bir şirketin kimlik profilini çözen asenkron
+            çağrılabilir (bkz.
+            ``app.domains.companies.provider.get_company_profile``); aynı
+            şekilde iletilir (Faz 6). ``revise_graph`` önceden inşa edilmiş
+            olarak verildiğinde göz ardı edilir.
+        today: Bu revizyonun gerçekleştiği tarih (bkz.
+            app.ai.workflows.dates.today_tr); revise_graph.verify_node'un
+            kendi tarih-yer tutucu yedeği, yeniden yazım geçişi bir tane
+            yeniden getirirse "Tarih:" yer tutucusunu doldurabilsin diye
+            iletilir -- sıradan bir revizyon orijinal taslağın tarihini
+            değiştirmeden korur (bkz. revise_graph'ın kendi tarih değiştirme
+            karşıtı kuralı) ve buna asla ihtiyaç duymaz, ancak başlığı meşru
+            şekilde yeniden üreten bir yeniden yazım yine de kullanıcıya
+            sorulan bir soruya dönüşmemelidir.
 
     Returns:
-        The revision result.
+        Revizyon sonucu.
     """
-    del emit_token_fn  # unused; see docstring
+    del emit_token_fn  # kullanılmıyor; docstring'e bakın
 
     preset = get_reasoning_level_preset(reasoning_level)
     resolved_correspondence_type = correspondence_type or active_draft.correspondence_type
@@ -223,12 +230,13 @@ async def run_revise(
         "pii_findings": final_state.get("pii_findings", []),
         "missing_information": final_state.get("missing_information", []),
         "attempt_history": final_state.get("attempt_history", []),
-        # C29: these two used to fall out of the sub-graph result here --
-        # revise_graph.verify_node computes and returns both (the same
-        # auditable rule breakdown and attempt count draft_graph's own
-        # result carries), but this façade never surfaced them, so every
-        # revised draft persisted with an empty applied_rules and no
-        # attempt count regardless of what the sub-graph actually did.
+        # C29: bu ikisi eskiden alt grafik sonucundan burada eksik kalıyordu --
+        # revise_graph.verify_node ikisini de hesaplayıp döndürür (draft_graph'ın
+        # kendi sonucunun taşıdığıyla aynı denetlenebilir kural dökümü ve
+        # deneme sayısı), ancak bu cephe bunları hiç yüzeye çıkarmıyordu; bu
+        # yüzden alt grafiğin gerçekte ne yaptığından bağımsız olarak her
+        # revize edilmiş taslak boş applied_rules ve deneme sayısı olmadan
+        # kalıcı hale geliyordu.
         "applied_rules": final_state.get("applied_rules", []),
         "attempts": final_state.get("attempts", 0),
         "conflicts": final_state.get("conflicts", []),
@@ -239,14 +247,14 @@ async def run_revise(
         "classification": active_draft.classification,
         "context": final_state.get("context") or active_draft.context,
         "source_document": active_draft.source_document,
-        # Carried forward unchanged from the version being revised, not
-        # re-derived -- a revision neither retrieves new style examples nor
-        # re-resolves the correspondence type (see this module's docstring).
-        # Needed so a *second* gate_revise round (see
-        # planning_graph.gate_revise_node) building its own DraftVersion
-        # from this dict still has them, instead of silently losing the
-        # PII/fallback-type gate parity and leak detection revise_graph's
-        # verify_node depends on.
+        # Revize edilen sürümden değiştirilmeden taşınır, yeniden türetilmez
+        # -- bir revizyon ne yeni stil örnekleri getirir ne de yazışma tipini
+        # yeniden çözer (bkz. bu modülün docstring'i). Bu, bu sözlükten kendi
+        # DraftVersion'ını inşa eden *ikinci* bir gate_revise turunun (bkz.
+        # planning_graph.gate_revise_node) bunlara hâlâ sahip olması için
+        # gerekli; aksi halde revise_graph'ın verify_node'unun bağlı olduğu
+        # PII/geri düşüş tipi kapı eşliği ve sızıntı tespiti sessizce
+        # kaybolur.
         "style_examples": [{"text": text} for text in active_draft.style_examples],
         "correspondence_type_source": active_draft.correspondence_type_source,
         "correspondence_sub_genre": final_state.get("correspondence_sub_genre")

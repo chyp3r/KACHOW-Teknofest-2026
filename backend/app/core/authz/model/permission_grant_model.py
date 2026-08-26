@@ -10,23 +10,24 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class PermissionGrantModel(Base, TimestampMixin):
-    """The ABAC PDP's PAP (Policy Administration Point) store.
+    """ABAC PDP'nin PAP (Policy Administration Point / Politika Yönetim Noktası) deposu.
 
-    One row is one explicit, company-scoped delegation on top of the
-    built-in role rules (``app.core.authz.rules.BUILTIN_RULES``) -- a
-    manager granting an employee ``document:delete`` on their own uploads,
-    a time-boxed break-glass elevation, or an explicit ``deny`` revoking
-    something a role would otherwise permit. See ``app.core.authz.engine.
-    authorize`` for how a row here is weighed against the built-in rules
-    (deny wins outright; among permits, highest ``priority`` wins).
+    Bir satır, yerleşik rol kurallarının (``app.core.authz.rules.BUILTIN_RULES``)
+    üzerine açık, şirket kapsamlı bir devirdir -- bir yöneticinin bir
+    çalışana kendi yüklemeleri üzerinde ``document:delete`` vermesi, süreli
+    bir acil durum (break-glass) yükseltmesi, ya da bir rolün aksi halde
+    izin vereceği bir şeyi iptal eden açık bir ``deny``. Buradaki bir
+    satırın yerleşik kurallara karşı nasıl tartıldığı için (deny doğrudan
+    kazanır; permit'ler arasında en yüksek ``priority`` kazanır)
+    ``app.core.authz.engine.authorize``'a bakın.
 
-    ``valid_from``/``valid_until`` being plain nullable timestamps -- not a
-    separate "delegations" or "break-glass" table -- is deliberate: every
-    time-boxed elevation this system needs (a manager's temporary delegation,
-    a self-granted emergency access with a mandatory ``reason``) is the same
-    shape as a permanent grant with an expiry, so it gets the same
-    persistence, the same audit trail via ``granted_by``/``reason``, and the
-    same revocation path (``revoked_at``) for free.
+    ``valid_from``/``valid_until``'ın ayrı bir "delegations" ya da
+    "break-glass" tablosu yerine düz, null olabilen zaman damgaları olması
+    bilinçlidir: bu sistemin ihtiyaç duyduğu her süreli yükseltme (bir
+    yöneticinin geçici devri, zorunlu bir ``reason`` ile kendi kendine
+    verilen acil erişim), süresi olan kalıcı bir yetkiyle aynı biçimdedir,
+    bu yüzden aynı kalıcılığı, ``granted_by``/``reason`` üzerinden aynı
+    denetim izini ve aynı iptal yolunu (``revoked_at``) bedavaya alır.
     """
 
     __tablename__ = "permission_grants"
@@ -42,36 +43,40 @@ class PermissionGrantModel(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True, default=lambda: uuid4().hex)
     company_id: Mapped[str] = mapped_column(String, ForeignKey("companies.id"), nullable=False, index=True)
-    #: ``"user"`` or ``"role"``. ``"unit"`` is reserved for a future phase
-    #: once ``unit_memberships`` exists (see the tenancy plan's §1.2) and is
-    #: not yet a value any code path writes or reads.
+    #: ``"user"`` ya da ``"role"``. ``"unit"``, ``unit_memberships`` var
+    #: olduğunda gelecek bir aşama için ayrılmıştır (bkz. kiracılık
+    #: planının §1.2'si) ve henüz hiçbir kod yolunun yazdığı ya da
+    #: okuduğu bir değer değildir.
     subject_type: Mapped[str] = mapped_column(String, nullable=False)
-    #: A ``users.id`` (subject_type="user") or a ``UserRole`` value
-    #: (subject_type="role"). Not a foreign key: a role-typed grant has no
-    #: single row to point at, so this column stays a plain string for both
-    #: cases rather than splitting into two nullable FK columns.
+    #: Bir ``users.id`` (subject_type="user") ya da bir ``UserRole`` değeri
+    #: (subject_type="role"). Bir yabancı anahtar değildir: rol tipli bir
+    #: yetkinin işaret edeceği tek bir satır yoktur, bu yüzden bu sütun iki
+    #: null olabilen FK sütununa bölünmek yerine her iki durum için de düz
+    #: bir dize olarak kalır.
     subject_id: Mapped[str] = mapped_column(String, nullable=False)
-    #: An ``app.core.authz.attributes.Action`` value, or ``"*"``.
+    #: Bir ``app.core.authz.attributes.Action`` değeri, ya da ``"*"``.
     action: Mapped[str] = mapped_column(String, nullable=False)
-    #: A ``Resource.type`` value ("document", "draft", "unit", ...), or
-    #: ``"*"``.
+    #: Bir ``Resource.type`` değeri ("document", "draft", "unit", ...), ya
+    #: da ``"*"``.
     resource_type: Mapped[str] = mapped_column(String, nullable=False)
     #: ``{"any": true}`` | ``{"owner": "self"}`` | ``{"id": "<resource_id>"}``
-    #: -- see ``app.core.authz.engine.GrantView.resource_selector``.
+    #: -- bkz. ``app.core.authz.engine.GrantView.resource_selector``.
     resource_selector: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
-    #: Reserved for future attribute-conditioned grants (e.g. a resource's
-    #: ``sensitivity_rank``) -- not yet evaluated by ``engine.authorize``.
-    #: Stored now so a grant row's shape does not need a migration the day
-    #: a condition-evaluating consumer is added.
+    #: Gelecekteki öznitelik-koşullu yetkiler için ayrılmıştır (örn. bir
+    #: kaynağın ``sensitivity_rank``'ı) -- henüz ``engine.authorize``
+    #: tarafından değerlendirilmiyor. Bir koşul değerlendiren tüketici
+    #: eklendiği gün bir yetki satırının biçiminin göç gerektirmemesi için
+    #: şimdiden saklanıyor.
     conditions: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
-    #: ``"permit"`` or ``"deny"``. An explicit deny always outranks every
-    #: permit, regardless of priority (see ``engine.authorize``).
+    #: ``"permit"`` ya da ``"deny"``. Açık bir deny, priority'den bağımsız
+    #: olarak her zaman her permit'in önüne geçer (bkz. ``engine.authorize``).
     effect: Mapped[str] = mapped_column(String, nullable=False, default="permit")
     priority: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     granted_by: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=False)
-    #: Set on revocation; a revoked row is kept (not deleted) as its own
-    #: audit trail rather than folded into the future ``audit_log`` table.
+    #: İptalde ayarlanır; iptal edilmiş bir satır silinmez, gelecekteki
+    #: ``audit_log`` tablosuna katılmak yerine kendi denetim izi olarak
+    #: tutulur.
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     reason: Mapped[Optional[str]] = mapped_column(String, nullable=True)

@@ -4,49 +4,49 @@ from app.core.enums.sensitivity_level import SensitivityLevel
 from app.core.enums.user_role import UserRole
 
 class UserCreate(BaseModel):
-    """Pydantic schema for creating a new user account.
+    """Yeni bir kullanıcı hesabı oluşturmak için Pydantic şeması.
 
-    Deliberately has no ``clearance_level`` field: registration is
-    self-service (gated only by the invite whitelist, no auth required), so
-    letting a registrant set their own confidentiality ceiling would be a
-    self-escalation hole. Every new account starts at
-    ``UserModel.clearance_level``'s column default and can only be raised
-    afterwards by an admin via ``PUT /users/{id}``.
+    Kasıtlı olarak ``clearance_level`` alanı yoktur: kayıt self-servistir
+    (sadece davet beyaz listesi ile kısıtlanır, kimlik doğrulama gerekmez),
+    bu yüzden kayıt olan kişinin kendi gizlilik tavanını belirlemesine izin
+    vermek, kendi kendine yetki yükseltme açığı olurdu. Her yeni hesap
+    ``UserModel.clearance_level``'ın kolon varsayılanıyla başlar ve sonradan
+    sadece bir admin tarafından ``PUT /users/{id}`` ile yükseltilebilir.
     """
-    username: str = Field(description="Unique username")
-    email: EmailStr = Field(description="Unique email address")
-    password: str = Field(description="Plain text password")
-    role: UserRole = Field(default=UserRole.EMPLOYEE, description="Assigned role for authorization")
+    username: str = Field(description="Benzersiz kullanıcı adı")
+    email: EmailStr = Field(description="Benzersiz e-posta adresi")
+    password: str = Field(description="Düz metin parola")
+    role: UserRole = Field(default=UserRole.EMPLOYEE, description="Yetkilendirme için atanan rol")
 
 class UserUpdate(BaseModel):
-    """Pydantic schema for updating a user account."""
-    email: Optional[EmailStr] = Field(default=None, description="Optional updated email address")
-    role: Optional[UserRole] = Field(default=None, description="Optional updated authorization role")
-    is_active: Optional[bool] = Field(default=None, description="Optional updated status of user account")
+    """Bir kullanıcı hesabını güncellemek için Pydantic şeması."""
+    email: Optional[EmailStr] = Field(default=None, description="İsteğe bağlı güncellenmiş e-posta adresi")
+    role: Optional[UserRole] = Field(default=None, description="İsteğe bağlı güncellenmiş yetkilendirme rolü")
+    is_active: Optional[bool] = Field(default=None, description="İsteğe bağlı güncellenmiş kullanıcı hesabı durumu")
     clearance_level: Optional[SensitivityLevel] = Field(
         default=None,
         description=(
-            "Optional updated confidentiality ceiling (EMPLOYEE role only -- "
-            "ADMIN/MANAGER clear everything regardless of this value). "
-            "Admin-only, same as role/is_active."
+            "İsteğe bağlı güncellenmiş gizlilik tavanı (sadece EMPLOYEE rolü için -- "
+            "ADMIN/MANAGER bu değerden bağımsız olarak her şeyi geçer). "
+            "role/is_active gibi sadece admin için."
         ),
     )
 
 class PasswordChangeRequest(BaseModel):
-    """Pydantic schema for updating current user's password securely."""
-    current_password: str = Field(description="The user's current password")
-    new_password: str = Field(description="The user's new secure password")
+    """Mevcut kullanıcının parolasını güvenli şekilde güncellemek için Pydantic şeması."""
+    current_password: str = Field(description="Kullanıcının mevcut parolası")
+    new_password: str = Field(description="Kullanıcının yeni güvenli parolası")
 
 class UserResponse(BaseModel):
-    """Pydantic schema for user account details output."""
-    id: str = Field(description="Unique user ID")
-    company_id: Optional[str] = Field(default=None, description="Owning company (NULL for root)")
-    username: str = Field(description="Unique username")
-    email: EmailStr = Field(description="Unique email address")
-    role: UserRole = Field(description="Assigned authorization role")
-    clearance_level: SensitivityLevel = Field(description="Confidentiality ceiling (EMPLOYEE role only).")
-    is_active: bool = Field(description="Status of user account")
-    is_deleted: bool = Field(description="Soft deletion flag status")
+    """Kullanıcı hesabı detayları çıktısı için Pydantic şeması."""
+    id: str = Field(description="Benzersiz kullanıcı ID'si")
+    company_id: Optional[str] = Field(default=None, description="Sahip şirket (root için NULL)")
+    username: str = Field(description="Benzersiz kullanıcı adı")
+    email: EmailStr = Field(description="Benzersiz e-posta adresi")
+    role: UserRole = Field(description="Atanan yetkilendirme rolü")
+    clearance_level: SensitivityLevel = Field(description="Gizlilik tavanı (sadece EMPLOYEE rolü için).")
+    is_active: bool = Field(description="Kullanıcı hesabının durumu")
+    is_deleted: bool = Field(description="Soft delete bayrağının durumu")
 
     model_config = {
         "from_attributes": True

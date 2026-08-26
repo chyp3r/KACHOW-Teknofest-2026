@@ -2,16 +2,16 @@ from app.ai.agents.template_agent import TemplateAgent
 
 
 class JudgeAgent(TemplateAgent):
-    """Judges a draft on criteria the deterministic verifier cannot check.
+    """Bir taslağı, deterministik doğrulayıcının kontrol edemeyeceği ölçütlere göre değerlendirir.
 
-    Runs on the fast tier: it emits a small structured verdict, never the
-    draft text itself, so its cost is a label-sized generation rather than a
-    second full draft.
+    Hızlı katmanda çalışır: küçük, yapılandırılmış bir karar üretir, asla
+    taslak metnin kendisini değil; bu yüzden maliyeti ikinci bir tam taslak
+    değil, etiket boyutunda bir üretimdir.
     """
 
     TEMPLATE_NAME = "judge"
     AGENT_NAME = "JudgeAgent"
     DESCRIPTION = (
-        "Judges a draft's request-fit, register, closing direction and "
-        "muhatap consistency -- the parts of quality a regex cannot see."
+        "Bir taslağın isteğe uygunluğunu, üslubunu, kapanış yönünü ve muhatap "
+        "tutarlılığını değerlendirir -- kalitenin regex ile görülemeyen kısımları."
     )

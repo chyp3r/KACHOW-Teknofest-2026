@@ -6,27 +6,29 @@ from app.ai.prompts.manager import PromptManager, get_prompt_manager
 
 
 class TemplateAgent(BaseAgent):
-    """An agent that is nothing more than a named prompt template.
+    """Adı verilmiş bir prompt şablonundan başka bir şey olmayan bir ajan.
 
-    ``ClassifierAgent``, ``ComplianceAgent``, ``RouterAgent`` and
-    ``JudgeAgent`` each reimplemented the same ``__init__`` (load a template
-    by name, forward name/description/validators to ``BaseAgent``) with no
-    other behavior of their own. They now subclass this and set the three
-    class attributes below instead. Class name, module path and constructor
-    signature are unchanged, so every existing call site and test keeps
-    working -- several tests patch by dotted path (e.g.
-    ``app.ai.agents.classifier.ClassifierAgent.run_structured``), which a
-    single shared class replacing all four would have broken.
+    ``ClassifierAgent``, ``ComplianceAgent``, ``RouterAgent`` ve
+    ``JudgeAgent`` her biri kendi başka davranışları olmadan aynı
+    ``__init__``'i (isimle şablon yükle, name/description/validators'ı
+    ``BaseAgent``'a ilet) yeniden uyguluyordu. Artık bunu alt sınıflandırıyor
+    ve bunun yerine aşağıdaki üç sınıf özniteliğini ayarlıyorlar. Sınıf adı,
+    modül yolu ve constructor imzası değişmedi, bu yüzden mevcut her çağrı
+    noktası ve test çalışmaya devam ediyor -- birkaç test noktalı yol ile
+    patch uyguluyor (örn. ``app.ai.agents.classifier.ClassifierAgent.
+    run_structured``), ki bu dördünü de değiştiren tek bir paylaşılan sınıf
+    bunu bozardı.
     """
 
-    #: Template name in prompts/templates/, e.g. "classifier".
+    #: prompts/templates/ içindeki şablon adı, örn. "classifier".
     TEMPLATE_NAME: str = ""
-    #: Passed through as BaseAgent's `name` -- also the Prometheus/log label,
-    #: so subclasses keep their historical agent name here rather than the
-    #: Python class name changing what a metric or log line reports.
+    #: BaseAgent'ın `name`i olarak iletilir -- aynı zamanda Prometheus/log
+    #: etiketi, bu yüzden alt sınıflar tarihsel ajan adlarını burada
+    #: tutuyorlar; Python sınıf adının bir metrik veya log satırının
+    #: raporladığı şeyi değiştirmesi yerine.
     AGENT_NAME: str = ""
     DESCRIPTION: str = ""
-    #: Post-generation validators, e.g. ``(assert_no_prompt_leak,)``.
+    #: Üretim sonrası doğrulayıcılar, örn. ``(assert_no_prompt_leak,)``.
     VALIDATORS: Sequence[Callable[[str], None]] = ()
 
     def __init__(
@@ -34,11 +36,11 @@ class TemplateAgent(BaseAgent):
         llm_client: BaseLLMClient,
         prompt_manager: Optional[PromptManager] = None,
     ):
-        """Initialize the agent from its class-level template binding.
+        """Ajanı, sınıf seviyesindeki şablon bağlamasından başlatır.
 
         Args:
-            llm_client: The LLM provider client conforming to BaseLLMClient.
-            prompt_manager: Optional prompt manager override (tests only).
+            llm_client: BaseLLMClient'a uyan LLM sağlayıcı istemcisi.
+            prompt_manager: Opsiyonel prompt yöneticisi override'ı (yalnızca testler için).
         """
         pm = prompt_manager or get_prompt_manager()
         super().__init__(

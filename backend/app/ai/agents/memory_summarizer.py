@@ -6,39 +6,40 @@ from app.ai.prompts.manager import PromptManager, get_prompt_manager
 
 
 class MemorySummarizerAgent(BaseAgent):
-    """Folds aged-out conversation turns into a short rolling summary."""
+    """Süresi dolmuş konuşma turlarını kısa, kayan bir özete katlar."""
 
     def __init__(
         self,
         llm_client: BaseLLMClient,
         prompt_manager: Optional[PromptManager] = None,
     ):
-        """Initialize the memory summarizer agent.
+        """Hafıza özetleyici ajanını başlatır.
 
         Args:
-            llm_client: The LLM provider client. The fast tier is enough for
-                this -- it is a short consolidation pass, not a generative task.
-            prompt_manager: Optional prompt manager override.
+            llm_client: LLM sağlayıcı istemcisi. Bunun için hızlı katman
+                yeterlidir -- bu üretken bir görev değil, kısa bir birleştirme
+                geçişidir.
+            prompt_manager: Opsiyonel prompt yöneticisi override'ı.
         """
         manager = prompt_manager or get_prompt_manager()
         super().__init__(
             llm_client=llm_client,
             name="MemorySummarizerAgent",
-            description="Consolidates aged-out turns into a rolling summary.",
+            description="Süresi dolmuş turları kayan bir özette birleştirir.",
             system_prompt=manager.get_template("memory_summary"),
         )
 
     async def summarize(
         self, *, existing_summary: str, new_turns: List[Dict[str, str]]
     ) -> str:
-        """Fold newly aged-out turns into the existing rolling summary.
+        """Yeni süresi dolmuş turları mevcut kayan özete katlar.
 
         Args:
-            existing_summary: The summary carried forward from prior turns.
-            new_turns: Turns that just fell outside the verbatim history window.
+            existing_summary: Önceki turlardan taşınan özet.
+            new_turns: Az önce birebir geçmiş penceresinin dışına düşen turlar.
 
         Returns:
-            The updated summary text.
+            Güncellenmiş özet metni.
         """
         turns_text = "\n".join(
             f"{turn.get('role')}: {turn.get('content', '')}" for turn in new_turns

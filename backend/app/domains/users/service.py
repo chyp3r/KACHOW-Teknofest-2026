@@ -15,13 +15,13 @@ from app.events import event_bus, UserCreatedEvent, UserDeletedEvent, UserPasswo
 
 
 class UserService:
-    """SOTA Service executing user-related business rules and invitations."""
+    """Kullanıcı ile ilgili iş kurallarını ve davetleri çalıştıran SOTA Servis."""
 
     def __init__(self, repository: UserRepository):
         self.repository = repository
 
     async def register_user(self, schema: UserCreate) -> UserModel:
-        """Register a new user, checking invitation whitelist first and assigning invite-specific role."""
+        """Önce davet beyaz listesini kontrol ederek ve davete özel rolü atayarak yeni bir kullanıcı kaydeder."""
         existing_user = await self.repository.get_by_username(schema.username)
         if existing_user:
             raise ConflictException(message="Username is already taken.")
@@ -30,16 +30,17 @@ class UserService:
         if existing_email:
             raise ConflictException(message="Email address is already in use.")
 
-        # Whitelist (invite) check
+        # Beyaz liste (davet) kontrolü
         invite = await self.repository.get_invite_by_email(schema.email)
         if not invite:
             raise AuthorizationException(message="This email address has not been invited by a system administrator.")
 
         hashed = hash_password(schema.password)
 
-        # Enforce role AND company defined by the inviting admin/manager in
-        # the invite -- letting a registrant pick either would be a
-        # self-escalation / cross-tenant self-assignment hole.
+        # Davette, davet eden admin/yönetici tarafından tanımlanan rol VE
+        # şirketi zorunlu kıl -- kayıt olan kişinin ikisinden birini
+        # seçmesine izin vermek, kendi kendine yetki yükseltme / kiracılar
+        # arası kendi kendine atama açığı olurdu.
         user = UserModel(
             id=str(uuid4()),
             company_id=invite.company_id,
@@ -54,7 +55,7 @@ class UserService:
         created_user = await self.repository.create(user)
         await self.repository.mark_invite_used(schema.email)
 
-        # Publish UserCreatedEvent
+        # UserCreatedEvent'i yayınla
         await event_bus.publish(UserCreatedEvent(
             payload={
                 "user_id": created_user.id,
@@ -67,7 +68,7 @@ class UserService:
         return created_user
 
     async def invite_user_email(self, schema: InvitedEmailCreate, company_id: str) -> InvitedEmailModel:
-        """Invite/whitelist an email for registration into `company_id` (Admin/Manager only)."""
+        """`company_id`'ye kayıt için bir e-postayı davet eder/beyaz listeye alır (sadece Admin/Manager)."""
         registered = await self.repository.get_by_email(schema.email)
         if registered:
             raise ConflictException(message="A user with this email address is already registered.")
@@ -87,12 +88,13 @@ class UserService:
         return await self.repository.create_invite(invite)
 
     async def get_user_by_id(self, user_id: str) -> UserModel:
-        """Fetch user by ID (not company-scoped), raising NotFoundException if not present.
+        """ID'ye göre kullanıcı getirir (şirket kapsamlı değildir), yoksa NotFoundException fırlatır.
 
-        For the authentication path only (`get_current_user`) -- the JWT's
-        `sub` already identifies a specific row, so there is no company to
-        scope against yet. Admin/manager-facing lookups of another user
-        must use `get_user_by_id_in_company` instead.
+        Sadece kimlik doğrulama yolu içindir (`get_current_user`) -- JWT'nin
+        `sub`'ı zaten belirli bir satırı tanımlar, bu yüzden henüz kapsamına
+        alınacak bir şirket yoktur. Başka bir kullanıcıya dönük admin/
+        yönetici aramaları bunun yerine `get_user_by_id_in_company`
+        kullanmalıdır.
         """
         user = await self.repository.get_by_id(user_id)
         if not user:
@@ -100,7 +102,7 @@ class UserService:
         return user
 
     async def get_user_by_id_in_company(self, user_id: str, company_id: str) -> UserModel:
-        """Fetch a user by ID within `company_id`, raising NotFoundException if not present."""
+        """`company_id` içinde ID'ye göre bir kullanıcı getirir, yoksa NotFoundException fırlatır."""
         user = await self.repository.get_by_id_in_company(user_id, company_id)
         if not user:
             raise NotFoundException(message="User not found.")
@@ -109,7 +111,7 @@ class UserService:
     async def get_users(
         self, company_id: str, skip: int = 0, limit: int = 100, role: Optional[str] = None
     ) -> List[UserModel]:
-        """Fetch list of users of `company_id` with pagination and optional role filters."""
+        """`company_id`'nin kullanıcı listesini sayfalama ve isteğe bağlı rol filtreleriyle getirir."""
         return await self.repository.get_multi(company_id, skip=skip, limit=limit, role=role)
 
     async def search_users(
@@ -121,10 +123,10 @@ class UserService:
         skip: int = 0,
         limit: int = 50,
     ):
-        """Search `company_id`'s users for the messaging/artifact-transfer
-        recipient picker (`GET /users/search`) -- see
-        `UserRepository._search_query`'s docstring for the filter
-        semantics. Returns each user paired with its primary unit's name.
+        """Mesajlaşma/belge-transfer alıcı seçici (`GET /users/search`) için
+        `company_id`'nin kullanıcılarını arar -- filtre semantiği için
+        `UserRepository._search_query`'nin docstring'ine bakınız. Her
+        kullanıcıyı birincil biriminin adıyla eşleştirerek döndürür.
         """
         items = await self.repository.search(
             company_id, q=q, unit_id=unit_id, role=role, skip=skip, limit=limit
@@ -133,13 +135,14 @@ class UserService:
         return items, total
 
     async def update_user(self, user_id: str, schema: UserUpdate, company_id: str) -> UserModel:
-        """Update user details, verifying unique constraints if email changes.
+        """E-posta değişirse benzersizlik kısıtlarını doğrulayarak kullanıcı detaylarını günceller.
 
         Args:
-            company_id: The acting admin's company -- `user_id` must belong
-                to it, or this raises `NotFoundException` the same as if
-                the row didn't exist at all (never leaks whether a user id
-                exists in a different company).
+            company_id: İşlemi yapan adminin şirketi -- `user_id` bu şirkete
+                ait olmalıdır, aksi halde bu, satır hiç var olmasaymış gibi
+                aynı şekilde `NotFoundException` fırlatır (bir kullanıcı
+                id'sinin farklı bir şirkette var olup olmadığını asla
+                sızdırmaz).
         """
         user = await self.get_user_by_id_in_company(user_id, company_id)
 
@@ -158,7 +161,7 @@ class UserService:
         return await self.repository.update(user, update_dict)
 
     async def change_password(self, user_id: str, schema: PasswordChangeRequest) -> None:
-        """Change the password of the user after verifying current password."""
+        """Mevcut parolayı doğruladıktan sonra kullanıcının parolasını değiştirir."""
         user = await self.get_user_by_id(user_id)
 
         if not verify_password(schema.current_password, user.hashed_password):
@@ -167,23 +170,23 @@ class UserService:
         hashed_new = hash_password(schema.new_password)
         await self.repository.update(user, {"hashed_password": hashed_new})
 
-        # Publish UserPasswordChangedEvent
+        # UserPasswordChangedEvent'i yayınla
         await event_bus.publish(UserPasswordChangedEvent(payload={"user_id": user_id}))
 
     async def soft_delete_user(self, user_id: str, company_id: str) -> None:
-        """Soft delete user by ID, scoped to `company_id`."""
+        """`company_id` kapsamında ID'ye göre kullanıcıyı soft-delete yapar."""
         user = await self.repository.soft_delete(user_id, company_id)
         if not user:
             raise NotFoundException(message="User not found.")
 
-        # Publish UserDeletedEvent (soft)
+        # UserDeletedEvent'i yayınla (soft)
         await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "soft"}))
 
     async def hard_delete_user(self, user_id: str, company_id: str) -> None:
-        """Hard delete user by ID, scoped to `company_id`."""
+        """`company_id` kapsamında ID'ye göre kullanıcıyı kalıcı olarak siler."""
         deleted = await self.repository.hard_delete(user_id, company_id)
         if not deleted:
             raise NotFoundException(message="User not found.")
 
-        # Publish UserDeletedEvent (hard)
+        # UserDeletedEvent'i yayınla (hard)
         await event_bus.publish(UserDeletedEvent(payload={"user_id": user_id, "delete_type": "hard"}))

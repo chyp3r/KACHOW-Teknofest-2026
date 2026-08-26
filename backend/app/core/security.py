@@ -1,7 +1,7 @@
-"""Security utilities: JWT token generation and password hashing.
+"""Güvenlik araçları: JWT token üretimi ve parola hashleme.
 
-Password hashing requires `bcrypt`.
-JWT signing requires `pyjwt`.
+Parola hashleme `bcrypt` gerektirir.
+JWT imzalama `pyjwt` gerektirir.
 """
 
 import logging
@@ -15,22 +15,22 @@ from app.api.exceptions.authentication import AuthenticationException
 
 logger = logging.getLogger(__name__)
 
-# ---------- Constants ----------
+# ---------- Sabitler ----------
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60
 REFRESH_TOKEN_EXPIRE_DAYS = 30
 
 
-# ---------- Password Hashing ----------
+# ---------- Parola Hashleme ----------
 def hash_password(plain_password: str) -> str:
-    """Hash a plain-text password using bcrypt."""
+    """Düz metin bir parolayı bcrypt kullanarak hashle."""
     return bcrypt.hashpw(
         plain_password.encode("utf-8"), bcrypt.gensalt()
     ).decode("utf-8")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a plain-text password against a bcrypt hash."""
+    """Düz metin bir parolayı bir bcrypt hash'ine karşı doğrula."""
     try:
         return bcrypt.checkpw(
             plain_password.encode("utf-8"), hashed_password.encode("utf-8")
@@ -40,9 +40,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-# ---------- JWT Token Generation ----------
+# ---------- JWT Token Üretimi ----------
 def create_access_token(subject: str | Any, extra_claims: dict | None = None) -> str:
-    """Create a short-lived JWT access token for the given subject."""
+    """Verilen özne için kısa ömürlü bir JWT erişim token'ı oluştur."""
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload: dict[str, Any] = {
         "sub": str(subject),
@@ -57,7 +57,7 @@ def create_access_token(subject: str | Any, extra_claims: dict | None = None) ->
 
 
 def create_refresh_token(subject: str | Any) -> str:
-    """Create a long-lived JWT refresh token for the given subject."""
+    """Verilen özne için uzun ömürlü bir JWT yenileme token'ı oluştur."""
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload: dict[str, Any] = {
         "sub": str(subject),
@@ -69,7 +69,7 @@ def create_refresh_token(subject: str | Any) -> str:
 
 
 def decode_token(token: str) -> dict[str, Any]:
-    """Decode and validate a JWT token, returning its payload."""
+    """Bir JWT token'ını çöz ve doğrula, payload'ını döndür."""
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
         return payload

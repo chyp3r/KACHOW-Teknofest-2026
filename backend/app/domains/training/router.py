@@ -25,12 +25,13 @@ from app.domains.users.model.user_model import UserModel
 from app.infrastructure.database.session import get_db
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
-#: Registered under /companies -- same shape as
-#: app.domains.feedback.router.company_router.
+#: /companies altında kayıtlıdır -- app.domains.feedback.router.company_router
+#: ile aynı biçimde.
 company_router = APIRouter(prefix="/companies", tags=["training"])
 
-#: The one bare-id route (delete a sample) lives on its own router, same
-#: split app.domains.feedback.router uses for /feedback vs /companies/{id}/feedback/*.
+#: Tek bir çıplak-id rotası (bir örneği silme) kendi router'ında yaşar,
+#: app.domains.feedback.router'ın /feedback ile /companies/{id}/feedback/*
+#: için kullandığı bölünmenin aynısı.
 router = APIRouter(prefix="/training-samples", tags=["training"])
 
 
@@ -47,9 +48,10 @@ def _quota_service(db: AsyncSession) -> QuotaService:
 
 
 def _require_company_access(current_user: UserModel, company_id: str) -> None:
-    """Root reaches any company; Admin/Manager only their own. Same rule as
-    `app.domains.feedback.router._require_company_access`, duplicated for
-    the same reason that one gives: it's private to its own module."""
+    """Root herhangi bir şirkete erişebilir; Admin/Manager yalnızca kendi
+    şirketine. `app.domains.feedback.router._require_company_access` ile
+    aynı kural, o fonksiyonun verdiğiyle aynı sebepten tekrarlanmıştır:
+    kendi modülüne özeldir."""
     if current_user.role == UserRole.ROOT.value:
         return
     if (
@@ -69,9 +71,10 @@ async def compile_training_samples(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Re-derive `training_samples` from every currently-resolvable
-    `feedback` vote. Does not train anything -- see `TrainingService.
-    compile_samples`'s docstring for why compiling is its own step."""
+    """Şu anda çözümlenebilir her `feedback` oyundan `training_samples`'ı
+    yeniden türetir. Hiçbir şeyi eğitmez -- derlemenin neden kendi başına
+    bir adım olduğu için bkz. `TrainingService.compile_samples`'ın
+    docstring'i."""
     _require_company_access(current_user, company_id)
     service = _service(db)
     samples = await service.compile_samples(company_id)
@@ -103,7 +106,7 @@ async def list_training_samples(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List one company's compiled samples, newest first."""
+    """Bir şirketin derlenmiş örneklerini en yeniden en eskiye listeler."""
     _require_company_access(current_user, company_id)
     service = _service(db)
     samples = await service.list_samples(
@@ -127,7 +130,7 @@ async def training_sample_stats(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Source distribution + how far from `MIN_FEEDBACK_SAMPLES` a company is."""
+    """Kaynak dağılımı + bir şirketin `MIN_FEEDBACK_SAMPLES`'a ne kadar uzak olduğu."""
     _require_company_access(current_user, company_id)
     service = _service(db)
     stats = await service.stats(company_id)
@@ -141,9 +144,9 @@ async def export_training_samples(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """The same rows `.../training-runs` trains on, as downloadable JSONL --
-    see `TrainingService.export_samples`'s docstring for why shown data and
-    trained data are guaranteed identical."""
+    """`.../training-runs`'ın üzerinde eğitim yaptığı aynı satırlar, indirilebilir
+    JSONL olarak -- gösterilen veri ile eğitilen verinin neden aynı olduğu
+    garanti edildiği için bkz. `TrainingService.export_samples`'ın docstring'i."""
     _require_company_access(current_user, company_id)
     service = _service(db)
     samples = await service.export_samples(company_id)
@@ -174,8 +177,8 @@ async def delete_training_sample(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remove a sample from the training set (a bad-label cleanup), scoped
-    to the caller's own company."""
+    """Bir örneği eğitim setinden kaldırır (hatalı etiket temizliği),
+    çağıranın kendi şirketiyle sınırlı."""
     service = _service(db)
     sample = await service.delete_sample(sample_id, current_user.company_id)
     await _audit_service(db).record(
@@ -207,13 +210,15 @@ async def trigger_training_run(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Trigger a training run. `style_adapter` compiles + mines + publishes
-    a refreshed style adapter synchronously (see `app.domains.training.
-    service`'s module docstring for why that scale doesn't need a
-    background worker). `lora_sft`/`lora_dpo` only queues the job --
-    actually running it needs the separate `worker` container manually
-    started via `scripts/start_training_worker.sh` (see #191's own body
-    for why it isn't part of `docker compose up` by default)."""
+    """Bir eğitim çalıştırmasını tetikler. `style_adapter`, yenilenmiş bir
+    stil adaptörünü senkron olarak derler + çıkarır + yayınlar (bu ölçeğin
+    neden bir arka plan işçisine ihtiyaç duymadığı için bkz.
+    `app.domains.training.service`'in modül docstring'i). `lora_sft`/
+    `lora_dpo` işi yalnızca kuyruğa alır -- fiilen çalıştırmak,
+    `scripts/start_training_worker.sh` ile manuel olarak başlatılan ayrı
+    bir `worker` konteynerine ihtiyaç duyar (varsayılan olarak neden
+    `docker compose up`'ın bir parçası olmadığı için bkz. #191'in kendi
+    gövdesi)."""
     _require_company_access(current_user, company_id)
     await _quota_service(db).check_and_increment(company_id, TRAINING_RUNS_METRIC)
     service = _service(db)

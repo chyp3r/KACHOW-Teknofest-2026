@@ -47,11 +47,11 @@ def _audit_service(db: AsyncSession) -> AuditService:
 
 
 def _require_company_access(current_user: UserModel, company_id: str) -> None:
-    """Root reaches any company; a company admin only reaches their own.
+    """Root herhangi bir şirkete erişebilir; bir şirket admin'i yalnızca kendi şirketine.
 
-    Manager/employee never reach this router at all -- see the per-route
-    ``require_roles`` dependency -- so this only has to distinguish root
-    from admin.
+    Manager/employee bu router'a hiçbir zaman ulaşamaz -- bkz. rota başına
+    ``require_roles`` bağımlılığı -- bu yüzden bu fonksiyon yalnızca root'u
+    admin'den ayırt etmek zorundadır.
     """
     if current_user.role == UserRole.ROOT.value:
         return
@@ -66,7 +66,7 @@ async def create_company(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Create a new tenant company (Root only)."""
+    """Yeni bir kiracı şirket oluşturur (yalnızca Root)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     company = await service.create_company(schema, created_by=current_user.id)
     await _audit_service(db).record(
@@ -87,7 +87,7 @@ async def list_companies(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List every tenant company, paginated (Root only)."""
+    """Her kiracı şirketi sayfalanmış şekilde listeler (yalnızca Root)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     companies, total = await service.list_companies(page=pagination.page, size=pagination.size)
     items = [CompanyResponse.model_validate(c) for c in companies]
@@ -103,7 +103,7 @@ async def get_company(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Fetch a single company's details (Root, or that company's own Admin)."""
+    """Tek bir şirketin ayrıntılarını getirir (Root, veya o şirketin kendi Admin'i)."""
     _require_company_access(current_user, company_id)
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     company = await service.get_company_by_id(company_id)
@@ -117,7 +117,7 @@ async def update_company(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update a company's name/tax number/active flag/settings (Root, or that company's own Admin)."""
+    """Bir şirketin adını/vergi numarasını/aktiflik durumunu/ayarlarını günceller (Root, veya o şirketin kendi Admin'i)."""
     _require_company_access(current_user, company_id)
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     company = await service.update_company(company_id, schema)
@@ -142,11 +142,11 @@ async def get_company_adapter_endpoint(
     company_id: str,
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
 ):
-    """Fetch a company's current runtime style adapter (Faz C2).
+    """Bir şirketin geçerli çalışma zamanı stil adaptörünü getirir (Faz C2).
 
-    Never 404s for a company with nothing configured -- returns the empty
-    adapter shape (``version=0``, empty lists) instead, same as
-    ``get_company_adapter`` itself.
+    Hiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --
+    bunun yerine, ``get_company_adapter``'ın kendisiyle aynı şekilde,
+    boş adaptör biçimini (``version=0``, boş listeler) döndürür.
     """
     _require_company_access(current_user, company_id)
     adapter = await get_company_adapter(company_id)
@@ -160,14 +160,14 @@ async def update_company_adapter(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Replace a company's runtime style adapter (Root, or that company's
-    own Admin).
+    """Bir şirketin çalışma zamanı stil adaptörünü değiştirir (Root, veya o
+    şirketin kendi Admin'i).
 
-    Hand-authoring is the only way to set one today -- Faz C3's automated
-    training pipeline will call the same
-    ``app.domains.companies.provider.set_company_adapter`` this uses, with
-    a real ``sample_count`` instead of the 0 a manual edit gets. Each field
-    replaces the adapter's entire list, it does not append.
+    Bugün bunu ayarlamanın tek yolu elle yazmaktır -- Faz C3'ün otomatik
+    eğitim hattı, manuel bir düzenlemenin aldığı 0 yerine gerçek bir
+    ``sample_count`` ile bunun kullandığı aynı
+    ``app.domains.companies.provider.set_company_adapter``'ı çağıracaktır.
+    Her alan, adaptörün tüm listesinin yerini alır, sona eklemez.
     """
     _require_company_access(current_user, company_id)
     try:
@@ -200,11 +200,11 @@ async def get_company_profile_endpoint(
     company_id: str,
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
 ):
-    """Fetch a company's identity profile.
+    """Bir şirketin kimlik profilini getirir.
 
-    Never 404s for a company with nothing configured -- returns the empty
-    profile shape (``version=0``, empty fields) instead, same as
-    ``get_company_adapter_endpoint``.
+    Hiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --
+    ``get_company_adapter_endpoint`` ile aynı şekilde, bunun yerine boş
+    profil biçimini (``version=0``, boş alanlar) döndürür.
     """
     _require_company_access(current_user, company_id)
     profile = await get_company_profile(company_id)
@@ -218,8 +218,8 @@ async def update_company_profile(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Replace a company's identity profile (Root, or that company's own
-    Admin). Every field replaces the profile's current value.
+    """Bir şirketin kimlik profilini değiştirir (Root, veya o şirketin kendi
+    Admin'i). Her alan, profilin geçerli değerinin yerini alır.
     """
     _require_company_access(current_user, company_id)
     try:
@@ -261,10 +261,11 @@ async def get_company_rules_endpoint(
     company_id: str,
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
 ):
-    """Fetch a company's mandatory drafting rules.
+    """Bir şirketin zorunlu taslak yazım kurallarını getirir.
 
-    Never 404s for a company with nothing configured -- returns an empty
-    rule list instead, same as ``get_company_adapter_endpoint``.
+    Hiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --
+    ``get_company_adapter_endpoint`` ile aynı şekilde, bunun yerine boş bir
+    kural listesi döndürür.
     """
     _require_company_access(current_user, company_id)
     ruleset = await get_company_rules(company_id)
@@ -278,13 +279,14 @@ async def update_company_rules(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Replace a company's mandatory drafting rules (Root, or that
-    company's own Admin).
+    """Bir şirketin zorunlu taslak yazım kurallarını değiştirir (Root, veya
+    o şirketin kendi Admin'i).
 
-    A violation is graded by the draft-quality judge and, when found,
-    becomes a numbered defect the existing verify/revise repair loop fixes
-    automatically -- see ``app.ai.verification.llm_judge.judge_draft``'s
-    own ``company_rules_block`` parameter.
+    Bir ihlal, taslak kalite hakemi tarafından derecelendirilir ve
+    bulunduğunda, mevcut doğrulama/revizyon onarım döngüsünün otomatik
+    olarak düzelttiği numaralandırılmış bir kusur hâline gelir -- bkz.
+    ``app.ai.verification.llm_judge.judge_draft``'ın kendi
+    ``company_rules_block`` parametresi.
     """
     _require_company_access(current_user, company_id)
     try:
@@ -313,7 +315,7 @@ async def assign_company_admin(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Promote an existing company user to Admin (Root only)."""
+    """Mevcut bir şirket kullanıcısını Admin'e yükseltir (yalnızca Root)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     user = await service.assign_admin(company_id, schema.user_id)
     await _audit_service(db).record(
@@ -334,7 +336,7 @@ async def delete_company(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Soft-delete a company (Root only)."""
+    """Bir şirketi geri alınabilir şekilde siler (soft-delete) (yalnızca Root)."""
     service = CompanyService(CompanyRepository(db), UserRepository(db))
     await service.delete_company(company_id)
     await _audit_service(db).record(

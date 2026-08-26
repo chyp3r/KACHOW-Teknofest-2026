@@ -12,18 +12,18 @@ from app.domains.users.repository import UserRepository
 
 
 class UnitService:
-    """Service executing unit-management business rules (create/list/update/delete).
+    """Birim yönetimi iş kurallarını (oluşturma/listeleme/güncelleme/silme) çalıştıran servis.
 
-    Every method takes an explicit `company_id` -- units are company-scoped
-    (see `UnitModel`'s docstring): two companies may both define an "İnsan
-    Kaynakları" unit without conflict.
+    Her metot açık bir `company_id` alır -- birimler şirket kapsamlıdır
+    (bkz. `UnitModel`'in docstring'i): iki şirket de çakışmadan bir "İnsan
+    Kaynakları" birimi tanımlayabilir.
     """
 
     def __init__(self, repository: UnitRepository):
         self.repository = repository
 
     async def create_unit(self, schema: UnitCreate, company_id: str) -> UnitModel:
-        """Create a new routable unit, rejecting a duplicate name within `company_id`."""
+        """`company_id` içinde tekrar eden bir adı reddederek yeni bir yönlendirilebilir birim oluşturur."""
         existing = await self.repository.get_by_name(schema.name, company_id)
         if existing:
             raise ConflictException(message="Bu isimde bir birim zaten mevcut.")
@@ -38,21 +38,20 @@ class UnitService:
         return await self.repository.create(unit)
 
     async def get_unit_by_id(self, unit_id: str, company_id: str) -> UnitModel:
-        """Fetch a unit by ID within `company_id`, raising NotFoundException if not present."""
+        """`company_id` içinde ID'ye göre bir birim getirir, yoksa NotFoundException fırlatır."""
         unit = await self.repository.get_by_id(unit_id, company_id)
         if not unit:
             raise NotFoundException(message="Birim bulunamadı.")
         return unit
 
     async def list_units(self, company_id: str) -> List[UnitModel]:
-        """Fetch every unit of `company_id`, active or not."""
+        """`company_id`'nin aktif olsun olmasın her birimini getirir."""
         return await self.repository.list_all(company_id)
 
     async def update_unit(self, unit_id: str, schema: UnitUpdate, company_id: str) -> UnitModel:
-        """Update a unit's name/description/active status.
+        """Bir birimin adını/açıklamasını/aktiflik durumunu günceller.
 
-        Verifies name uniqueness (within `company_id`) when the name is
-        being changed.
+        Ad değiştirilirken (`company_id` içinde) ad benzersizliğini doğrular.
         """
         unit = await self.get_unit_by_id(unit_id, company_id)
 
@@ -65,19 +64,20 @@ class UnitService:
         return await self.repository.update(unit, update_dict)
 
     async def delete_unit(self, unit_id: str, company_id: str) -> None:
-        """Permanently delete a unit by ID, scoped to `company_id`."""
+        """`company_id` kapsamında, ID'ye göre bir birimi kalıcı olarak siler."""
         deleted = await self.repository.delete(unit_id, company_id)
         if not deleted:
             raise NotFoundException(message="Birim bulunamadı.")
 
 
 class UnitMembershipService:
-    """Service executing unit-membership business rules (see `UnitMembershipModel`).
+    """Birim üyeliği iş kurallarını çalıştıran servis (bkz. `UnitMembershipModel`).
 
-    Backs both `/units/{id}/members` (management) and `/units/{id}/
-    suggested-recipients` (read-only, same underlying ranked listing) --
-    the AI-suggested-recipients feature is exactly "who is in the unit
-    routing already picked", no separate model or endpoint logic needed.
+    Hem `/units/{id}/members`'ı (yönetim) hem de `/units/{id}/
+    suggested-recipients`'ı (salt okunur, aynı temel sıralı listeleme)
+    destekler -- AI önerili alıcılar özelliği tam olarak "yönlendirmenin
+    zaten seçtiği birimde kim var" sorusudur, ayrı bir model veya endpoint
+    mantığı gerekmez.
     """
 
     def __init__(
@@ -93,7 +93,7 @@ class UnitMembershipService:
     async def add_member(
         self, unit_id: str, user_id: str, company_id: str, is_primary: bool, role_in_unit: str | None
     ) -> UnitMembershipModel:
-        """Add `user_id` to `unit_id`, rejecting a duplicate membership or an unknown user."""
+        """`user_id`'yi `unit_id`'ye ekler, tekrar eden bir üyeliği veya bilinmeyen bir kullanıcıyı reddeder."""
         unit = await self.unit_repository.get_by_id(unit_id, company_id)
         if unit is None:
             raise NotFoundException(message="Birim bulunamadı.")
@@ -120,7 +120,7 @@ class UnitMembershipService:
         return await self.membership_repository.create(membership)
 
     async def remove_member(self, unit_id: str, user_id: str, company_id: str) -> None:
-        """Remove `user_id` from `unit_id`."""
+        """`user_id`'yi `unit_id`'den çıkarır."""
         deleted = await self.membership_repository.delete(unit_id, user_id, company_id)
         if not deleted:
             raise NotFoundException(message="Üyelik bulunamadı.")
@@ -128,11 +128,11 @@ class UnitMembershipService:
     async def list_members(
         self, unit_id: str, company_id: str
     ) -> List[Tuple[UnitMembershipModel, UserModel]]:
-        """List `unit_id`'s members, ranked for suggestion (primary, then leads, then the rest).
+        """`unit_id`'nin üyelerini, öneri için sıralanmış listeler (önce birincil, sonra liderler, sonra geri kalanı).
 
-        Raises NotFoundException if `unit_id` doesn't exist within `company_id`
-        -- an empty membership list and a nonexistent unit must not look the
-        same to the caller.
+        `unit_id`, `company_id` içinde yoksa NotFoundException fırlatır --
+        boş bir üyelik listesi ile var olmayan bir birim, çağıran için aynı
+        görünmemelidir.
         """
         unit = await self.unit_repository.get_by_id(unit_id, company_id)
         if unit is None:

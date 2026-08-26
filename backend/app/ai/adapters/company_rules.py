@@ -1,22 +1,24 @@
-"""A company's mandatory drafting rules -- admin-authored constraints the
-writer/reviser must follow, and the judge must grade against.
+"""Bir şirketin zorunlu yazım kuralları -- yazarın/revize edenin uyması ve
+yargıcın karşısında not vermesi gereken, yönetici tarafından yazılmış
+kısıtlar.
 
-Sibling of ``app.ai.adapters.company_adapter.CompanyAdapter`` (same package,
-same injected-callable pattern, same "AI Core never imports app.domains"
-rule -- the reader/writer lives in ``app.domains.companies.provider``), but
-deliberately stored under its own settings key rather than folded into
-``CompanyAdapter.style_rules``: ``CompanyAdapter`` is what an automated
-training run (Faz C3) rewrites wholesale on every successful run (see
-``set_company_adapter``'s "replaces the whole list" contract); a rule an
-admin hand-authored here must survive that rewrite untouched, so it cannot
-live in the same list.
+``app.ai.adapters.company_adapter.CompanyAdapter``'ın kardeşi (aynı paket,
+aynı enjekte-edilen-callable deseni, aynı "AI Core asla app.domains import
+etmez" kuralı -- okuyucu/yazıcı ``app.domains.companies.provider`` içinde
+yaşar), ama ``CompanyAdapter.style_rules``'a katılmak yerine bilinçli olarak
+kendi settings anahtarı altında saklanır: ``CompanyAdapter``, otomatik bir
+eğitim çalıştırmasının (Faz C3) her başarılı çalıştırmada topluca yeniden
+yazdığı şeydir (bkz. ``set_company_adapter``'ın "tüm listeyi değiştirir"
+sözleşmesi); bir yöneticinin burada elle yazdığı bir kural bu yeniden
+yazımdan değişmeden kurtulmalıdır, bu yüzden aynı listede yaşayamaz.
 
-Unlike ``CompanyAdapter``, a rule set is not asserted into a prompt on
-trust alone -- ``app.ai.verification.llm_judge.judge_draft`` is handed the
-same rendered block and asked whether the draft actually followed it (see
-``DraftJudgeVerdict.company_rules_ok``), and a violation becomes a numbered
-defect the existing verify/revise repair loop fixes automatically, the same
-loop every other deterministic/judge finding already goes through.
+``CompanyAdapter``'dan farklı olarak, bir kural seti yalnızca güvene
+dayanarak bir prompt'a iddia edilmez -- ``app.ai.verification.llm_judge.
+judge_draft``'a aynı render edilmiş blok verilir ve taslağın onu gerçekten
+takip edip etmediği sorulur (bkz. ``DraftJudgeVerdict.company_rules_ok``) ve
+bir ihlal, mevcut doğrulama/revize onarım döngüsünün otomatik olarak
+düzelttiği numaralandırılmış bir kusura dönüşür -- diğer her deterministik/
+yargıç bulgusunun zaten geçtiği aynı döngü.
 """
 
 from dataclasses import dataclass, field
@@ -25,25 +27,26 @@ from typing import Any, Awaitable, Callable, Literal, Optional
 
 @dataclass(frozen=True)
 class CompanyRule:
-    """One admin-authored drafting rule.
+    """Yönetici tarafından yazılmış bir yazım kuralı.
 
     Attributes:
-        id: A short, stable slug (e.g. "K3") assigned server-side when the
-            rule is created -- referenced by the judge's own
-            ``violated_rule_ids`` so a violation can be traced back to the
-            exact rule without re-matching free text. Stable across edits to
-            *other* rules in the same set (see
-            ``app.domains.companies.provider.set_company_rules``), so a
-            rule's id does not shift just because an admin reordered or
-            removed a different one.
-        text: The rule itself, in Turkish, as the admin wrote it (e.g.
-            "Kapanışta her zaman 'Arz ederim' kullan.").
-        severity: "zorunlu" (mandatory -- a violation blocks automatic
-            approval the same way a critical judge finding does) or
-            "onerilen" (recommended -- surfaced to the judge and the writer,
-            but never forces human review on its own).
-        enabled: False keeps a rule stored without applying it -- lets an
-            admin temporarily disable one without losing its text/id.
+        id: Kural oluşturulduğunda sunucu tarafında atanan kısa, sabit bir
+            slug (örn. "K3") -- yargıcın kendi ``violated_rule_ids``'i
+            tarafından referans alınır, böylece bir ihlal serbest metni
+            yeniden eşleştirmeden tam olarak kurala geri izlenebilir. Aynı
+            settaki *diğer* kurallara yapılan düzenlemelerde sabit kalır
+            (bkz. ``app.domains.companies.provider.set_company_rules``), bu
+            yüzden bir kuralın id'si, bir yöneticinin başka birini yeniden
+            sıralaması veya kaldırması nedeniyle kaymaz.
+        text: Kuralın kendisi, yöneticinin yazdığı şekilde Türkçe olarak
+            (örn. "Kapanışta her zaman 'Arz ederim' kullan.").
+        severity: "zorunlu" (bir ihlal, kritik bir yargıç bulgusuyla aynı
+            şekilde otomatik onayı engeller) veya "onerilen" (yargıca ve
+            yazara gösterilir, ama kendi başına asla insan incelemesi
+            zorunlu kılmaz).
+        enabled: False, bir kuralı uygulamadan saklı tutar -- bir yöneticinin
+            metnini/id'sini kaybetmeden bir kuralı geçici olarak devre dışı
+            bırakmasını sağlar.
     """
 
     id: str
@@ -54,15 +57,15 @@ class CompanyRule:
 
 @dataclass(frozen=True)
 class CompanyRuleSet:
-    """One company's full set of mandatory/recommended drafting rules.
+    """Bir şirketin tam zorunlu/önerilen yazım kuralları seti.
 
     Attributes:
-        company_id: Which tenant this rule set belongs to.
-        version: Bumped on every write (see
+        company_id: Bu kural setinin ait olduğu kiracı.
+        version: Her yazımda artırılır (bkz.
             ``app.domains.companies.provider.set_company_rules``).
-        rules: The full rule list, in admin-authored order.
-        updated_at: ISO-8601 timestamp of the last write, or None if this
-            rule set has never been set (see :meth:`empty`).
+        rules: Yönetici tarafından yazılmış sıradaki tam kural listesi.
+        updated_at: Son yazımın ISO-8601 zaman damgası, veya bu kural seti
+            hiç ayarlanmamışsa None (bkz. :meth:`empty`).
     """
 
     company_id: str
@@ -72,29 +75,29 @@ class CompanyRuleSet:
 
     @property
     def is_empty(self) -> bool:
-        """True when there is nothing here worth injecting into a prompt or
-        handing to the judge."""
+        """Bir prompt'a enjekte edilmeye veya yargıca verilmeye değer hiçbir
+        şey yoksa True."""
         return not self.enabled_rules
 
     @property
     def enabled_rules(self) -> tuple[CompanyRule, ...]:
-        """Only the rules currently switched on -- what every consumer
-        (prompt injection, the judge) actually reads."""
+        """Şu anda açık olan kurallar -- her tüketicinin (prompt enjeksiyonu,
+        yargıç) gerçekten okuduğu şey."""
         return tuple(rule for rule in self.rules if rule.enabled)
 
     @classmethod
     def empty(cls, company_id: str) -> "CompanyRuleSet":
-        """The rule set a company with nothing configured resolves to.
+        """Hiçbir şey yapılandırılmamış bir şirketin çözümlendiği kural seti.
 
-        Never ``None`` -- every caller can unconditionally check
-        ``.is_empty`` instead of also handling a missing rule set as a
-        separate case, same convention as ``CompanyAdapter.empty``.
+        Asla ``None`` değil -- her çağıran, eksik bir kural setini ayrı bir
+        durum olarak ele almak yerine koşulsuzca ``.is_empty``'i kontrol
+        edebilir, ``CompanyAdapter.empty`` ile aynı kural.
         """
         return cls(company_id=company_id)
 
     def to_dict(self) -> dict[str, Any]:
-        """JSON-safe representation -- what actually gets written into
-        ``CompanyModel.settings`` and the Redis cache value."""
+        """JSON'a uygun gösterim -- ``CompanyModel.settings`` ve Redis
+        önbellek değerine gerçekten yazılan şey."""
         return {
             "version": self.version,
             "rules": [
@@ -111,8 +114,8 @@ class CompanyRuleSet:
 
     @classmethod
     def from_dict(cls, company_id: str, value: Optional[dict[str, Any]]) -> "CompanyRuleSet":
-        """Reconstruct from a ``to_dict()``-shaped mapping (or ``None``,
-        for a company that has never had one set)."""
+        """``to_dict()`` biçimli bir eşlemeden (veya hiç ayarlanmamış bir
+        şirket için ``None``'dan) yeniden oluşturur."""
         if not value:
             return cls.empty(company_id)
         rules = tuple(
@@ -133,8 +136,8 @@ class CompanyRuleSet:
         )
 
 
-#: Async callable taking a ``company_id`` and returning that company's
-#: current rule set (never raises, never returns None -- see
-#: ``CompanyRuleSet.empty``) -- injected into ``create_draft_graph``/
-#: ``create_revise_graph`` the same way ``AdapterProvider`` is.
+#: Bir ``company_id`` alan ve o şirketin mevcut kural setini döndüren async
+#: callable (asla hata fırlatmaz, asla None döndürmez -- bkz.
+#: ``CompanyRuleSet.empty``) -- ``AdapterProvider`` ile aynı şekilde
+#: ``create_draft_graph``/``create_revise_graph``'a enjekte edilir.
 RulesProvider = Callable[[str], Awaitable[CompanyRuleSet]]

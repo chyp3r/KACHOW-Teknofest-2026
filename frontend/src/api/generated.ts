@@ -33,13 +33,14 @@ export interface paths {
         };
         /**
          * Health Check
-         * @description Health check endpoint returning standardized APIResponse.
+         * @description Standartlaştırılmış bir APIResponse döndüren sağlık kontrolü uç noktası.
          *
          *     Args:
-         *         deep: When True, probes Postgres, Redis, Qdrant, Ollama and the
-         *             LangGraph checkpointer instead of only reporting that the process
-         *             is up. Any failed dependency sets the HTTP status to 503 so
-         *             uptime monitors and load balancers can act on it, not just read it.
+         *         deep: True olduğunda, yalnızca sürecin ayakta olduğunu bildirmek
+         *             yerine Postgres, Redis, Qdrant, Ollama ve LangGraph checkpointer'ı
+         *             yoklar. Başarısız olan herhangi bir bağımlılık, uptime izleme
+         *             araçlarının ve yük dengeleyicilerin sadece okumakla kalmayıp
+         *             harekete geçebilmesi için HTTP durumunu 503 yapar.
          */
         get: operations["health_check_api_v1_health_get"];
         put?: never;
@@ -59,7 +60,7 @@ export interface paths {
         };
         /**
          * Analytics Summary
-         * @description Document/draft/run/guardrail volume + quota usage for one company.
+         * @description Bir şirket için evrak/taslak/çalıştırma/güvenlik önlemi hacmi + kota kullanımı.
          */
         get: operations["analytics_summary_api_v1_companies__company_id__analytics_summary_get"];
         put?: never;
@@ -79,7 +80,7 @@ export interface paths {
         };
         /**
          * Analytics Timeseries
-         * @description One metric's volume over time, bucketed by day or week.
+         * @description Tek bir metriğin zaman içindeki hacmi, gün veya hafta bazında gruplanmış.
          */
         get: operations["analytics_timeseries_api_v1_companies__company_id__analytics_timeseries_get"];
         put?: never;
@@ -99,7 +100,7 @@ export interface paths {
         };
         /**
          * Analytics Units
-         * @description Draft volume per routed unit (`drafts.destination`).
+         * @description Yönlendirilen birim başına taslak hacmi (`drafts.destination`).
          */
         get: operations["analytics_units_api_v1_companies__company_id__analytics_units_get"];
         put?: never;
@@ -119,7 +120,7 @@ export interface paths {
         };
         /**
          * Analytics Guardrails
-         * @description Guardrail decision breakdown by stage/kind/decision.
+         * @description Aşama/tür/karar bazında güvenlik önlemi kararı dağılımı.
          */
         get: operations["analytics_guardrails_api_v1_companies__company_id__analytics_guardrails_get"];
         put?: never;
@@ -139,10 +140,11 @@ export interface paths {
         };
         /**
          * Analytics Links
-         * @description Grafana/Langfuse deep links, pre-filtered to this company where the
-         *     target tool supports it (Grafana's `company` template variable --
-         *     Langfuse's own tagging is honest-but-unverified, see
-         *     `app.observability.tracer.build_trace_config`'s docstring).
+         * @description Hedef aracın desteklediği durumlarda bu şirkete önceden filtrelenmiş
+         *     Grafana/Langfuse derin bağlantıları (Grafana'nın `company` şablon
+         *     değişkeni -- Langfuse'un kendi etiketlemesi doğru kabul edilir ancak
+         *     doğrulanmamıştır, bkz. `app.observability.tracer.build_trace_config`'in
+         *     docstring'i).
          */
         get: operations["analytics_links_api_v1_companies__company_id__analytics_links_get"];
         put?: never;
@@ -162,11 +164,12 @@ export interface paths {
         };
         /**
          * List Audit Log
-         * @description List audit trail entries, newest first.
+         * @description Denetim izi kayıtlarını en yeniden en eskiye listeler.
          *
-         *     Root: pass `company_id` for one company, or omit it to list every row
-         *     system-wide (every company's rows plus root's own system-wide actions).
-         *     Admin: always its own company, regardless of `company_id`.
+         *     Root: tek bir şirket için `company_id` gönderin, ya da sistem genelinde
+         *     tüm satırları listelemek için boş bırakın (tüm şirketlerin satırları
+         *     artı root'un kendi sistem geneli işlemleri). Admin: `company_id`'den
+         *     bağımsız olarak her zaman kendi şirketi.
          */
         get: operations["list_audit_log_api_v1_audit_get"];
         put?: never;
@@ -186,15 +189,15 @@ export interface paths {
         };
         /**
          * Verify Audit Chain
-         * @description Walk one hash chain and report the first tampered/missing link, or
-         *     confirm it's intact.
+         * @description Tek bir hash zincirini dolaşır ve ilk bozulmuş/eksik halkayı bildirir
+         *     ya da zincirin sağlam olduğunu doğrular.
          *
-         *     Root: pass `company_id` for that company's own chain, or omit it to
-         *     verify root's own system-wide (`company_id IS NULL`) chain specifically
-         *     -- unlike `GET /audit`'s omitted-`company_id` meaning "every row," a
-         *     chain to verify has to be one specific chain, since `seq`/`prev_hash`
-         *     continuity is only ever defined within a single chain. Admin: always
-         *     its own company's chain.
+         *     Root: o şirketin kendi zinciri için `company_id` gönderin, ya da özellikle
+         *     root'un kendi sistem geneli (`company_id IS NULL`) zincirini doğrulamak
+         *     için boş bırakın -- `GET /audit`'te boş `company_id`'nin "tüm satırlar"
+         *     anlamına gelmesinin aksine, doğrulanacak bir zincir tek bir belirli zincir
+         *     olmak zorundadır, çünkü `seq`/`prev_hash` sürekliliği yalnızca tek bir
+         *     zincir içinde tanımlıdır. Admin: her zaman kendi şirketinin zinciri.
          */
         get: operations["verify_audit_chain_api_v1_audit_verify_get"];
         put?: never;
@@ -216,15 +219,16 @@ export interface paths {
         put?: never;
         /**
          * Login
-         * @description Authenticate user credentials and issue access + refresh tokens.
+         * @description Kullanıcı kimlik bilgilerini doğrular ve erişim + yenileme jetonu verir.
          *
-         *     Rate limit: max 5 requests per minute per IP.
+         *     Hız sınırı: IP başına dakikada en fazla 5 istek.
          *
-         *     Uses ``get_owner_db``, not ``get_db``: ``username``/``email`` are unique
-         *     system-wide, not per company, so looking a caller up by either one is
-         *     inherently cross-tenant -- there is no company to scope a row-level
-         *     -security policy by until this call resolves who they are (see
-         *     ``get_owner_db``'s own docstring).
+         *     ``get_db`` yerine ``get_owner_db`` kullanılır: ``username``/``email``
+         *     şirket bazında değil, sistem genelinde benzersizdir, bu yüzden çağıranı
+         *     bunlardan biriyle aramak doğası gereği çoklu kiracı (cross-tenant) bir
+         *     işlemdir -- bu çağrı çağıranın kim olduğunu çözene kadar, satır düzeyinde
+         *     bir güvenlik politikasını kapsayacak bir şirket yoktur (bkz.
+         *     ``get_owner_db``'nin kendi docstring'i).
          */
         post: operations["login_api_v1_auth_login_post"];
         delete?: never;
@@ -244,20 +248,20 @@ export interface paths {
         put?: never;
         /**
          * Refresh
-         * @description Exchange a valid refresh token for a new access + refresh token pair.
+         * @description Geçerli bir yenileme jetonunu yeni bir erişim + yenileme jetonu çiftiyle değiştirir.
          *
-         *     Rate limit: max 20 requests per minute per IP.
-         *     The refresh token is validated against:
-         *     - JWT signature and expiry
-         *     - Token type (must be 'refresh', not 'access')
-         *     - Redis blacklist (invalidated on logout)
-         *     - Active user status
+         *     Hız sınırı: IP başına dakikada en fazla 20 istek.
+         *     Yenileme jetonu şunlara karşı doğrulanır:
+         *     - JWT imzası ve son kullanma tarihi
+         *     - Jeton türü ('access' değil, 'refresh' olmalı)
+         *     - Redis kara listesi (çıkışta geçersiz kılınır)
+         *     - Aktif kullanıcı durumu
          *
-         *     Uses ``get_owner_db``, not ``get_db``: a refresh token carries no
-         *     ``company_id`` claim (only an access token does -- see
-         *     ``AuthService.refresh_access_token``), so there is no tenant context
-         *     available yet to scope a row-level-security policy by (same reasoning
-         *     as ``login`` above).
+         *     ``get_db`` yerine ``get_owner_db`` kullanılır: bir yenileme jetonu
+         *     ``company_id`` claim'i taşımaz (yalnızca bir erişim jetonu taşır -- bkz.
+         *     ``AuthService.refresh_access_token``), bu yüzden satır düzeyinde bir
+         *     güvenlik politikasını kapsayacak bir kiracı bağlamı henüz mevcut değildir
+         *     (yukarıdaki ``login`` ile aynı gerekçe).
          */
         post: operations["refresh_api_v1_auth_refresh_post"];
         delete?: never;
@@ -277,12 +281,12 @@ export interface paths {
         put?: never;
         /**
          * Logout
-         * @description Logout the current user by blacklisting both access and refresh tokens in Redis.
+         * @description Redis'te hem erişim hem yenileme jetonunu kara listeye alarak mevcut kullanıcının oturumunu kapatır.
          *
          *     Raises:
-         *         BaseAppException: 500, if a token that was still live could not be
-         *             blacklisted -- the caller must not be told logout succeeded when
-         *             the token remains usable.
+         *         BaseAppException: 500, hâlâ aktif olan bir jeton kara listeye
+         *             alınamazsa -- jeton kullanılabilir durumda kalırken çağırana
+         *             çıkışın başarılı olduğu söylenmemelidir.
          */
         post: operations["logout_api_v1_auth_logout_post"];
         delete?: never;
@@ -302,12 +306,13 @@ export interface paths {
         put?: never;
         /**
          * Send Chat Message
-         * @description Orchestrate a chat interaction and return the completed result.
+         * @description Bir sohbet etkileşimini düzenler ve tamamlanmış sonucu döndürür.
          *
-         *     Routes the user input through the master planning graph, which resolves
-         *     whether it needs analysis, drafting, document Q&A or plain conversation.
-         *     May also return an ``INTERRUPTED`` status when the run paused at the
-         *     human-in-the-loop gate; resume it via ``POST /chat/resume``.
+         *     Kullanıcı girdisini, analiz, taslak yazımı, evrak soru-cevap ya da düz
+         *     sohbete mi ihtiyaç duyduğunu çözen ana planlama grafiği üzerinden
+         *     yönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir
+         *     ``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile
+         *     devam ettirin.
          */
         post: operations["send_chat_message_api_v1_chat_message_post"];
         delete?: never;
@@ -327,15 +332,15 @@ export interface paths {
         put?: never;
         /**
          * Stream Chat Message
-         * @description Orchestrate a chat interaction and stream progress events over SSE.
+         * @description Bir sohbet etkileşimini düzenler ve ilerleme olaylarını SSE üzerinden akıtır.
          *
-         *     Emits ``session`` first with the resolved thread_id, then
-         *     ``node_start``/``node_end``/``node_skipped``/``node_error`` for workflow
-         *     phases, ``token`` for live text as it is generated, ``partial_result`` for
-         *     intermediate output the client can render before the run finishes, and
-         *     either a terminal ``final_result`` or, if the run paused at the
-         *     human-in-the-loop gate, an ``interrupt`` event carrying what the human
-         *     needs to answer.
+         *     Önce çözümlenmiş thread_id ile ``session`` yayınlar, ardından iş akışı
+         *     aşamaları için ``node_start``/``node_end``/``node_skipped``/
+         *     ``node_error``, üretildikçe canlı metin için ``token``, istemcinin
+         *     çalıştırma bitmeden önce render edebileceği ara çıktı için
+         *     ``partial_result``, ve ya sonlandırıcı bir ``final_result`` ya da,
+         *     çalıştırma insan-döngüde kapısında duraklatıldıysa, insanın
+         *     yanıtlaması gerekeni taşıyan bir ``interrupt`` olayı yayınlar.
          */
         post: operations["stream_chat_message_api_v1_chat_stream_post"];
         delete?: never;
@@ -355,11 +360,11 @@ export interface paths {
         put?: never;
         /**
          * Resume Chat Stream
-         * @description Resume a run paused at the human-in-the-loop gate, streaming over SSE.
+         * @description İnsan-döngüde kapısında duraklatılmış bir çalıştırmayı SSE üzerinden akıtarak devam ettirir.
          *
-         *     ``action="answer"`` fills in a draft's missing-information placeholders
-         *     without regenerating it. ``action="approve"|"revise"|"reject"`` resolves a
-         *     draft that needed a human's sign-off before unit routing.
+         *     ``action="answer"``, bir taslağın eksik bilgi yer tutucularını yeniden
+         *     üretmeden doldurur. ``action="approve"|"revise"|"reject"``, birim
+         *     yönlendirmesinden önce insan onayına ihtiyaç duyan bir taslağı çözer.
          */
         post: operations["resume_chat_stream_api_v1_chat_resume_post"];
         delete?: never;
@@ -379,7 +384,7 @@ export interface paths {
         put?: never;
         /**
          * Resume Chat Sync
-         * @description Resume a paused run and return the completed (or re-paused) result.
+         * @description Duraklatılmış bir çalıştırmayı devam ettirir ve tamamlanmış (veya yeniden duraklatılmış) sonucu döndürür.
          */
         post: operations["resume_chat_sync_api_v1_chat_resume_sync_post"];
         delete?: never;
@@ -397,11 +402,11 @@ export interface paths {
         };
         /**
          * List Chat Sessions
-         * @description List the caller's chat sessions, most recently active first.
+         * @description Çağıranın sohbet oturumlarını, en son aktif olanı önce listeler.
          *
-         *     ``user_id=None`` (an ADMIN/MANAGER/ROOT -- see ``bypasses_ownership``)
-         *     lists every session *within the caller's own company*, matching
-         *     ``GET /documents``'s convention.
+         *     ``user_id=None`` (bir ADMIN/MANAGER/ROOT -- bkz. ``bypasses_ownership``),
+         *     ``GET /documents``'in kuralına uygun olarak *çağıranın kendi şirketi
+         *     içindeki* her oturumu listeler.
          */
         get: operations["list_chat_sessions_api_v1_chat_sessions_get"];
         put?: never;
@@ -421,15 +426,15 @@ export interface paths {
         };
         /**
          * List Chat Session Messages
-         * @description List a session's messages in conversation order (oldest first).
+         * @description Bir oturumun mesajlarını konuşma sırasına göre listeler (en eskiden en yeniye).
          *
-         *     Ownership reuses ``ChatService._verify_thread_ownership`` -- the same
-         *     ``user_id:`` prefix check that already gates ``/chat/resume`` from
-         *     touching another user's thread.
+         *     Sahiplik, ``ChatService._verify_thread_ownership``'i yeniden kullanır --
+         *     ``/chat/resume``'un başka bir kullanıcının thread'ine dokunmasını zaten
+         *     engelleyen aynı ``user_id:`` öneki kontrolü.
          *
          *     Raises:
-         *         AuthorizationException: If ``session_id`` belongs to a different
-         *             user than ``current_user``.
+         *         AuthorizationException: ``session_id``, ``current_user``'dan
+         *             farklı bir kullanıcıya aitse.
          */
         get: operations["list_chat_session_messages_api_v1_chat_sessions__session_id__messages_get"];
         put?: never;
@@ -449,15 +454,36 @@ export interface paths {
         };
         /**
          * Get Session State
-         * @description Report whether a session is idle, running, or paused on an interrupt.
+         * @description Bir oturumun boşta mı, çalışıyor mu, yoksa bir kesintide mi duraklatılmış olduğunu bildirir.
          *
-         *     Lets the client recover after a page reload or a dropped SSE connection:
-         *     if ``status`` is ``"interrupted"``, re-render the resume form from the
-         *     returned ``interrupt`` payload instead of losing it.
+         *     İstemcinin bir sayfa yenilemesi veya kopan bir SSE bağlantısı sonrası
+         *     kurtarma yapmasını sağlar: ``status`` ``"interrupted"`` ise, devam
+         *     ettirme formunu kaybetmek yerine dönen ``interrupt`` yükünden yeniden
+         *     render edin.
          */
         get: operations["get_session_state_api_v1_chat_sessions__session_id__state_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/sessions/{session_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Chat Session
+         * @description Stop the active turn and settle its persisted workflow checkpoint.
+         */
+        post: operations["cancel_chat_session_api_v1_chat_sessions__session_id__cancel_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -473,13 +499,13 @@ export interface paths {
         };
         /**
          * List Companies
-         * @description List every tenant company, paginated (Root only).
+         * @description Her kiracı şirketi sayfalanmış şekilde listeler (yalnızca Root).
          */
         get: operations["list_companies_api_v1_companies_get"];
         put?: never;
         /**
          * Create Company
-         * @description Create a new tenant company (Root only).
+         * @description Yeni bir kiracı şirket oluşturur (yalnızca Root).
          */
         post: operations["create_company_api_v1_companies_post"];
         delete?: never;
@@ -497,21 +523,21 @@ export interface paths {
         };
         /**
          * Get Company
-         * @description Fetch a single company's details (Root, or that company's own Admin).
+         * @description Tek bir şirketin ayrıntılarını getirir (Root, veya o şirketin kendi Admin'i).
          */
         get: operations["get_company_api_v1_companies__company_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Company
-         * @description Soft-delete a company (Root only).
+         * @description Bir şirketi geri alınabilir şekilde siler (soft-delete) (yalnızca Root).
          */
         delete: operations["delete_company_api_v1_companies__company_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Company
-         * @description Update a company's name/tax number/active flag/settings (Root, or that company's own Admin).
+         * @description Bir şirketin adını/vergi numarasını/aktiflik durumunu/ayarlarını günceller (Root, veya o şirketin kendi Admin'i).
          */
         patch: operations["update_company_api_v1_companies__company_id__patch"];
         trace?: never;
@@ -525,23 +551,23 @@ export interface paths {
         };
         /**
          * Get Company Adapter Endpoint
-         * @description Fetch a company's current runtime style adapter (Faz C2).
+         * @description Bir şirketin geçerli çalışma zamanı stil adaptörünü getirir (Faz C2).
          *
-         *     Never 404s for a company with nothing configured -- returns the empty
-         *     adapter shape (``version=0``, empty lists) instead, same as
-         *     ``get_company_adapter`` itself.
+         *     Hiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --
+         *     bunun yerine, ``get_company_adapter``'ın kendisiyle aynı şekilde,
+         *     boş adaptör biçimini (``version=0``, boş listeler) döndürür.
          */
         get: operations["get_company_adapter_endpoint_api_v1_companies__company_id__adapter_get"];
         /**
          * Update Company Adapter
-         * @description Replace a company's runtime style adapter (Root, or that company's
-         *     own Admin).
+         * @description Bir şirketin çalışma zamanı stil adaptörünü değiştirir (Root, veya o
+         *     şirketin kendi Admin'i).
          *
-         *     Hand-authoring is the only way to set one today -- Faz C3's automated
-         *     training pipeline will call the same
-         *     ``app.domains.companies.provider.set_company_adapter`` this uses, with
-         *     a real ``sample_count`` instead of the 0 a manual edit gets. Each field
-         *     replaces the adapter's entire list, it does not append.
+         *     Bugün bunu ayarlamanın tek yolu elle yazmaktır -- Faz C3'ün otomatik
+         *     eğitim hattı, manuel bir düzenlemenin aldığı 0 yerine gerçek bir
+         *     ``sample_count`` ile bunun kullandığı aynı
+         *     ``app.domains.companies.provider.set_company_adapter``'ı çağıracaktır.
+         *     Her alan, adaptörün tüm listesinin yerini alır, sona eklemez.
          */
         put: operations["update_company_adapter_api_v1_companies__company_id__adapter_put"];
         post?: never;
@@ -560,17 +586,17 @@ export interface paths {
         };
         /**
          * Get Company Profile Endpoint
-         * @description Fetch a company's identity profile.
+         * @description Bir şirketin kimlik profilini getirir.
          *
-         *     Never 404s for a company with nothing configured -- returns the empty
-         *     profile shape (``version=0``, empty fields) instead, same as
-         *     ``get_company_adapter_endpoint``.
+         *     Hiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --
+         *     ``get_company_adapter_endpoint`` ile aynı şekilde, bunun yerine boş
+         *     profil biçimini (``version=0``, boş alanlar) döndürür.
          */
         get: operations["get_company_profile_endpoint_api_v1_companies__company_id__profile_get"];
         /**
          * Update Company Profile
-         * @description Replace a company's identity profile (Root, or that company's own
-         *     Admin). Every field replaces the profile's current value.
+         * @description Bir şirketin kimlik profilini değiştirir (Root, veya o şirketin kendi
+         *     Admin'i). Her alan, profilin geçerli değerinin yerini alır.
          */
         put: operations["update_company_profile_api_v1_companies__company_id__profile_put"];
         post?: never;
@@ -589,21 +615,23 @@ export interface paths {
         };
         /**
          * Get Company Rules Endpoint
-         * @description Fetch a company's mandatory drafting rules.
+         * @description Bir şirketin zorunlu taslak yazım kurallarını getirir.
          *
-         *     Never 404s for a company with nothing configured -- returns an empty
-         *     rule list instead, same as ``get_company_adapter_endpoint``.
+         *     Hiçbir şey yapılandırılmamış bir şirket için asla 404 döndürmez --
+         *     ``get_company_adapter_endpoint`` ile aynı şekilde, bunun yerine boş bir
+         *     kural listesi döndürür.
          */
         get: operations["get_company_rules_endpoint_api_v1_companies__company_id__rules_get"];
         /**
          * Update Company Rules
-         * @description Replace a company's mandatory drafting rules (Root, or that
-         *     company's own Admin).
+         * @description Bir şirketin zorunlu taslak yazım kurallarını değiştirir (Root, veya
+         *     o şirketin kendi Admin'i).
          *
-         *     A violation is graded by the draft-quality judge and, when found,
-         *     becomes a numbered defect the existing verify/revise repair loop fixes
-         *     automatically -- see ``app.ai.verification.llm_judge.judge_draft``'s
-         *     own ``company_rules_block`` parameter.
+         *     Bir ihlal, taslak kalite hakemi tarafından derecelendirilir ve
+         *     bulunduğunda, mevcut doğrulama/revizyon onarım döngüsünün otomatik
+         *     olarak düzelttiği numaralandırılmış bir kusur hâline gelir -- bkz.
+         *     ``app.ai.verification.llm_judge.judge_draft``'ın kendi
+         *     ``company_rules_block`` parametresi.
          */
         put: operations["update_company_rules_api_v1_companies__company_id__rules_put"];
         post?: never;
@@ -624,7 +652,7 @@ export interface paths {
         put?: never;
         /**
          * Assign Company Admin
-         * @description Promote an existing company user to Admin (Root only).
+         * @description Mevcut bir şirket kullanıcısını Admin'e yükseltir (yalnızca Root).
          */
         post: operations["assign_company_admin_api_v1_companies__company_id__admins_post"];
         delete?: never;
@@ -644,23 +672,23 @@ export interface paths {
         put?: never;
         /**
          * Analyze Document
-         * @description Perform the first review (ön inceleme) of an incoming official document.
+         * @description Gelen bir resmi evrakın ilk incelemesini (ön inceleme) yapar.
          *
-         *     Reads the document via direct text extraction or OCR, determines its type,
-         *     extracts its header fields, reports required-but-missing information with the
-         *     relevant legislation, and returns a short summary.
+         *     Evrakı doğrudan metin çıkarımı veya OCR ile okur, türünü belirler,
+         *     başlık alanlarını çıkarır, gerekli ama eksik bilgileri ilgili
+         *     mevzuatla birlikte bildirir ve kısa bir özet döndürür.
          *
          *     Args:
-         *         http_request: The raw request, checked for a declared Content-Length
-         *             before the body is read at all.
-         *         file: The uploaded document.
-         *         service: Injected document analysis service.
-         *         current_user: The authenticated caller -- registered as the
-         *             document's owner and company so later reads can be restricted
-         *             to them.
+         *         http_request: Gövde hiç okunmadan önce beyan edilmiş bir
+         *             Content-Length için kontrol edilen ham istek.
+         *         file: Yüklenen evrak.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         current_user: Kimliği doğrulanmış çağıran -- daha sonraki okumaların
+         *             kendisiyle sınırlandırılabilmesi için evrakın sahibi ve şirketi
+         *             olarak kaydedilir.
          *
          *     Returns:
-         *         The analysis result inside the unified success envelope.
+         *         Analiz sonucu, birleşik başarı zarfının içinde.
          */
         post: operations["analyze_document_api_v1_documents_analyze_post"];
         delete?: never;
@@ -680,22 +708,22 @@ export interface paths {
         put?: never;
         /**
          * Generate Draft
-         * @description Generate an official draft and department routing suggestion (Task 2).
+         * @description Resmi bir taslak ve birim yönlendirme önerisi üretir (Görev 2).
          *
-         *     Uses the output from the first review (Görev 1) to determine the correct
-         *     correspondence type, draft the text, and route it to the appropriate department.
+         *     Doğru yazışma türünü belirlemek, metni yazmak ve uygun birime
+         *     yönlendirmek için ilk incelemenin (Görev 1) çıktısını kullanır.
          *
-         *     ``DraftService`` reads the source document straight from storage by
-         *     ``storage_path`` -- unlike ``GET /documents/{storage_path}``, it has no
-         *     ownership/clearance concept of its own, so that check belongs here, at
-         *     the router boundary, before the raw file content ever reaches the
-         *     drafting graph.
+         *     ``DraftService``, kaynak evrakı doğrudan depodan ``storage_path`` ile
+         *     okur -- ``GET /documents/{storage_path}``'ın aksine, kendi
+         *     sahiplik/yetki kavramı yoktur, bu yüzden bu kontrol burada, router
+         *     sınırında, ham dosya içeriği taslak yazım grafiğine ulaşmadan önce
+         *     yapılmalıdır.
          *
          *     Raises:
-         *         AuthorizationException: If the document belongs to a different
-         *             company, or a different owner than ``current_user`` (and it
-         *             isn't ADMIN/MANAGER/ROOT), or ``current_user``'s clearance
-         *             doesn't cover the document's confidentiality level.
+         *         AuthorizationException: Evrak farklı bir şirkete aitse, veya
+         *             ``current_user``'dan farklı bir sahibe aitse (ve ADMIN/MANAGER/
+         *             ROOT değilse), veya ``current_user``'ın yetkisi evrakın gizlilik
+         *             seviyesini karşılamıyorsa.
          */
         post: operations["generate_draft_api_v1_documents_draft_post"];
         delete?: never;
@@ -713,19 +741,20 @@ export interface paths {
         };
         /**
          * List Documents
-         * @description List uploaded documents with their summary metadata, newest first.
+         * @description Yüklenen evrakları özet meta verileriyle birlikte en yeniden en eskiye listeler.
          *
          *     Args:
-         *         pagination: Page/size query parameters.
-         *         document_repository: Ownership/listing registry.
-         *         current_user: The authenticated caller -- the list is restricted to
-         *             documents it owns, unless it is ADMIN/MANAGER/ROOT (see
-         *             ``bypasses_ownership``), who see every document company-wide.
-         *             Never cross-company regardless of role.
+         *         pagination: Sayfa/boyut sorgu parametreleri.
+         *         document_repository: Sahiplik/listeleme kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran -- liste, ADMIN/MANAGER/
+         *             ROOT (bkz. ``bypasses_ownership``) olmadığı sürece sahip olduğu
+         *             evraklarla sınırlıdır; bunlar şirket genelinde her evrakı görür.
+         *             Rolden bağımsız olarak asla şirketler arası değildir.
          *
          *     Returns:
-         *         A paginated envelope over the 7-field library projection (see
-         *         ``GET /documents/{storage_path}`` for the full analysis).
+         *         7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam
+         *         analiz için bkz. ``GET /documents/{storage_path}``). Şirket geneli
+         *         görüntüleyiciler ayrıca yükleyenin kullanıcı adını da alır.
          */
         get: operations["list_documents_api_v1_documents_get"];
         put?: never;
@@ -745,11 +774,11 @@ export interface paths {
         };
         /**
          * List Correspondence Types
-         * @description List the supported outbound correspondence types and their Turkish labels.
+         * @description Desteklenen giden yazışma türlerini ve Türkçe etiketlerini listeler.
          *
-         *     Single source of truth for the frontend's type selector, instead of the
-         *     labels being retyped in TypeScript and drifting from
-         *     ``app.ai.workflows.correspondence.CORRESPONDENCE_TYPE_LABELS``.
+         *     Etiketlerin TypeScript'te yeniden yazılıp
+         *     ``app.ai.workflows.correspondence.CORRESPONDENCE_TYPE_LABELS``'tan
+         *     sapması yerine, ön yüzün tür seçicisi için tek doğruluk kaynağıdır.
          */
         get: operations["list_correspondence_types_api_v1_documents_correspondence_types_get"];
         put?: never;
@@ -769,30 +798,32 @@ export interface paths {
         };
         /**
          * Get Corpus Graph
-         * @description The compliance knowledge graph over every document the caller may see.
+         * @description Çağıranın görebileceği her evrak üzerindeki uyumluluk bilgi grafiği.
          *
-         *     Declared here, above every ``/{storage_path:path}`` route below --
-         *     FastAPI matches routes in registration order, and ``:path`` converters
-         *     swallow slashes, so a literal ``/graph`` registered after the catch-all
-         *     ``GET /{storage_path:path}`` would never be reached; every request would
-         *     match the catch-all first, with ``storage_path="graph"``.
+         *     Aşağıdaki her ``/{storage_path:path}`` rotasının üzerinde burada
+         *     tanımlanmıştır -- FastAPI rotaları kayıt sırasına göre eşleştirir ve
+         *     ``:path`` dönüştürücüleri eğik çizgileri yutar, bu yüzden yakalayıcı
+         *     ``GET /{storage_path:path}``'dan sonra kaydedilen düz bir ``/graph``
+         *     asla ulaşılamaz olurdu; her istek önce ``storage_path="graph"`` ile
+         *     yakalayıcıyla eşleşirdi.
          *
-         *     Unlike every other route in this file, a document above the caller's
-         *     clearance is not a 403 for the whole graph -- it is silently excluded
-         *     (see ``DocumentService.build_corpus_graph``'s own docstring), and only
-         *     its count is reported back as ``hidden_document_count``. Revealing that
-         *     a hidden document *exists* would defeat the point of hiding it.
+         *     Bu dosyadaki diğer her rotanın aksine, çağıranın yetkisinin üzerindeki
+         *     bir evrak tüm grafik için 403 değildir -- sessizce hariç tutulur (bkz.
+         *     ``DocumentService.build_corpus_graph``'ın kendi docstring'i) ve yalnızca
+         *     sayısı ``hidden_document_count`` olarak geri bildirilir. Gizli bir
+         *     evrakın *var olduğunu* açığa çıkarmak, onu gizlemenin amacını boşa
+         *     çıkarırdı.
          *
          *     Args:
-         *         service: Injected document analysis service.
-         *         current_user: The authenticated caller. Company-wide when
-         *             ADMIN/MANAGER/ROOT (see ``bypasses_ownership``), otherwise
-         *             scoped to the caller's own documents -- the same semantics
-         *             ``GET /documents`` already uses.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         current_user: Kimliği doğrulanmış çağıran. ADMIN/MANAGER/ROOT ise
+         *             şirket geneli (bkz. ``bypasses_ownership``), aksi halde
+         *             çağıranın kendi evraklarıyla sınırlı -- ``GET /documents``'in
+         *             zaten kullandığı aynı semantik.
          *
          *     Returns:
-         *         ``{nodes, edges, insights, truncated, total_document_count,
-         *         hidden_document_count}`` inside the unified success envelope.
+         *         Birleşik başarı zarfı içinde ``{nodes, edges, insights, truncated,
+         *         total_document_count, hidden_document_count}``.
          */
         get: operations["get_corpus_graph_api_v1_documents_graph_get"];
         put?: never;
@@ -818,31 +849,31 @@ export interface paths {
         head?: never;
         /**
          * Update Document Fields
-         * @description Manually correct a document's extracted fields.
+         * @description Bir evrakın çıkarılan alanlarını elle düzeltir.
          *
-         *     UI-driven fix for fields the extraction missed or got wrong (see
-         *     ``DocumentAnalysisPanel`` -- previously read-only). Re-runs the same
-         *     deterministic compliance check the original analysis used
-         *     (``app.ai.compliance.checker.check_required_fields``, no LLM call), so
-         *     ``missing_fields``/``compliance_status`` reflect the correction
-         *     immediately instead of staying stuck at whatever the extraction found.
+         *     Çıkarımın kaçırdığı veya yanlış aldığı alanlar için arayüz odaklı bir
+         *     düzeltme (bkz. ``DocumentAnalysisPanel`` -- önceden salt okunurdu).
+         *     Orijinal analizin kullandığı aynı deterministik uyumluluk kontrolünü
+         *     (``app.ai.compliance.checker.check_required_fields``, LLM çağrısı yok)
+         *     yeniden çalıştırır, böylece ``missing_fields``/``compliance_status``,
+         *     çıkarımın bulduğu değerde takılı kalmak yerine düzeltmeyi hemen yansıtır.
          *
          *     Args:
-         *         storage_path: The document's storage key.
-         *         payload: The full corrected field set.
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership registry, checked before the update.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı.
+         *         payload: Düzeltilmiş tam alan kümesi.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: Güncellemeden önce kontrol edilen sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         The updated analysis, in the same shape as ``GET /documents/{storage_path}``.
+         *         ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
-         *             is cached for it.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company or user, or the requester's clearance doesn't cover the
-         *             document's confidentiality level.
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+         *             aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+         *             karşılamıyorsa 403.
          */
         patch: operations["update_document_fields_api_v1_documents__storage_path__fields_patch"];
         trace?: never;
@@ -858,43 +889,91 @@ export interface paths {
         put?: never;
         /**
          * Generate Detailed Summary
-         * @description Build (or return the already-built) detailed summary of a document.
+         * @description Bir evrakın ayrıntılı özetini oluşturur (veya zaten oluşturulmuşsa döndürür).
          *
-         *     On-demand: the short ``summary`` `POST /documents/analyze` already
-         *     returns is enough for most documents, and building the detailed one is
-         *     expensive -- measured directly, 184-288s on real documents, several
-         *     sequential LLM calls (see ``app.ai.summarization``'s own module
-         *     docstring). This is why it is its own endpoint rather than part of the
-         *     eager analysis: a user pays that cost only when they actually want the
-         *     result, not on every upload.
+         *     Talep üzerine: `POST /documents/analyze`'ın zaten döndürdüğü kısa
+         *     ``summary`` çoğu evrak için yeterlidir, ve ayrıntılı olanı oluşturmak
+         *     maliyetlidir -- doğrudan ölçülmüştür, gerçek evraklarda 184-288sn,
+         *     birkaç ardışık LLM çağrısı (bkz. ``app.ai.summarization``'ın modül
+         *     docstring'i). Bu yüzden istekli analizin bir parçası yerine kendi başına
+         *     bir uç noktadır: bir kullanıcı bu maliyeti yalnızca sonucu gerçekten
+         *     istediğinde öder, her yüklemede değil.
          *
-         *     Idempotent: a document whose detailed summary is already cached returns
-         *     it immediately, no model call. Rate-limited tighter than
-         *     ``POST /documents/analyze`` (5/60s vs 10/60s) precisely because each
-         *     call that does reach the model is this expensive.
+         *     İdempotent: ayrıntılı özeti zaten önbelleğe alınmış bir evrak, model
+         *     çağrısı olmadan onu hemen döndürür. Tam olarak modele ulaşan her
+         *     çağrının bu kadar pahalı olması nedeniyle
+         *     ``POST /documents/analyze``'den (5/60sn ve 10/60sn) daha sıkı hız
+         *     sınırlıdır.
          *
          *     Args:
-         *         storage_path: The document's storage key.
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership registry, checked before generating.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: Üretmeden önce kontrol edilen sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         The full analysis with ``detailed_summary`` populated, in the same
-         *         shape as ``GET /documents/{storage_path}``.
+         *         ``detailed_summary`` doldurulmuş tam analiz, ``GET
+         *         /documents/{storage_path}`` ile aynı biçimde.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
-         *             is cached for it.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company or user, or the requester's clearance doesn't cover the
-         *             document's confidentiality level.
-         *         AIException: 502 if building the summary times out or the
-         *             underlying provider call fails (see
-         *             ``DocumentService.generate_detailed_summary``'s own docstring
-         *             for why this raises instead of degrading silently).
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+         *             aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+         *             karşılamıyorsa 403.
+         *         AIException: Özeti oluşturmak zaman aşımına uğrarsa veya alttaki
+         *             sağlayıcı çağrısı başarısız olursa 502 (bunun neden sessizce
+         *             bozulmak yerine hata fırlattığı için bkz.
+         *             ``DocumentService.generate_detailed_summary``'nin kendi
+         *             docstring'i).
          */
         post: operations["generate_detailed_summary_api_v1_documents__storage_path__detailed_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/documents/{storage_path}/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Document Graph
+         * @description Tek evrak komşuluğu: bir evrak ve dokunduğu her madde/kanun.
+         *
+         *     Aşağıdaki yakalayıcı ``GET /{storage_path:path}``'ın üzerinde
+         *     tanımlanmıştır -- ikisi de aynı yol biçimiyle eşleşen GET rotalarıdır,
+         *     bu yüzden ``/documents/uploads/abc.pdf/graph`` gibi bir isteğin
+         *     hangisine ulaşacağına yalnızca kayıt sırası karar verir. Ondan sonra
+         *     kaydedilseydi, bu rotaya asla ulaşılamazdı; her böyle bir istek bunun
+         *     yerine ``storage_path="uploads/abc.pdf/graph"`` ile yakalayıcıyla
+         *     eşleşirdi.
+         *
+         *     Args:
+         *         storage_path: Evrakın depo anahtarı.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: İçeriği döndürmeden önce kontrol edilen
+         *             sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
+         *
+         *     Returns:
+         *         ``GET /documents/graph`` ile aynı zarf biçimi, bu tek evrakla
+         *         sınırlı.
+         *
+         *     Raises:
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+         *             aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+         *             karşılamıyorsa 403.
+         */
+        get: operations["get_document_graph_api_v1_documents__storage_path__graph_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -910,66 +989,65 @@ export interface paths {
         };
         /**
          * Get Document Text
-         * @description Return the extracted/OCR text of a previously analysed document.
+         * @description Daha önce analiz edilmiş bir evrakın çıkarılan/OCR metnini döndürür.
          *
-         *     Backs the "Belge metni" panel section. Declared ABOVE the catch-all
-         *     ``GET /{storage_path:path}`` below on purpose: that route is greedy and
-         *     would otherwise swallow ``.../text`` as if it were itself a
-         *     ``storage_path``. The ``/fields`` and ``/detailed-summary`` routes get
-         *     away with sitting below it only because they use different HTTP
-         *     methods; a ``GET`` sub-route does not have that luxury.
+         *     "Belge metni" panel bölümünü destekler. Bilerek aşağıdaki yakalayıcı
+         *     ``GET /{storage_path:path}``'ın ÜZERİNDE tanımlanmıştır: o rota
+         *     açgözlüdür ve aksi halde ``.../text``'i sanki kendisi bir
+         *     ``storage_path``'mış gibi yutardı. ``/fields`` ve ``/detailed-summary``
+         *     rotaları yalnızca farklı HTTP yöntemleri kullandıkları için onun altında
+         *     durabiliyor; bir ``GET`` alt rotasının böyle bir lüksü yoktur.
          *
          *     Args:
-         *         storage_path: The document's storage key.
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership registry, checked before returning
-         *             content.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: İçeriği döndürmeden önce kontrol edilen
+         *             sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         The cached pages/text plus extraction provenance, inside the
-         *         unified success envelope.
+         *         Önbelleğe alınmış sayfalar/metin artı çıkarım kaynağı, birleşik
+         *         başarı zarfının içinde.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
-         *             is cached for it.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company or user, or the requester's clearance doesn't cover the
-         *             document's confidentiality level.
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+         *             aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+         *             karşılamıyorsa 403.
          */
         get: operations["get_document_text_api_v1_documents__storage_path__text_get"];
         /**
          * Update Document Text
-         * @description Save hand-corrected OCR/extraction text.
+         * @description Elle düzeltilmiş OCR/çıkarım metnini kaydeder.
          *
-         *     UI-driven fix for text the extraction pipeline still got wrong -- the
-         *     companion to the field-aware extraction-acceptance fix in
-         *     ``FallbackDocumentExtractor``: a document whose header still didn't
-         *     parse (or that never escalated because the automatic rule's floor
-         *     wasn't crossed) can be corrected directly. Re-derives ``fields``,
-         *     ``missing_fields``, ``compliance_status`` and ``guardrail``
-         *     deterministically from the corrected text -- no model call (see
-         *     ``DocumentService.update_document_text``'s own docstring).
+         *     Çıkarım hattının hâlâ yanlış aldığı metin için arayüz odaklı bir
+         *     düzeltme -- ``FallbackDocumentExtractor``'daki alan bilinçli çıkarım
+         *     kabul düzeltmesinin eşlikçisi: başlığı hâlâ ayrıştırılamayan (veya
+         *     otomatik kuralın eşiği aşılmadığı için hiç yükseltilmeyen) bir evrak
+         *     doğrudan düzeltilebilir. ``fields``, ``missing_fields``,
+         *     ``compliance_status`` ve ``guardrail``'ı düzeltilmiş metinden
+         *     deterministik olarak yeniden türetir -- model çağrısı yok (bkz.
+         *     ``DocumentService.update_document_text``'in kendi docstring'i).
          *
          *     Args:
-         *         storage_path: The document's storage key.
-         *         payload: The corrected per-page text.
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership registry, checked before the update.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı.
+         *         payload: Düzeltilmiş sayfa bazlı metin.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: Güncellemeden önce kontrol edilen sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         The updated analysis, in the same shape as
-         *         ``GET /documents/{storage_path}``.
+         *         ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
-         *             is cached for it.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company or user, or the requester's clearance doesn't cover the
-         *             document's confidentiality level.
-         *         ValidationException: 422 if the submitted page count doesn't match
-         *             the cached document's.
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+         *             aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+         *             karşılamıyorsa 403.
+         *         ValidationException: Gönderilen sayfa sayısı önbelleğe alınmış
+         *             evrakınkiyle eşleşmiyorsa 422.
          */
         put: operations["update_document_text_api_v1_documents__storage_path__text_put"];
         post?: never;
@@ -990,51 +1068,36 @@ export interface paths {
         put?: never;
         /**
          * Reextract Document Text
-         * @description Re-run OCR with the vision model directly -- the manual override for
-         *     when the extraction chain's own automatic escalation didn't fire.
+         * @description OCR'ı doğrudan görü modeliyle yeniden çalıştırır -- çıkarım zincirinin
+         *     kendi otomatik yükseltmesi tetiklenmediğinde kullanılan manuel geçersiz kılma.
          *
-         *     Bypasses ``get_document_extractor()``'s chain entirely and always pays
-         *     the full glm-ocr cost (see ``DocumentService.reextract_document_text``'s
-         *     own docstring) -- this is deliberately more expensive and more tightly
-         *     rate-limited than ``PUT .../text`` (2/60s vs 10/60s) or
-         *     ``POST .../detailed-summary`` (5/60s), matching how expensive the call
-         *     it triggers actually is.
+         *     ``get_document_extractor()``'ın zincirini tamamen atlar ve her zaman
+         *     tam glm-ocr maliyetini öder (bkz.
+         *     ``DocumentService.reextract_document_text``'in kendi docstring'i) --
+         *     bu, tetiklediği çağrının fiilen ne kadar pahalı olduğuyla uyumlu olarak
+         *     bilinçli şekilde ``PUT .../text``'ten (2/60sn ve 10/60sn) veya
+         *     ``POST .../detailed-summary``'den (5/60sn) daha pahalı ve daha sıkı
+         *     hız sınırlıdır.
          *
          *     Args:
-         *         storage_path: The document's storage key.
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership registry, checked before re-running.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: Yeniden çalıştırmadan önce kontrol edilen
+         *             sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         The updated analysis, in the same shape as
-         *         ``GET /documents/{storage_path}``.
+         *         ``GET /documents/{storage_path}`` ile aynı biçimde güncellenmiş analiz.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
-         *             is cached for it.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company or user, or the requester's clearance doesn't cover the
-         *             document's confidentiality level.
-         *         ValidationException: 422 if the vision model call itself fails.
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+         *             aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+         *             karşılamıyorsa 403.
+         *         ValidationException: Görü modeli çağrısının kendisi başarısız olursa 422.
          */
         post: operations["reextract_document_text_api_v1_documents__storage_path__re_extract_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-      "/api/v1/documents/{storage_path}/graph": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["get_document_graph_api_v1_documents__storage_path__graph_get"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1050,58 +1113,58 @@ export interface paths {
         };
         /**
          * Get Document Analysis
-         * @description Return a previously computed analysis in full.
+         * @description Daha önce hesaplanmış bir analizi tam olarak döndürür.
          *
-         *     ``GET /documents`` only ever returns the 7-field library projection
-         *     (document_type_label, compliance_status, summary, ...); re-selecting a
-         *     document from that list lost ``missing_fields`` and
-         *     ``mevzuat_references`` entirely because nothing exposed the cached
-         *     analysis this reads back.
+         *     ``GET /documents`` her zaman yalnızca 7 alanlı kütüphane izdüşümünü
+         *     döndürür (document_type_label, compliance_status, summary, ...); o
+         *     listeden bir evrakı yeniden seçmek, bu uç noktanın geri okuduğu
+         *     önbelleğe alınmış analizi hiçbir şey açığa çıkarmadığından
+         *     ``missing_fields`` ve ``mevzuat_references``'ı tamamen kaybediyordu.
          *
          *     Args:
-         *         storage_path: The document's storage key (as returned by
-         *             ``POST /documents/analyze``).
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership registry, checked before returning
-         *             content.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı (``POST /documents/analyze``'ın
+         *             döndürdüğü şekilde).
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: İçeriği döndürmeden önce kontrol edilen
+         *             sahiplik kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         The full analysis inside the unified success envelope.
+         *         Tam analiz, birleşik başarı zarfının içinde.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed, 404 if no analysis
-         *             is cached for it.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company, or a different user than the one making the request
-         *             (and it isn't ADMIN/MANAGER/ROOT), or the requester's clearance
-         *             doesn't cover the document's confidentiality level.
+         *         HTTPException: storage_path bozuksa 400, onun için önbelleğe
+         *             alınmış bir analiz yoksa 404.
+         *         AuthorizationException: Evrak farklı bir şirkete, veya isteği
+         *             yapandan farklı bir kullanıcıya aitse (ve ADMIN/MANAGER/ROOT
+         *             değilse), veya isteği yapanın yetkisi evrakın gizlilik
+         *             seviyesini karşılamıyorsa 403.
          */
         get: operations["get_document_analysis_api_v1_documents__storage_path__get"];
         put?: never;
         post?: never;
         /**
          * Delete Document
-         * @description Permanently delete a document: registry row, raw file, analysis
-         *     cache, and any indexed Q&A chunks.
+         * @description Bir evrakı kalıcı olarak siler: kayıt satırı, ham dosya, analiz
+         *     önbelleği ve indekslenmiş her Soru-Cevap parçası.
          *
          *     Args:
-         *         storage_path: The document's storage key.
-         *         service: Injected document analysis service.
-         *         document_repository: Ownership/listing registry, checked before the
-         *             delete.
-         *         current_user: The authenticated caller.
+         *         storage_path: Evrakın depo anahtarı.
+         *         service: Enjekte edilmiş evrak analiz servisi.
+         *         document_repository: Silmeden önce kontrol edilen sahiplik/listeleme
+         *             kaydı.
+         *         current_user: Kimliği doğrulanmış çağıran.
          *
          *     Returns:
-         *         ``{"deleted": true}`` inside the unified success envelope. Succeeds
-         *         even if ``storage_path`` was already gone -- delete is idempotent.
+         *         Birleşik başarı zarfı içinde ``{"deleted": true}``. ``storage_path``
+         *         zaten yoksa bile başarılı olur -- silme idempotenttir.
          *
          *     Raises:
-         *         HTTPException: 400 if storage_path is malformed.
-         *         AuthorizationException: 403 if the document belongs to a different
-         *             company, or a different user than ``current_user`` (and it
-         *             isn't ADMIN/MANAGER/ROOT), or ``current_user``'s clearance
-         *             doesn't cover the document's confidentiality level.
+         *         HTTPException: storage_path bozuksa 400.
+         *         AuthorizationException: Evrak farklı bir şirkete, veya
+         *             ``current_user``'dan farklı bir kullanıcıya aitse (ve
+         *             ADMIN/MANAGER/ROOT değilse), veya ``current_user``'ın yetkisi
+         *             evrakın gizlilik seviyesini karşılamıyorsa 403.
          */
         delete: operations["delete_document_api_v1_documents__storage_path__delete"];
         options?: never;
@@ -1118,11 +1181,12 @@ export interface paths {
         };
         /**
          * List Drafts
-         * @description List drafts, one row per session (its latest version), newest first.
+         * @description Taslakları listeler, oturum başına bir satır (en son sürümü), en
+         *     yeniden en eskiye.
          *
-         *     ``session_id``/``document_id`` narrow the listing; ``user_id`` is
-         *     resolved from the caller and is not a query parameter, same as
-         *     ``GET /documents``/``GET /chat/sessions``.
+         *     ``session_id``/``document_id`` listelemeyi daraltır; ``user_id``,
+         *     ``GET /documents``/``GET /chat/sessions`` ile aynı şekilde, çağırandan
+         *     çözümlenir ve bir sorgu parametresi değildir.
          */
         get: operations["list_drafts_api_v1_drafts_get"];
         put?: never;
@@ -1142,8 +1206,8 @@ export interface paths {
         };
         /**
          * List Draft Inbox
-         * @description Shares received by the caller, newest first. Optional `status` filter
-         *     ("sent" | "read" | "accepted" | "rejected" | "withdrawn").
+         * @description Çağıranın aldığı paylaşımlar, en yeniden en eskiye. İsteğe bağlı
+         *     `status` filtresi ("sent" | "read" | "accepted" | "rejected" | "withdrawn").
          */
         get: operations["list_draft_inbox_api_v1_drafts_inbox_get"];
         put?: never;
@@ -1163,7 +1227,7 @@ export interface paths {
         };
         /**
          * List Draft Outbox
-         * @description Shares sent by the caller, newest first. Optional `status` filter.
+         * @description Çağıranın gönderdiği paylaşımlar, en yeniden en eskiye. İsteğe bağlı `status` filtresi.
          */
         get: operations["list_draft_outbox_api_v1_drafts_outbox_get"];
         put?: never;
@@ -1183,14 +1247,14 @@ export interface paths {
         };
         /**
          * Get Draft
-         * @description Fetch one draft version by id.
+         * @description Tek bir taslak sürümünü id ile getirir.
          */
         get: operations["get_draft_api_v1_drafts__draft_id__get"];
         put?: never;
         post?: never;
         /**
          * Delete Draft
-         * @description Soft-delete a draft and its whole version chain.
+         * @description Bir taslağı ve tüm sürüm zincirini geri alınabilir şekilde siler (soft-delete).
          */
         delete: operations["delete_draft_api_v1_drafts__draft_id__delete"];
         options?: never;
@@ -1213,15 +1277,36 @@ export interface paths {
         head?: never;
         /**
          * Update Draft Destination
-         * @description Override this draft version's routed unit with the caller's own pick.
+         * @description Bu taslak sürümünün yönlendirilmiş birimini çağıranın kendi seçimiyle geçersiz kılar.
          *
-         *     The routing graph always proposes a primary (and usually an
-         *     alternative) unit now -- this is the write path for a human choosing a
-         *     third option instead, e.g. from the chat UI's unit picker. Updates the
-         *     row in place; unlike a content revision this never creates a new
-         *     version, since routing metadata isn't the draft's own text.
+         *     Yönlendirme grafiği artık her zaman birincil (ve genellikle bir
+         *     alternatif) birim öneriyor -- bu, bir insanın bunun yerine üçüncü bir
+         *     seçenek seçtiği yazma yoludur, örn. sohbet arayüzünün birim seçicisinden.
+         *     Satırı yerinde günceller; bir içerik revizyonunun aksine, yönlendirme
+         *     meta verisi taslağın kendi metni olmadığından bu asla yeni bir sürüm
+         *     oluşturmaz.
          */
         patch: operations["update_draft_destination_api_v1_drafts__draft_id__destination_patch"];
+        trace?: never;
+    };
+    "/api/v1/drafts/{draft_id}/review/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Draft Review
+         * @description Confirm that an authorized human reviewed this draft version.
+         */
+        post: operations["approve_draft_review_api_v1_drafts__draft_id__review_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/drafts/{draft_id}/versions": {
@@ -1233,7 +1318,7 @@ export interface paths {
         };
         /**
          * List Draft Versions
-         * @description List every version in this draft's revision chain, oldest first.
+         * @description Bu taslağın revizyon zincirindeki her sürümü en eskiden en yeniye listeler.
          */
         get: operations["list_draft_versions_api_v1_drafts__draft_id__versions_get"];
         put?: never;
@@ -1255,12 +1340,12 @@ export interface paths {
         put?: never;
         /**
          * Send Draft
-         * @description Send one draft version to one or more recipients within the caller's company.
+         * @description Bir taslak sürümünü çağıranın şirketi içinde bir veya daha fazla alıcıya gönderir.
          *
-         *     Delegates to `ArtifactTransferService.execute` (see `DraftShareService.
-         *     send`'s own docstring) -- `Action.ARTIFACT_TRANSFER`-gated there: an
-         *     EMPLOYEE may only send its own draft, ADMIN/MANAGER/ROOT may send any
-         *     draft company-wide.
+         *     `ArtifactTransferService.execute`'a devreder (bkz. `DraftShareService.
+         *     send`'in kendi docstring'i) -- orada `Action.ARTIFACT_TRANSFER` ile
+         *     korunur: bir EMPLOYEE yalnızca kendi taslağını gönderebilir,
+         *     ADMIN/MANAGER/ROOT şirket genelinde herhangi bir taslağı gönderebilir.
          */
         post: operations["send_draft_api_v1_drafts__draft_id__send_post"];
         delete?: never;
@@ -1280,7 +1365,7 @@ export interface paths {
         put?: never;
         /**
          * Read Draft Share
-         * @description Advance a share to `read`. Recipient only.
+         * @description Bir paylaşımı `read` durumuna ilerletir. Yalnızca alıcı.
          */
         post: operations["read_draft_share_api_v1_drafts_shares__share_id__read_post"];
         delete?: never;
@@ -1300,8 +1385,8 @@ export interface paths {
         put?: never;
         /**
          * Accept Draft Share
-         * @description Accept a shared draft. Recipient only -- forks a new version the
-         *     recipient now owns (see `DraftShareService.respond`).
+         * @description Paylaşılan bir taslağı kabul eder. Yalnızca alıcı -- alıcının artık
+         *     sahibi olduğu yeni bir sürüm çatallar (bkz. `DraftShareService.respond`).
          */
         post: operations["accept_draft_share_api_v1_drafts_shares__share_id__accept_post"];
         delete?: never;
@@ -1321,7 +1406,7 @@ export interface paths {
         put?: never;
         /**
          * Reject Draft Share
-         * @description Reject a shared draft. Recipient only.
+         * @description Paylaşılan bir taslağı reddeder. Yalnızca alıcı.
          */
         post: operations["reject_draft_share_api_v1_drafts_shares__share_id__reject_post"];
         delete?: never;
@@ -1342,7 +1427,7 @@ export interface paths {
         post?: never;
         /**
          * Withdraw Draft Share
-         * @description Withdraw a still-`sent` share. Sender (or Admin/Manager/Root) only.
+         * @description Hâlâ `sent` durumundaki bir paylaşımı geri çeker. Yalnızca gönderen (veya Admin/Manager/Root).
          */
         delete: operations["withdraw_draft_share_api_v1_drafts_shares__share_id__delete"];
         options?: never;
@@ -1359,17 +1444,17 @@ export interface paths {
         };
         /**
          * List Feedback
-         * @description List the caller's own company's feedback, newest first. Admin/Manager/Root only.
+         * @description Çağıranın kendi şirketinin geri bildirimlerini en yeniden en eskiye listeler. Yalnızca Admin/Manager/Root.
          */
         get: operations["list_feedback_api_v1_feedback_get"];
         put?: never;
         /**
          * Submit Feedback
-         * @description Cast (or re-cast) a 👍/👎 vote on a piece of AI-generated output.
+         * @description Yapay zeka tarafından üretilmiş bir çıktıya 👍/👎 oyu verir (veya yeniden verir).
          *
-         *     Any authenticated user may vote, scoped to their own company -- this is
-         *     the one write path in the RLHF-style data-collection layer every user
-         *     reaches, not just admins.
+         *     Kimliği doğrulanmış her kullanıcı, yalnızca kendi şirketiyle sınırlı
+         *     olarak oy verebilir -- bu, RLHF tarzı veri toplama katmanında sadece
+         *     yöneticilerin değil her kullanıcının eriştiği tek yazma yoludur.
          */
         post: operations["submit_feedback_api_v1_feedback_post"];
         delete?: never;
@@ -1390,7 +1475,7 @@ export interface paths {
         post?: never;
         /**
          * Delete Feedback
-         * @description Withdraw a vote. The voter, or Admin/Manager/Root company-wide.
+         * @description Bir oyu geri çeker. Oyu veren kişi veya şirket genelinde Admin/Manager/Root.
          */
         delete: operations["delete_feedback_api_v1_feedback__feedback_id__delete"];
         options?: never;
@@ -1407,7 +1492,7 @@ export interface paths {
         };
         /**
          * Feedback Stats
-         * @description Vote counts by signal and by target kind, for one company.
+         * @description Bir şirket için sinyale ve hedef türe göre oy sayıları.
          */
         get: operations["feedback_stats_api_v1_companies__company_id__feedback_stats_get"];
         put?: never;
@@ -1427,13 +1512,13 @@ export interface paths {
         };
         /**
          * List Conversations
-         * @description The caller's active conversations, most recent activity first.
+         * @description Çağıranın aktif konuşmaları, en son etkinlik önce.
          */
         get: operations["list_conversations_api_v1_messaging_conversations_get"];
         put?: never;
         /**
          * Create Conversation
-         * @description Open a DM (idempotent) or create a group conversation.
+         * @description Bir özel mesajı açar (idempotent) veya bir grup konuşması oluşturur.
          */
         post: operations["create_conversation_api_v1_messaging_conversations_post"];
         delete?: never;
@@ -1458,7 +1543,7 @@ export interface paths {
         head?: never;
         /**
          * Update Conversation
-         * @description Rename/archive a group conversation (owner, or Admin/Manager/Root).
+         * @description Bir grup konuşmasını yeniden adlandırır/arşivler (sahibi, veya Admin/Manager/Root).
          */
         patch: operations["update_conversation_api_v1_messaging_conversations__conversation_id__patch"];
         trace?: never;
@@ -1474,7 +1559,7 @@ export interface paths {
         put?: never;
         /**
          * Add Participants
-         * @description Add members to a group conversation (owner, or Admin/Manager/Root).
+         * @description Bir grup konuşmasına üye ekler (sahibi, veya Admin/Manager/Root).
          */
         post: operations["add_participants_api_v1_messaging_conversations__conversation_id__participants_post"];
         delete?: never;
@@ -1495,7 +1580,7 @@ export interface paths {
         post?: never;
         /**
          * Remove Participant
-         * @description Leave a group (self) or remove another member (owner, or Admin/Manager/Root).
+         * @description Bir gruptan ayrılır (kendisi) veya başka bir üyeyi çıkarır (sahibi, veya Admin/Manager/Root).
          */
         delete: operations["remove_participant_api_v1_messaging_conversations__conversation_id__participants__user_id__delete"];
         options?: never;
@@ -1512,7 +1597,7 @@ export interface paths {
         };
         /**
          * List Messages
-         * @description Keyset page of messages, newest first (`before_id` to page older).
+         * @description Mesajların keyset sayfası, en yeniden en eskiye (daha eskiye gitmek için `before_id`).
          */
         get: operations["list_messages_api_v1_messaging_conversations__conversation_id__messages_get"];
         put?: never;
@@ -1550,13 +1635,13 @@ export interface paths {
         };
         /**
          * Stream Messages
-         * @description Live-push new messages over SSE, one connection per user across every
-         *     conversation they're in -- same Redis pub/sub pattern as
-         *     `notifications/router.py::stream_notifications`, distinct channel
-         *     prefix (see `messaging_channel_for`'s docstring). A dropped or never-
-         *     received push is never data loss: `GET /messaging/conversations/{id}/
-         *     messages` always has the row regardless of whether this stream was
-         *     connected when it was sent.
+         * @description SSE üzerinden yeni mesajları canlı gönderir, kullanıcı başına
+         *     bulundukları her konuşma boyunca tek bir bağlantı --
+         *     `notifications/router.py::stream_notifications` ile aynı Redis pub/sub
+         *     deseni, farklı kanal öneki (bkz. `messaging_channel_for`'ın
+         *     docstring'i). Kaçırılan veya hiç alınmayan bir gönderim asla veri
+         *     kaybı değildir: bu akış mesaj gönderildiğinde bağlı olsa da olmasa da
+         *     `GET /messaging/conversations/{id}/messages` her zaman o satıra sahiptir.
          */
         get: operations["stream_messages_api_v1_messaging_stream_get"];
         put?: never;
@@ -1576,7 +1661,7 @@ export interface paths {
         };
         /**
          * List Notifications
-         * @description The caller's own notifications, newest first.
+         * @description Çağıranın kendi bildirimleri, en yeniden en eskiye.
          */
         get: operations["list_notifications_api_v1_notifications_get"];
         put?: never;
@@ -1598,7 +1683,7 @@ export interface paths {
         put?: never;
         /**
          * Read Notification
-         * @description Mark one notification as read.
+         * @description Tek bir bildirimi okundu olarak işaretler.
          */
         post: operations["read_notification_api_v1_notifications__notification_id__read_post"];
         delete?: never;
@@ -1618,7 +1703,7 @@ export interface paths {
         put?: never;
         /**
          * Read All Notifications
-         * @description Mark every unread notification of the caller as read.
+         * @description Çağıranın okunmamış tüm bildirimlerini okundu olarak işaretler.
          */
         post: operations["read_all_notifications_api_v1_notifications_read_all_post"];
         delete?: never;
@@ -1636,17 +1721,17 @@ export interface paths {
         };
         /**
          * Stream Notifications
-         * @description Live-push notification stream over SSE.
+         * @description SSE üzerinden canlı bildirim akışı.
          *
-         *     Backed by Redis pub/sub (`RedisCache.publish`/`NotificationService.
-         *     create`), not the process-wide in-memory `EventBus` alone -- a multi-
-         *     worker uvicorn deployment would otherwise drop any notification
-         *     published from a worker other than the one holding this connection (see
-         *     the tenancy plan's own risk note on this). A dropped or never-received
-         *     live push is never data loss: the notification row already exists by
-         *     the time it's published (see `NotificationService.create`), so
-         *     `GET /notifications` always has it regardless of whether this stream
-         *     was even connected.
+         *     Süreç geneli bellek içi `EventBus`'ın tek başına değil, Redis pub/sub
+         *     (`RedisCache.publish`/`NotificationService.create`) tarafından
+         *     desteklenir -- aksi halde çok işçili (multi-worker) bir uvicorn
+         *     dağıtımı, bu bağlantıyı tutan işçi dışındaki bir işçiden yayınlanan her
+         *     bildirimi kaybederdi (bkz. kiracılık planının bu konudaki risk notu).
+         *     Kaçırılan veya hiç alınmayan bir canlı bildirim asla veri kaybı değildir:
+         *     bildirim satırı yayınlandığı anda zaten mevcuttur (bkz.
+         *     `NotificationService.create`), bu yüzden bu akış bağlı olsa da olmasa da
+         *     `GET /notifications` her zaman bu bildirime sahiptir.
          */
         get: operations["stream_notifications_api_v1_notifications_stream_get"];
         put?: never;
@@ -1666,7 +1751,7 @@ export interface paths {
         };
         /**
          * Get My Pool
-         * @description The caller's own personal document pool, lazily created on first use.
+         * @description Çağıranın kendi kişisel evrak havuzu, ilk kullanımda tembel (lazy) olarak oluşturulur.
          */
         get: operations["get_my_pool_api_v1_pools_me_get"];
         put?: never;
@@ -1686,13 +1771,13 @@ export interface paths {
         };
         /**
          * List Pool Items
-         * @description List a pool's items, newest first. The pool's own owner, or Admin/Manager/Root.
+         * @description Bir havuzun ögelerini en yeniden en eskiye listeler. Havuzun sahibi veya Admin/Manager/Root.
          */
         get: operations["list_pool_items_api_v1_pools__pool_id__items_get"];
         put?: never;
         /**
          * Push To Pool
-         * @description Push one document directly into a specific, already-known pool (Admin/Manager only).
+         * @description Bir evrakı doğrudan belirli, zaten bilinen bir havuza iter (yalnızca Admin/Manager).
          */
         post: operations["push_to_pool_api_v1_pools__pool_id__items_post"];
         delete?: never;
@@ -1712,8 +1797,9 @@ export interface paths {
         put?: never;
         /**
          * Push Bulk
-         * @description Push one document into several recipients' (or a whole unit's) personal pools
-         *     (Admin/Manager only). Per-recipient result: 'pushed' | 'denied_clearance' | 'not_found'.
+         * @description Bir evrakı birden çok alıcının (veya bütün bir birimin) kişisel
+         *     havuzlarına iter (yalnızca Admin/Manager). Alıcı bazında sonuç:
+         *     'pushed' | 'denied_clearance' | 'not_found'.
          */
         post: operations["push_bulk_api_v1_pools_push_post"];
         delete?: never;
@@ -1734,7 +1820,7 @@ export interface paths {
         post?: never;
         /**
          * Remove Pool Item
-         * @description Remove an item from a pool. The pool's own owner, or Admin/Manager/Root.
+         * @description Havuzdan bir öge kaldırır. Havuzun sahibi veya Admin/Manager/Root.
          */
         delete: operations["remove_pool_item_api_v1_pools__pool_id__items__item_id__delete"];
         options?: never;
@@ -1753,7 +1839,7 @@ export interface paths {
         put?: never;
         /**
          * Acknowledge Pool Item
-         * @description Mark a pushed item as read/acknowledged. The pool's own owner, or Admin/Manager/Root.
+         * @description İtilmiş bir ögeyi okundu/onaylandı olarak işaretler. Havuzun sahibi veya Admin/Manager/Root.
          */
         post: operations["acknowledge_pool_item_api_v1_pools_items__item_id__acknowledge_post"];
         delete?: never;
@@ -1773,11 +1859,12 @@ export interface paths {
         put?: never;
         /**
          * Adopt Pool Item
-         * @description Copy-on-write (Faz 5, #205): give a transferred item's own owner a
-         *     fully independent, editable copy (blob + registry row + analysis cache
-         *     + Q&A index) instead of the read-only shared-blob snapshot a transfer
-         *     leaves behind by default. The pool item's own owner only -- no Admin/
-         *     Manager bypass, see `DocumentService.adopt_pool_item`'s own docstring.
+         * @description Copy-on-write (Faz 5, #205): bir transferin varsayılan olarak
+         *     bıraktığı salt okunur paylaşılan blob anlık görüntüsü yerine, transfer
+         *     edilen bir ögenin sahibine tamamen bağımsız, düzenlenebilir bir kopya
+         *     (blob + kayıt satırı + analiz önbelleği + Soru-Cevap indeksi) verir.
+         *     Yalnızca havuz ögesinin kendi sahibi -- Admin/Manager atlaması yok,
+         *     bkz. `DocumentService.adopt_pool_item`'in kendi docstring'i.
          */
         post: operations["adopt_pool_item_api_v1_pools_items__item_id__adopt_post"];
         delete?: never;
@@ -1795,8 +1882,8 @@ export interface paths {
         };
         /**
          * Root Overview
-         * @description System-wide counts: companies, users, documents, drafts, and run
-         *     status/error-rate breakdown, across every company at once.
+         * @description Sistem geneli sayılar: tüm şirketler genelinde bir arada şirketler,
+         *     kullanıcılar, belgeler, taslaklar ve çalışma durumu/hata oranı dökümü.
          */
         get: operations["root_overview_api_v1_root_overview_get"];
         put?: never;
@@ -1816,7 +1903,7 @@ export interface paths {
         };
         /**
          * Root Company Stats
-         * @description Per-company rollup: identity plus user/document/draft counts.
+         * @description Şirket başına toplu bakış: kimlik bilgisi artı kullanıcı/belge/taslak sayıları.
          */
         get: operations["root_company_stats_api_v1_root_companies_stats_get"];
         put?: never;
@@ -1836,10 +1923,11 @@ export interface paths {
         };
         /**
          * Root User Stats
-         * @description Role breakdown and 7-day active count, system-wide -- see
-         *     `app.domains.analytics.repository.AnalyticsRepository.active_user_count`'s
-         *     docstring for what "active" means here (a `runs` row, not a tracked
-         *     login timestamp).
+         * @description Sistem geneli rol dökümü ve 7 günlük aktif kullanıcı sayısı --
+         *     burada "aktif" olmanın ne anlama geldiği için (izlenen bir giriş
+         *     zaman damgası değil, bir `runs` satırı)
+         *     `app.domains.analytics.repository.AnalyticsRepository.active_user_count`'un
+         *     docstring'ine bakın.
          */
         get: operations["root_user_stats_api_v1_root_users_stats_get"];
         put?: never;
@@ -1859,9 +1947,10 @@ export interface paths {
         };
         /**
          * Root Health
-         * @description `GET /health?deep=true`'s full dependency probe, plus a per-company
-         *     last-activity view (root's own "which tenant looks stale" question,
-         *     which the plain health check has no concept of a tenant to answer).
+         * @description `GET /health?deep=true`'nin tam bağımlılık kontrolü, artı şirket
+         *     başına son etkinlik görünümü (root'a özgü "hangi kiracı bayat
+         *     görünüyor" sorusu -- düz sağlık kontrolünün yanıtlayacağı bir kiracı
+         *     kavramı yoktur).
          */
         get: operations["root_health_api_v1_root_health_get"];
         put?: never;
@@ -1883,12 +1972,12 @@ export interface paths {
         put?: never;
         /**
          * Suggest Routing
-         * @description Produce a unit-routing decision for a draft, independent of drafting it.
+         * @description Bir taslak için, taslağı oluşturmaktan bağımsız olarak birim yönlendirme kararı üretir.
          *
-         *     Standalone from ``POST /documents/draft`` so a human who edits a draft
-         *     after it was generated can get a fresh routing decision without paying
-         *     for a new generation -- the routing graph runs on the fast tier and reads
-         *     only the draft text and its confidence score.
+         *     ``POST /documents/draft`` uç noktasından bağımsızdır; böylece bir taslak
+         *     oluşturulduktan sonra onu düzenleyen bir kullanıcı, yeni bir üretim
+         *     maliyetine katlanmadan güncel bir yönlendirme kararı alabilir -- yönlendirme
+         *     grafiği hızlı katmanda çalışır ve yalnızca taslak metnini ve güven skorunu okur.
          */
         post: operations["suggest_routing_api_v1_routing_suggest_post"];
         delete?: never;
@@ -1909,8 +1998,8 @@ export interface paths {
         post?: never;
         /**
          * Delete Training Sample
-         * @description Remove a sample from the training set (a bad-label cleanup), scoped
-         *     to the caller's own company.
+         * @description Bir örneği eğitim setinden kaldırır (hatalı etiket temizliği),
+         *     çağıranın kendi şirketiyle sınırlı.
          */
         delete: operations["delete_training_sample_api_v1_training_samples__sample_id__delete"];
         options?: never;
@@ -1929,9 +2018,10 @@ export interface paths {
         put?: never;
         /**
          * Compile Training Samples
-         * @description Re-derive `training_samples` from every currently-resolvable
-         *     `feedback` vote. Does not train anything -- see `TrainingService.
-         *     compile_samples`'s docstring for why compiling is its own step.
+         * @description Şu anda çözümlenebilir her `feedback` oyundan `training_samples`'ı
+         *     yeniden türetir. Hiçbir şeyi eğitmez -- derlemenin neden kendi başına
+         *     bir adım olduğu için bkz. `TrainingService.compile_samples`'ın
+         *     docstring'i.
          */
         post: operations["compile_training_samples_api_v1_companies__company_id__training_samples_compile_post"];
         delete?: never;
@@ -1949,7 +2039,7 @@ export interface paths {
         };
         /**
          * List Training Samples
-         * @description List one company's compiled samples, newest first.
+         * @description Bir şirketin derlenmiş örneklerini en yeniden en eskiye listeler.
          */
         get: operations["list_training_samples_api_v1_companies__company_id__training_samples_get"];
         put?: never;
@@ -1969,7 +2059,7 @@ export interface paths {
         };
         /**
          * Training Sample Stats
-         * @description Source distribution + how far from `MIN_FEEDBACK_SAMPLES` a company is.
+         * @description Kaynak dağılımı + bir şirketin `MIN_FEEDBACK_SAMPLES`'a ne kadar uzak olduğu.
          */
         get: operations["training_sample_stats_api_v1_companies__company_id__training_samples_stats_get"];
         put?: never;
@@ -1989,9 +2079,9 @@ export interface paths {
         };
         /**
          * Export Training Samples
-         * @description The same rows `.../training-runs` trains on, as downloadable JSONL --
-         *     see `TrainingService.export_samples`'s docstring for why shown data and
-         *     trained data are guaranteed identical.
+         * @description `.../training-runs`'ın üzerinde eğitim yaptığı aynı satırlar, indirilebilir
+         *     JSONL olarak -- gösterilen veri ile eğitilen verinin neden aynı olduğu
+         *     garanti edildiği için bkz. `TrainingService.export_samples`'ın docstring'i.
          */
         get: operations["export_training_samples_api_v1_companies__company_id__training_samples_export_get"];
         put?: never;
@@ -2014,13 +2104,15 @@ export interface paths {
         put?: never;
         /**
          * Trigger Training Run
-         * @description Trigger a training run. `style_adapter` compiles + mines + publishes
-         *     a refreshed style adapter synchronously (see `app.domains.training.
-         *     service`'s module docstring for why that scale doesn't need a
-         *     background worker). `lora_sft`/`lora_dpo` only queues the job --
-         *     actually running it needs the separate `worker` container manually
-         *     started via `scripts/start_training_worker.sh` (see #191's own body
-         *     for why it isn't part of `docker compose up` by default).
+         * @description Bir eğitim çalıştırmasını tetikler. `style_adapter`, yenilenmiş bir
+         *     stil adaptörünü senkron olarak derler + çıkarır + yayınlar (bu ölçeğin
+         *     neden bir arka plan işçisine ihtiyaç duymadığı için bkz.
+         *     `app.domains.training.service`'in modül docstring'i). `lora_sft`/
+         *     `lora_dpo` işi yalnızca kuyruğa alır -- fiilen çalıştırmak,
+         *     `scripts/start_training_worker.sh` ile manuel olarak başlatılan ayrı
+         *     bir `worker` konteynerine ihtiyaç duyar (varsayılan olarak neden
+         *     `docker compose up`'ın bir parçası olmadığı için bkz. #191'in kendi
+         *     gövdesi).
          */
         post: operations["trigger_training_run_api_v1_companies__company_id__training_runs_post"];
         delete?: never;
@@ -2040,11 +2132,12 @@ export interface paths {
         put?: never;
         /**
          * Send Transfer
-         * @description Send one draft or document to one recipient -- the manual chat-
-         *     initiated path. `Action.ARTIFACT_TRANSFER`-gated: an EMPLOYEE may only
-         *     send an artifact it owns, ADMIN/MANAGER/ROOT may send any artifact
-         *     company-wide. Always ends up posting a `kind="artifact"` message into
-         *     the sender/recipient DM (opened if it didn't already exist).
+         * @description Bir taslağı veya evrakı tek bir alıcıya gönderir -- manuel, sohbet
+         *     üzerinden başlatılan yol. `Action.ARTIFACT_TRANSFER` ile korunur: bir
+         *     EMPLOYEE yalnızca sahibi olduğu bir artefaktı gönderebilir,
+         *     ADMIN/MANAGER/ROOT şirket genelinde herhangi bir artefaktı gönderebilir.
+         *     Her zaman gönderen/alıcı özel mesajına (yoksa açılarak)
+         *     `kind="artifact"` türünde bir mesaj gönderilmesiyle sonuçlanır.
          */
         post: operations["send_transfer_api_v1_transfers_send_post"];
         delete?: never;
@@ -2064,10 +2157,11 @@ export interface paths {
         put?: never;
         /**
          * Send Group Transfer
-         * @description Send one draft or document to several recipients at once -- chat/
-         *     REST only (see `ArtifactTransferService.execute_group`'s own docstring
-         *     for why the AI channel never reaches this). Per-recipient partial
-         *     success: one recipient's denial/not-found never blocks the others.
+         * @description Bir taslağı veya evrakı birden çok alıcıya aynı anda gönderir --
+         *     yalnızca sohbet/REST üzerinden (yapay zeka kanalının buraya neden hiç
+         *     ulaşmadığı için bkz. `ArtifactTransferService.execute_group`'un kendi
+         *     docstring'i). Alıcı bazında kısmi başarı: bir alıcının reddedilmesi/
+         *     bulunamaması diğerlerini asla engellemez.
          */
         post: operations["send_group_transfer_api_v1_transfers_send_group_post"];
         delete?: never;
@@ -2085,10 +2179,10 @@ export interface paths {
         };
         /**
          * Recommend Recipients
-         * @description Suggested recipients for `draft_id`, ranked from its own routed
-         *     unit's membership (favorites first). Empty, never an error, when the
-         *     draft has no routed unit or that unit is inactive -- a recommendation
-         *     is a hint, not a requirement.
+         * @description `draft_id` için önerilen alıcılar, taslağın kendi yönlendirilmiş
+         *     biriminin üyeliğinden sıralanmış (favoriler önce). Taslağın yönlendirilmiş
+         *     bir birimi yoksa veya o birim pasifse boş döner, asla hata vermez --
+         *     bir öneri bir ipucudur, bir gereklilik değildir.
          */
         get: operations["recommend_recipients_api_v1_transfers_recommendations_get"];
         put?: never;
@@ -2108,10 +2202,10 @@ export interface paths {
         };
         /**
          * Get Transfer
-         * @description Fetch one transfer -- the sender or recipient only (or Admin/
-         *     Manager/Root company-wide), same participation-is-the-grant shape
-         *     `draft_shares` already uses. Backs `ArtifactMessageCard`'s live read of
-         *     a `kind="artifact"` message's current status.
+         * @description Tek bir transferi getirir -- yalnızca gönderen veya alıcı (veya şirket
+         *     genelinde Admin/Manager/Root), `draft_shares`'in zaten kullandığı
+         *     "katılım = yetki" biçimiyle aynı. `ArtifactMessageCard`'ın bir
+         *     `kind="artifact"` mesajının güncel durumunu canlı okumasını destekler.
          */
         get: operations["get_transfer_api_v1_transfers__transfer_id__get"];
         put?: never;
@@ -2131,16 +2225,17 @@ export interface paths {
         };
         /**
          * List Units
-         * @description List every unit of the caller's company (active and inactive) -- the
-         *     AI's routing suggestions themselves only ever consider the active
-         *     subset (see ``app.domains.units.provider``); this endpoint returns both
-         *     so an admin UI can review and reactivate a disabled unit.
+         * @description Çağıranın şirketindeki her birimi listeler (aktif ve pasif) -- yapay
+         *     zekanın yönlendirme önerilerinin kendisi yalnızca aktif alt kümeyi
+         *     dikkate alır (bkz. ``app.domains.units.provider``); bu uç nokta bir
+         *     yönetici arayüzünün pasif bir birimi inceleyip yeniden aktif
+         *     edebilmesi için ikisini de döndürür.
          */
         get: operations["list_units_api_v1_units_get"];
         put?: never;
         /**
          * Create Unit
-         * @description Create a new routable unit within the caller's company (Admin/Manager only).
+         * @description Çağıranın şirketi içinde yönlendirilebilir yeni bir birim oluşturur (yalnızca Admin/Manager).
          */
         post: operations["create_unit_api_v1_units_post"];
         delete?: never;
@@ -2161,14 +2256,14 @@ export interface paths {
         post?: never;
         /**
          * Delete Unit
-         * @description Permanently delete a unit (Admin/Manager only).
+         * @description Bir birimi kalıcı olarak siler (yalnızca Admin/Manager).
          */
         delete: operations["delete_unit_api_v1_units__unit_id__delete"];
         options?: never;
         head?: never;
         /**
          * Update Unit
-         * @description Update a unit's name, description or active status (Admin/Manager only).
+         * @description Bir birimin adını, açıklamasını veya aktiflik durumunu günceller (yalnızca Admin/Manager).
          */
         patch: operations["update_unit_api_v1_units__unit_id__patch"];
         trace?: never;
@@ -2182,13 +2277,13 @@ export interface paths {
         };
         /**
          * List Unit Members
-         * @description List a unit's members, ranked (primary first, then leads, then the rest).
+         * @description Bir birimin üyelerini sıralanmış şekilde listeler (önce birincil, sonra sorumlular, sonra geri kalanlar).
          */
         get: operations["list_unit_members_api_v1_units__unit_id__members_get"];
         put?: never;
         /**
          * Add Unit Member
-         * @description Add a company user to a unit (Admin/Manager only).
+         * @description Bir şirket kullanıcısını bir birime ekler (yalnızca Admin/Manager).
          */
         post: operations["add_unit_member_api_v1_units__unit_id__members_post"];
         delete?: never;
@@ -2209,7 +2304,7 @@ export interface paths {
         post?: never;
         /**
          * Remove Unit Member
-         * @description Remove a user from a unit (Admin/Manager only).
+         * @description Bir kullanıcıyı bir birimden çıkarır (yalnızca Admin/Manager).
          */
         delete: operations["remove_unit_member_api_v1_units__unit_id__members__user_id__delete"];
         options?: never;
@@ -2226,15 +2321,17 @@ export interface paths {
         };
         /**
          * Suggested Recipients
-         * @description AI-suggested draft recipients: the members of the unit routing chose.
+         * @description Yapay zeka tarafından önerilen taslak alıcıları: yönlendirmenin
+         *     seçtiği birimin üyeleri.
          *
-         *     Reuses the existing routing decision entirely -- no new AI call here.
-         *     The caller already has `unit_id` from the routed `destination` unit name
-         *     (`POST /documents/draft`'s response, or `POST /routing/suggest`) matched
-         *     against `GET /units`; this just ranks that unit's own membership the
-         *     same way `GET /units/{id}/members` does (primary, then leads, then
-         *     everyone else), which is exactly what "suggested recipients" means once
-         *     a unit has already been identified.
+         *     Mevcut yönlendirme kararını tamamen yeniden kullanır -- burada yeni bir
+         *     yapay zeka çağrısı yoktur. Çağıranın zaten `GET /units` ile eşleştirilmiş,
+         *     yönlendirilen `destination` birim adından (`POST /documents/draft`'ın
+         *     yanıtı veya `POST /routing/suggest`) gelen bir `unit_id`'si vardır; bu
+         *     yalnızca o birimin kendi üyeliğini `GET /units/{id}/members`'ın yaptığı
+         *     aynı şekilde sıralar (önce birincil, sonra sorumlular, sonra herkes),
+         *     ki bu da bir birim zaten belirlendikten sonra "önerilen alıcılar"ın tam
+         *     olarak ne anlama geldiğidir.
          */
         get: operations["suggested_recipients_api_v1_units__unit_id__suggested_recipients_get"];
         put?: never;
@@ -2254,23 +2351,25 @@ export interface paths {
         };
         /**
          * List Users
-         * @description Retrieve the caller's own company's users, paginated and role-filtered (Admin/Manager only).
+         * @description Çağıranın kendi şirketinin kullanıcılarını sayfalanmış ve role göre filtrelenmiş şekilde getirir (yalnızca Admin/Manager).
          */
         get: operations["list_users_api_v1_users_get"];
         put?: never;
         /**
          * Register
-         * @description Register a new user account in the system, validating the email invitation whitelist.
+         * @description Sistemde yeni bir kullanıcı hesabı kaydeder, e-posta davet beyaz listesini doğrular.
          *
-         *     Unauthenticated by design -- registration is invite-gated instead (see
-         *     `UserService.register_user`), and the invite is what determines both
-         *     the new account's role and its company, never the request body.
+         *     Tasarım gereği kimlik doğrulaması yoktur -- bunun yerine kayıt davet
+         *     tarafından kapılanır (bkz. `UserService.register_user`), ve yeni
+         *     hesabın hem rolünü hem de şirketini belirleyen davettir, istek gövdesi
+         *     asla değil.
          *
-         *     Uses `get_owner_db`, not `get_db`: the invite lookup is by `email`,
-         *     unique system-wide (`InvitedEmailModel.email`, not per company), so
-         *     there is no tenant context yet to scope a row-level-security policy by
-         *     until the invite (and the company it belongs to) is found -- same
-         *     reasoning as `auth/router.py::login`.
+         *     `get_db` yerine `get_owner_db` kullanılır: davet araması `email` ile
+         *     yapılır, sistem genelinde benzersizdir (`InvitedEmailModel.email`,
+         *     şirket bazında değil), bu yüzden davet (ve ait olduğu şirket)
+         *     bulunana kadar satır düzeyinde bir güvenlik politikasını kapsayacak
+         *     bir kiracı bağlamı henüz yoktur -- `auth/router.py::login` ile aynı
+         *     gerekçe.
          */
         post: operations["register_api_v1_users_post"];
         delete?: never;
@@ -2290,8 +2389,8 @@ export interface paths {
         put?: never;
         /**
          * Invite User
-         * @description Invite/whitelist an email address with a predefined role, into the
-         *     caller's own company (Admin/Manager only).
+         * @description Bir e-posta adresini önceden tanımlanmış bir rolle çağıranın kendi
+         *     şirketine davet eder/beyaz listeye alır (yalnızca Admin/Manager).
          */
         post: operations["invite_user_api_v1_users_invitations_post"];
         delete?: never;
@@ -2309,7 +2408,7 @@ export interface paths {
         };
         /**
          * Get Me
-         * @description Get profile details of the currently authenticated user.
+         * @description Şu anda kimliği doğrulanmış kullanıcının profil bilgilerini getirir.
          */
         get: operations["get_me_api_v1_users_me_get"];
         put?: never;
@@ -2329,11 +2428,12 @@ export interface paths {
         };
         /**
          * Search Users
-         * @description Search the caller's own company's users for the messaging/artifact-
-         *     transfer recipient picker. `q` requires at least 2 characters (rate-
-         *     limited on top -- see `rate_limit`'s own docstring) to keep this from
-         *     doubling as a company-wide user enumeration tool. Results are always
-         *     company-scoped by RLS + the explicit `company_id` filter regardless.
+         * @description Mesajlaşma/artefakt transferi alıcı seçicisi için çağıranın kendi
+         *     şirketinin kullanıcılarında arama yapar. `q`, bunun şirket geneli bir
+         *     kullanıcı listeleme aracına dönüşmesini engellemek için en az 2 karakter
+         *     gerektirir (üzerine hız sınırlaması da eklenmiştir -- bkz.
+         *     `rate_limit`'in kendi docstring'i). Sonuçlar, ne olursa olsun her zaman
+         *     RLS + açık `company_id` filtresi ile şirket bazlıdır.
          */
         get: operations["search_users_api_v1_users_search_get"];
         put?: never;
@@ -2353,13 +2453,13 @@ export interface paths {
         };
         /**
          * List My Favorites
-         * @description The caller's own favorites, newest-favorited first.
+         * @description Çağıranın kendi favorileri, en son favorilenen önce.
          */
         get: operations["list_my_favorites_api_v1_users_me_favorites_get"];
         put?: never;
         /**
          * Add My Favorite
-         * @description Add a company user to the caller's own favorites.
+         * @description Bir şirket kullanıcısını çağıranın kendi favorilerine ekler.
          */
         post: operations["add_my_favorite_api_v1_users_me_favorites_post"];
         delete?: never;
@@ -2380,7 +2480,7 @@ export interface paths {
         post?: never;
         /**
          * Remove My Favorite
-         * @description Remove a user from the caller's own favorites.
+         * @description Bir kullanıcıyı çağıranın kendi favorilerinden çıkarır.
          */
         delete: operations["remove_my_favorite_api_v1_users_me_favorites__user_id__delete"];
         options?: never;
@@ -2397,15 +2497,16 @@ export interface paths {
         };
         /**
          * Get User
-         * @description Retrieve details of a specific user. Authenticated user can only
-         *     retrieve themselves, unless they are Admin/Manager of that user's own
-         *     company (ROOT is not implicitly cross-company here -- see the
-         *     `/companies` routes for root's company-scoped views).
+         * @description Belirli bir kullanıcının bilgilerini getirir. Kimliği doğrulanmış
+         *     kullanıcı, o kullanıcının kendi şirketinin Admin/Manager'ı olmadığı
+         *     sürece yalnızca kendisini getirebilir (ROOT burada örtük olarak şirketler
+         *     arası değildir -- root'un şirket bazlı görünümleri için `/companies`
+         *     rotalarına bakın).
          */
         get: operations["get_user_api_v1_users__user_id__get"];
         /**
          * Update User
-         * @description Update profile details of a user. Role or status changes require Admin privileges.
+         * @description Bir kullanıcının profil bilgilerini günceller. Rol veya durum değişiklikleri Admin yetkisi gerektirir.
          */
         put: operations["update_user_api_v1_users__user_id__put"];
         post?: never;
@@ -2426,7 +2527,7 @@ export interface paths {
         put?: never;
         /**
          * Change My Password
-         * @description Update password of current logged-in user after validation.
+         * @description Doğrulamadan sonra şu anda giriş yapmış kullanıcının parolasını günceller.
          */
         post: operations["change_my_password_api_v1_users_me_password_post"];
         delete?: never;
@@ -2447,7 +2548,7 @@ export interface paths {
         post?: never;
         /**
          * Soft Delete
-         * @description Soft delete user account by setting is_deleted flag (Admin only, own company).
+         * @description is_deleted bayrağını ayarlayarak kullanıcı hesabını geri alınabilir şekilde siler (yalnızca Admin, kendi şirketi).
          */
         delete: operations["soft_delete_api_v1_users__user_id__soft_delete"];
         options?: never;
@@ -2467,7 +2568,7 @@ export interface paths {
         post?: never;
         /**
          * Hard Delete
-         * @description Permanently delete user record from database (Admin only, own company).
+         * @description Kullanıcı kaydını veritabanından kalıcı olarak siler (yalnızca Admin, kendi şirketi).
          */
         delete: operations["hard_delete_api_v1_users__user_id__hard_delete"];
         options?: never;
@@ -2484,23 +2585,23 @@ export interface paths {
         };
         /**
          * List Permissions
-         * @description List every non-revoked permission explicitly granted to a company user (Admin/Manager only).
+         * @description Bir şirket kullanıcısına açıkça verilmiş, geri alınmamış her yetkiyi listeler (yalnızca Admin/Manager).
          */
         get: operations["list_permissions_api_v1_users__user_id__permissions_get"];
         put?: never;
         /**
          * Grant Permission
-         * @description Delegate a permission to a company user (Admin/Manager only).
+         * @description Bir şirket kullanıcısına bir yetki devreder (yalnızca Admin/Manager).
          *
-         *     Privilege non-escalation: the granter itself must be authorized for
-         *     ``schema.action`` (checked with its own identity standing in for the
-         *     resource's owner) before it may hand that action to someone else -- a
-         *     manager who only holds a delegated ``document:delete`` grant cannot in
-         *     turn grant ``draft:send``, since it was never granted that itself. Built
-         *     -in ADMIN/MANAGER role rules already cover every action defined today
-         *     (see ``app.core.authz.rules.BUILTIN_RULES``), so this check only starts
-         *     actually restricting once a manager's own permissions are themselves
-         *     grant-derived rather than role-derived.
+         *     Yetki yükseltmesi olmaması: yetkiyi verenin kendisi, o eylemi başka
+         *     birine devredebilmeden önce ``schema.action`` için yetkilendirilmiş
+         *     olmalıdır (kendi kimliği kaynağın sahibi yerine geçerek kontrol edilir)
+         *     -- yalnızca devredilmiş bir ``document:delete`` yetkisine sahip bir
+         *     yönetici, kendisine hiç verilmediği için ``draft:send`` yetkisini
+         *     devredemez. Yerleşik ADMIN/MANAGER rol kuralları bugün tanımlı her
+         *     eylemi zaten kapsadığından (bkz. ``app.core.authz.rules.BUILTIN_RULES``),
+         *     bu kontrol yalnızca bir yöneticinin kendi yetkileri rolden değil
+         *     devirden türetildiğinde fiilen kısıtlamaya başlar.
          */
         post: operations["grant_permission_api_v1_users__user_id__permissions_post"];
         delete?: never;
@@ -2521,10 +2622,10 @@ export interface paths {
         post?: never;
         /**
          * Revoke Permission
-         * @description Revoke a permission grant (Admin/Manager only, own company).
+         * @description Bir yetki devrini geri alır (yalnızca Admin/Manager, kendi şirketi).
          *
-         *     The revoked row is kept, not deleted (see
-         *     ``PermissionGrantModel.revoked_at``'s docstring) -- its own audit trail.
+         *     Geri alınan satır silinmez, saklanır (bkz.
+         *     ``PermissionGrantModel.revoked_at``'ın docstring'i) -- kendi denetim izi.
          */
         delete: operations["revoke_permission_api_v1_users_permissions__grant_id__delete"];
         options?: never;
@@ -2538,22 +2639,22 @@ export interface components {
     schemas: {
         /**
          * APIErrorDetail
-         * @description Pydantic model representing structured error information in APIResponse.
+         * @description APIResponse içindeki yapılandırılmış hata bilgisini temsil eden Pydantic modeli.
          */
         APIErrorDetail: {
             /**
              * Code
-             * @description Application-specific unique error code (e.g. NOT_FOUND, AI_EXECUTION_ERROR).
+             * @description Uygulamaya özgü benzersiz hata kodu (örn. NOT_FOUND, AI_EXECUTION_ERROR).
              */
             code: string;
             /**
              * Message
-             * @description Human-readable error message for the user or developer.
+             * @description Kullanıcı veya geliştirici için okunabilir hata mesajı.
              */
             message: string;
             /**
              * Details
-             * @description Additional technical details or validation errors.
+             * @description Ek teknik detaylar veya doğrulama hataları.
              */
             details?: {
                 [key: string]: unknown;
@@ -2563,16 +2664,16 @@ export interface components {
         APIResponse_AnalyticsLinksResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["AnalyticsLinksResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2582,16 +2683,16 @@ export interface components {
         APIResponse_AnalyticsSummaryResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["AnalyticsSummaryResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2601,16 +2702,16 @@ export interface components {
         APIResponse_ChainVerificationResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["ChainVerificationResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2620,16 +2721,16 @@ export interface components {
         APIResponse_CompanyAdapterResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["CompanyAdapterResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2639,16 +2740,16 @@ export interface components {
         APIResponse_CompanyProfileResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["CompanyProfileResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2658,16 +2759,16 @@ export interface components {
         APIResponse_CompanyResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["CompanyResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2677,16 +2778,16 @@ export interface components {
         APIResponse_CompanyRulesResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["CompanyRulesResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2696,16 +2797,16 @@ export interface components {
         APIResponse_DocumentPoolItemResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["DocumentPoolItemResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2715,16 +2816,16 @@ export interface components {
         APIResponse_DocumentPoolResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["DocumentPoolResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2734,16 +2835,16 @@ export interface components {
         APIResponse_FeedbackResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["FeedbackResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2753,16 +2854,16 @@ export interface components {
         APIResponse_FeedbackStatsResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["FeedbackStatsResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2772,16 +2873,16 @@ export interface components {
         APIResponse_InvitedEmailResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["InvitedEmailResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2791,19 +2892,19 @@ export interface components {
         APIResponse_List_PermissionGrantResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: components["schemas"]["PermissionGrantResponse"][] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2813,19 +2914,19 @@ export interface components {
         APIResponse_List_PoolPushResultItem__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: components["schemas"]["PoolPushResultItem"][] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2835,19 +2936,19 @@ export interface components {
         APIResponse_List_UnitMemberResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: components["schemas"]["UnitMemberResponse"][] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2857,19 +2958,19 @@ export interface components {
         APIResponse_List_UnitResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: components["schemas"]["UnitResponse"][] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2879,19 +2980,19 @@ export interface components {
         APIResponse_List_UserResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: components["schemas"]["UserResponse"][] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2901,19 +3002,19 @@ export interface components {
         APIResponse_NoneType_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2923,16 +3024,16 @@ export interface components {
         APIResponse_PaginatedResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PaginatedResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2942,16 +3043,16 @@ export interface components {
         APIResponse_PaginatedResponse_AuditLogResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PaginatedResponse_AuditLogResponse_"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2961,16 +3062,16 @@ export interface components {
         APIResponse_PaginatedResponse_CompanyResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PaginatedResponse_CompanyResponse_"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2980,16 +3081,16 @@ export interface components {
         APIResponse_PaginatedResponse_FeedbackResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PaginatedResponse_FeedbackResponse_"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -2999,16 +3100,16 @@ export interface components {
         APIResponse_PaginatedResponse_TrainingRunResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PaginatedResponse_TrainingRunResponse_"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3018,16 +3119,16 @@ export interface components {
         APIResponse_PaginatedResponse_TrainingSampleResponse__: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PaginatedResponse_TrainingSampleResponse_"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3037,16 +3138,16 @@ export interface components {
         APIResponse_PermissionGrantResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["PermissionGrantResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3056,16 +3157,16 @@ export interface components {
         APIResponse_TokenResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["TokenResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3075,16 +3176,16 @@ export interface components {
         APIResponse_TrainingRunResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["TrainingRunResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3094,16 +3195,16 @@ export interface components {
         APIResponse_TrainingSampleStatsResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["TrainingSampleStatsResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3113,16 +3214,16 @@ export interface components {
         APIResponse_UnitMemberResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["UnitMemberResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3132,16 +3233,16 @@ export interface components {
         APIResponse_UnitResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["UnitResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3151,16 +3252,16 @@ export interface components {
         APIResponse_UserResponse_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
-            /** @description Payload returned on a successful operation. */
+            /** @description Başarılı bir işlemde döndürülen payload. */
             data?: components["schemas"]["UserResponse"] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3170,21 +3271,21 @@ export interface components {
         APIResponse_dict_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: {
                 [key: string]: unknown;
             } | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3194,19 +3295,19 @@ export interface components {
         APIResponse_list_: {
             /**
              * Success
-             * @description Indicates whether the operation was successful.
+             * @description İşlemin başarılı olup olmadığını belirtir.
              */
             success: boolean;
             /**
              * Data
-             * @description Payload returned on a successful operation.
+             * @description Başarılı bir işlemde döndürülen payload.
              */
             data?: unknown[] | null;
-            /** @description Structured error details returned on failure. */
+            /** @description Hata durumunda döndürülen yapılandırılmış hata bilgisi. */
             error?: components["schemas"]["APIErrorDetail"] | null;
             /**
              * Meta
-             * @description Response metadata (e.g., response time, timestamp).
+             * @description Yanıt meta verisi (örn. yanıt süresi, zaman damgası).
              */
             meta?: {
                 [key: string]: unknown;
@@ -3241,7 +3342,7 @@ export interface components {
         };
         /**
          * AuditLogResponse
-         * @description Pydantic schema for one `audit_log` row.
+         * @description Tek bir `audit_log` satırı için Pydantic şeması.
          */
         AuditLogResponse: {
             /** Id */
@@ -3292,7 +3393,7 @@ export interface components {
         };
         /**
          * ChainVerificationResponse
-         * @description Pydantic schema for `GET /audit/verify`'s result.
+         * @description `GET /audit/verify`'ın sonucu için Pydantic şeması.
          */
         ChainVerificationResponse: {
             /** Valid */
@@ -3306,7 +3407,7 @@ export interface components {
         };
         /**
          * ChatMessageRequest
-         * @description Client request for a new chat interaction.
+         * @description Yeni bir sohbet etkileşimi için istemci isteği.
          */
         ChatMessageRequest: {
             /**
@@ -3337,12 +3438,12 @@ export interface components {
         };
         /**
          * ChatResumeRequest
-         * @description Resume a chat run paused at the human-in-the-loop gate.
+         * @description İnsan-döngüde (human-in-the-loop) kapısında duraklatılmış bir sohbet çalışmasını devam ettirir.
          *
-         *     Two interrupt kinds share this one request shape: ``answer`` fills in a
-         *     draft's missing-information placeholders (Görev 2's "eksik bilgi talep
-         *     etme" requirement); ``approve``/``revise``/``reject`` resolve a draft
-         *     that needed a human's sign-off before proceeding to unit routing.
+         *     İki kesinti türü bu tek istek şeklini paylaşır: ``answer`` bir taslağın
+         *     eksik bilgi yer tutucularını doldurur (Görev 2'nin "eksik bilgi talep
+         *     etme" gereksinimi); ``approve``/``revise``/``reject``, birim yönlendirmeye
+         *     geçmeden önce bir insanın onayına ihtiyaç duyan bir taslağı çözümler.
          */
         ChatResumeRequest: {
             /**
@@ -3380,8 +3481,8 @@ export interface components {
         };
         /**
          * CompanyAdapterResponse
-         * @description Pydantic schema for one company's current adapter -- mirrors
-         *     ``app.ai.adapters.company_adapter.CompanyAdapter`` field-for-field.
+         * @description Bir şirketin mevcut adaptörü için Pydantic şeması -- ``app.ai.
+         *     adapters.company_adapter.CompanyAdapter`` ile alan alan birebir aynıdır.
          */
         CompanyAdapterResponse: {
             /** Company Id */
@@ -3401,11 +3502,12 @@ export interface components {
         };
         /**
          * CompanyAdapterUpdate
-         * @description Pydantic schema for hand-authoring a company's runtime style adapter
-         *     (Faz C2) -- replaces the whole list per field, not an append.
+         * @description Bir şirketin çalışma zamanı stil adaptörünü elle oluşturmak için
+         *     Pydantic şeması (Faz C2) -- her alanı, eklemek yerine tüm listeyi
+         *     değiştirir.
          *
-         *     There is no automated training pipeline yet (Faz C3); this is how an
-         *     admin configures a company's adapter until one exists.
+         *     Henüz otomatik bir eğitim pipeline'ı yok (Faz C3); böyle biri var
+         *     olana kadar bir admin şirketin adaptörünü bu şekilde yapılandırır.
          */
         CompanyAdapterUpdate: {
             /** Style Rules */
@@ -3417,7 +3519,7 @@ export interface components {
         };
         /**
          * CompanyAdminAssign
-         * @description Pydantic schema for assigning an existing user as a company admin.
+         * @description Mevcut bir kullanıcıyı şirket admini olarak atamak için Pydantic şeması.
          */
         CompanyAdminAssign: {
             /**
@@ -3428,7 +3530,7 @@ export interface components {
         };
         /**
          * CompanyCreate
-         * @description Pydantic schema for creating a new company (root only).
+         * @description Yeni bir şirket oluşturmak için Pydantic şeması (yalnızca root).
          */
         CompanyCreate: {
             /**
@@ -3449,8 +3551,8 @@ export interface components {
         };
         /**
          * CompanyProfileResponse
-         * @description Pydantic schema for one company's current identity profile --
-         *     mirrors ``app.ai.identity.company_profile.CompanyProfile`` field-for-field.
+         * @description Bir şirketin mevcut kimlik profili için Pydantic şeması -- ``app.ai.
+         *     identity.company_profile.CompanyProfile`` ile alan alan birebir aynıdır.
          */
         CompanyProfileResponse: {
             /** Company Id */
@@ -3467,15 +3569,23 @@ export interface components {
             letterhead: string;
             /** Default Signer Title */
             default_signer_title: string;
+            /**
+             * Default Signer Name
+             * @default
+             */
+            default_signer_name: string;
+            /** Aliases */
+            aliases?: string[];
             /** Updated At */
             updated_at?: string | null;
         };
         /**
          * CompanyProfileUpdate
-         * @description Pydantic schema for setting a company's identity profile -- the
-         *     agent's own name and the company's letterhead/signer default a draft's
-         *     header/signature block falls back to when the writing brief leaves that
-         *     slot unspecified. Every field replaces the profile's current value.
+         * @description Bir şirketin kimlik profilini ayarlamak için Pydantic şeması --
+         *     asistanın kendi adı ve şirketin antet/imza sahibi varsayılanı, yazım
+         *     briefi o alanı belirtmeden bıraktığında bir taslağın başlık/imza
+         *     bloğunun geri düştüğü değerlerdir. Her alan, profilin mevcut değerinin
+         *     yerine geçer.
          */
         CompanyProfileUpdate: {
             /**
@@ -3508,10 +3618,21 @@ export interface components {
              * @default
              */
             default_signer_title: string;
+            /**
+             * Default Signer Name
+             * @description Varsayılan imza sahibi ad soyad -- yazım briefi ve gelen evrakın kendi imza sahibi alanı boş kaldığında kullanılır. Gelen evrakın imza sahibiyle ASLA karıştırılmaz; o karşı tarafa aittir.
+             * @default
+             */
+            default_signer_name: string;
+            /**
+             * Aliases
+             * @description Şirketin bir belgede veya kullanıcı mesajında geçebilecek diğer ad biçimleri (kısaltma, eski ad vb.) -- yalnızca bir belgenin bize gönderildiğini/adımızı taşıdığını tespit etmek için kullanılır, hiçbir taslakta doğrudan render edilmez.
+             */
+            aliases?: string[];
         };
         /**
          * CompanyResponse
-         * @description Pydantic schema for company details output.
+         * @description Şirket detay çıktısı için Pydantic şeması.
          */
         CompanyResponse: {
             /**
@@ -3549,11 +3670,11 @@ export interface components {
         };
         /**
          * CompanyRuleItem
-         * @description Pydantic schema for one mandatory/recommended drafting rule.
+         * @description Zorunlu/önerilen bir yazım kuralı için Pydantic şeması.
          *
-         *     ``id`` is optional on write: leave it unset for a new rule (the server
-         *     assigns a stable ``Kx`` id) or supply the id an earlier read returned
-         *     to edit that same rule in place -- see
+         *     ``id`` yazarken opsiyoneldir: yeni bir kural için boş bırakılır
+         *     (sunucu kalıcı bir ``Kx`` id atar) ya da aynı kuralı yerinde
+         *     düzenlemek için önceki bir okumanın döndürdüğü id verilir -- bkz.
          *     ``app.domains.companies.provider.set_company_rules``.
          */
         CompanyRuleItem: {
@@ -3575,8 +3696,9 @@ export interface components {
         };
         /**
          * CompanyRulesResponse
-         * @description Pydantic schema for one company's current mandatory rule set --
-         *     mirrors ``app.ai.adapters.company_rules.CompanyRuleSet`` field-for-field.
+         * @description Bir şirketin mevcut zorunlu kural seti için Pydantic şeması --
+         *     ``app.ai.adapters.company_rules.CompanyRuleSet`` ile alan alan birebir
+         *     aynıdır.
          */
         CompanyRulesResponse: {
             /** Company Id */
@@ -3590,7 +3712,7 @@ export interface components {
         };
         /**
          * CompanyRulesUpdate
-         * @description Pydantic schema for replacing a company's full mandatory rule set.
+         * @description Bir şirketin tüm zorunlu kural setini değiştirmek için Pydantic şeması.
          */
         CompanyRulesUpdate: {
             /** Rules */
@@ -3598,7 +3720,7 @@ export interface components {
         };
         /**
          * CompanyUpdate
-         * @description Pydantic schema for updating an existing company. All fields optional.
+         * @description Mevcut bir şirketi güncellemek için Pydantic şeması. Tüm alanlar opsiyoneldir.
          */
         CompanyUpdate: {
             /** Name */
@@ -3617,13 +3739,13 @@ export interface components {
         };
         /**
          * ConversationCreateRequest
-         * @description `POST /messaging/conversations` body -- discriminated by `kind`.
+         * @description `POST /messaging/conversations` gövdesi -- `kind`'a göre ayrıştırılır.
          *
-         *     A DM sets `participant_id` only; a group sets `title` and
-         *     `participant_ids` only. One endpoint, not two, because "open or create
-         *     a conversation" is a single concept to the caller -- the discriminator
-         *     just picks which fields are relevant, the same way the frontend forms
-         *     it maps to would.
+         *     Bir DM yalnızca `participant_id`'yi ayarlar; bir grup yalnızca
+         *     `title` ve `participant_ids`'i ayarlar. İki değil tek bir endpoint,
+         *     çünkü "bir konuşmayı aç ya da oluştur" çağıran için tek bir kavramdır
+         *     -- ayrıştırıcı yalnızca hangi alanların ilgili olduğunu seçer,
+         *     eşlendiği frontend formlarının yapacağı gibi.
          */
         ConversationCreateRequest: {
             /**
@@ -3649,7 +3771,8 @@ export interface components {
         };
         /**
          * ConversationUpdateRequest
-         * @description Group-only: rename or archive. A DM has no editable fields.
+         * @description Yalnızca grup: yeniden adlandırma veya arşivleme. Bir DM'in
+         *     düzenlenebilir alanı yoktur.
          */
         ConversationUpdateRequest: {
             /** Title */
@@ -3659,26 +3782,27 @@ export interface components {
         };
         /**
          * CorrespondenceType
-         * @description Supported official correspondence outputs produced by the draft workflow.
+         * @description Taslak iş akışının ürettiği desteklenen resmi yazışma çıktıları.
          *
-         *     Fixed at these four per spec. A user request for a specific genre that
-         *     isn't one of them (an itiraz dilekçesi, a muvafakatname, ...) still
-         *     resolves here -- to OTHER_OFFICIAL -- but carries the genre itself as a
-         *     separate free-text sub-genre alongside the type (see
-         *     ``app.ai.workflows.correspondence.resolve_correspondence_type``), so the
-         *     writer prompt still knows what to actually produce.
+         *     Spesifikasyona göre bu dört tanede sabittir. Bunlardan biri olmayan
+         *     belirli bir tür için kullanıcı isteği (bir itiraz dilekçesi, bir
+         *     muvafakatname, ...) yine de buraya -- OTHER_OFFICIAL'a -- çözülür, ama
+         *     türün kendisini tür ile birlikte ayrı bir serbest metin alt-tür olarak
+         *     taşır (bkz.
+         *     ``app.ai.workflows.correspondence.resolve_correspondence_type``), bu
+         *     yüzden writer prompt'u gerçekte ne üretileceğini yine de bilir.
          * @enum {string}
          */
         CorrespondenceType: "cover_letter" | "response_letter" | "information_notice" | "other_official";
         /**
          * DocumentFieldsUpdateSchema
-         * @description Payload for manually correcting a document's extracted fields.
+         * @description Bir evrakın çıkarılan alanlarını elle düzeltmek için gövde.
          *
-         *     The full ``EvrakField`` set is replaced wholesale rather than patched
-         *     key-by-key -- the frontend form always round-trips every field it
-         *     rendered (including ones already correctly detected), so a partial
-         *     payload would have no way to distinguish "leave this alone" from "the
-         *     user cleared it".
+         *     Tam ``EvrakField`` kümesi anahtar anahtar yamalanmak yerine bütünüyle
+         *     değiştirilir -- ön yüz formu render ettiği her alanı (zaten doğru
+         *     tespit edilenler dahil) her zaman geri gönderir, bu yüzden kısmi bir
+         *     gövdenin "buna dokunma" ile "kullanıcı temizledi"yi ayırt etmesinin
+         *     hiçbir yolu olmazdı.
          */
         DocumentFieldsUpdateSchema: {
             /** @description Kullanıcı tarafından düzeltilmiş üstveri alanları. */
@@ -3686,7 +3810,7 @@ export interface components {
         };
         /**
          * DocumentPoolItemResponse
-         * @description Pydantic schema for one pool item, joined with its document's file name.
+         * @description Evrakının dosya adıyla birleştirilmiş bir havuz öğesi için Pydantic şeması.
          */
         DocumentPoolItemResponse: {
             /** Id */
@@ -3716,7 +3840,7 @@ export interface components {
         };
         /**
          * DocumentPoolResponse
-         * @description Pydantic schema for a pool's own metadata.
+         * @description Bir havuzun kendi üstverisi için Pydantic şeması.
          */
         DocumentPoolResponse: {
             /** Id */
@@ -3732,18 +3856,19 @@ export interface components {
         };
         /**
          * DocumentTextUpdateSchema
-         * @description Payload for saving hand-corrected OCR/extracted text.
+         * @description Elle düzeltilmiş OCR/çıkarılan metni kaydetmek için gövde.
          *
-         *     Carries ``pages`` only, never a joined ``extracted_text`` -- the server
-         *     always re-derives the join from the submitted pages (see
-         *     ``DocumentService.update_document_text``). There is no lossless inverse
-         *     of ``"\n\n".join(pages)`` (a double-spaced source page splits back
-         *     into far more fragments than it started with), so accepting a
-         *     client-submitted joined text would risk silently diverging from what
-         *     the pages actually say. The server separately rejects a page count that
-         *     doesn't match the cached document, since ``PageMap``,
-         *     ``get_document_outline``/``get_document_section`` and
-         *     ``signature.marks[].page`` all index by page number.
+         *     Yalnızca ``pages`` taşır, birleştirilmiş bir ``extracted_text`` asla
+         *     taşımaz -- sunucu birleşimi her zaman gönderilen sayfalardan yeniden
+         *     türetir (bkz. ``DocumentService.update_document_text``).
+         *     ``"\n\n".join(pages)``'in kayıpsız bir tersi yoktur (çift boşluklu bir
+         *     kaynak sayfa geri bölündüğünde başladığından çok daha fazla parçaya
+         *     ayrılır), bu yüzden istemcinin gönderdiği birleştirilmiş metni kabul
+         *     etmek, sayfaların fiilen söylediğinden sessizce sapma riski taşırdı.
+         *     Sunucu ayrıca önbellekteki evrakla eşleşmeyen bir sayfa sayısını
+         *     reddeder, çünkü ``PageMap``, ``get_document_outline``/
+         *     ``get_document_section`` ve ``signature.marks[].page`` hepsi sayfa
+         *     numarasına göre indekslenir.
          */
         DocumentTextUpdateSchema: {
             /**
@@ -3754,23 +3879,23 @@ export interface components {
         };
         /**
          * DocumentType
-         * @description Types of incoming official documents (evrak) recognised at intake.
+         * @description Girişte tanınan gelen resmi belge (evrak) türleri.
          *
-         *     This taxonomy describes the document the institution *receives*. It is the
-         *     counterpart of `CorrespondenceType`, which describes the official reply the
-         *     institution *produces*. Keeping the two separate lets the intake pipeline
-         *     classify an inbound petition while the drafting pipeline independently
-         *     decides that the answer should be a response letter.
+         *     Bu taksonomi kurumun *aldığı* belgeyi tanımlar. Kurumun *ürettiği*
+         *     resmi yanıtı tanımlayan `CorrespondenceType`'ın karşılığıdır. İkisini
+         *     ayrı tutmak, giriş boru hattının gelen bir dilekçeyi sınıflandırmasına
+         *     izin verirken taslak boru hattının bağımsız olarak yanıtın bir yanıt
+         *     mektubu olması gerektiğine karar vermesini sağlar.
          * @enum {string}
          */
         DocumentType: "official_letter" | "petition" | "information_request" | "complaint" | "circular" | "directive" | "report" | "minutes" | "leave_request" | "other";
         /**
          * DraftClassificationSchema
-         * @description The narrow slice of Görev 1's output the draft flow actually consumes.
+         * @description Görev 1'in çıktısının taslak akışının fiilen tükettiği dar dilimi.
          *
-         *     Replaces ``DraftRequestSchema.classification: dict`` (was a free-form,
-         *     unvalidated dict fed straight into prompts -- a correctness hole and an
-         *     injection surface at once).
+         *     ``DraftRequestSchema.classification: dict``'in yerini alır (doğrudan
+         *     prompt'lara beslenen serbest biçimli, doğrulanmamış bir dict idi --
+         *     aynı anda hem bir doğruluk açığı hem bir enjeksiyon yüzeyi).
          */
         DraftClassificationSchema: {
             /** @description Gelen evrakın türü. */
@@ -3795,7 +3920,7 @@ export interface components {
         };
         /**
          * DraftDestinationUpdateRequest
-         * @description Override a draft version's routed unit -- see
+         * @description Bir taslak versiyonunun yönlendirildiği birimi geçersiz kıl -- bkz.
          *     `DraftService.update_destination`.
          */
         DraftDestinationUpdateRequest: {
@@ -3807,7 +3932,7 @@ export interface components {
         };
         /**
          * DraftRequestSchema
-         * @description Payload for initiating a drafting and routing workflow.
+         * @description Taslak oluşturma ve yönlendirme iş akışını başlatmak için gövde.
          */
         DraftRequestSchema: {
             /**
@@ -3833,7 +3958,7 @@ export interface components {
         };
         /**
          * DraftSendRequest
-         * @description Pydantic schema for sending one draft version to one or more recipients.
+         * @description Bir taslak versiyonunu bir veya birden fazla alıcıya göndermek için Pydantic şeması.
          */
         DraftSendRequest: {
             /**
@@ -3846,7 +3971,7 @@ export interface components {
         };
         /**
          * DraftShareRespondRequest
-         * @description Pydantic schema for accepting or rejecting a shared draft.
+         * @description Paylaşılan bir taslağı kabul etmek veya reddetmek için Pydantic şeması.
          */
         DraftShareRespondRequest: {
             /** Response Note */
@@ -3863,12 +3988,12 @@ export interface components {
         };
         /**
          * EvrakField
-         * @description Structured header and signature fields of an incoming official document.
+         * @description Gelen bir resmi belgenin yapılandırılmış başlık ve imza alanları.
          *
-         *     Every field is optional and defaults to None on purpose: missing-field
-         *     detection depends on the model reporting honest absence. A field given a
-         *     meaningful default (for example a "Tasnif Dışı" confidentiality grade) would
-         *     make every document look complete.
+         *     Her alan isteğe bağlıdır ve varsayılan olarak bilerek None'dır: eksik alan
+         *     tespiti, modelin gerçek yokluğu dürüstçe bildirmesine dayanır. Anlamlı bir
+         *     varsayılan değer verilen bir alan (örneğin "Tasnif Dışı" gizlilik derecesi)
+         *     her belgeyi eksiksiz gösterirdi.
          */
         EvrakField: {
             /**
@@ -3959,7 +4084,7 @@ export interface components {
         };
         /**
          * FeedbackResponse
-         * @description Pydantic schema for one feedback row.
+         * @description Tek bir geri bildirim satırı için Pydantic şeması.
          */
         FeedbackResponse: {
             /** Id */
@@ -3999,7 +4124,7 @@ export interface components {
         };
         /**
          * FeedbackStatsResponse
-         * @description Pydantic schema for `GET /companies/{id}/feedback/stats`.
+         * @description `GET /companies/{id}/feedback/stats` için Pydantic şeması.
          */
         FeedbackStatsResponse: {
             /** Total */
@@ -4015,12 +4140,12 @@ export interface components {
         };
         /**
          * FeedbackVoteRequest
-         * @description Pydantic schema for casting (or re-casting) a vote.
+         * @description Bir oy vermek (veya tekrar vermek) için Pydantic şeması.
          *
-         *     `content` is the exact rated text -- hashed server-side into
-         *     `content_hash` and never itself persisted (see `FeedbackModel`'s
-         *     docstring). The frontend already has this text in hand (it is what is
-         *     on screen), so no extra fetch is needed to vote.
+         *     `content`, oylanan tam metindir -- sunucu tarafında `content_hash`'e
+         *     hash'lenir ve kendisi asla kalıcı hale getirilmez (bkz. `FeedbackModel`'ın
+         *     docstring'i). Frontend bu metne zaten sahiptir (ekranda görünen odur),
+         *     bu yüzden oy vermek için ekstra bir fetch gerekmez.
          */
         FeedbackVoteRequest: {
             /**
@@ -4063,10 +4188,10 @@ export interface components {
         };
         /**
          * GroupTransferSendRequest
-         * @description `POST /transfers/send-group` body -- chat/REST-only fan-out to
-         *     several recipients at once (Faz 5, #205). There is no AI-channel
-         *     equivalent of this request; see `ArtifactTransferService.execute_group`'s
-         *     own docstring.
+         * @description `POST /transfers/send-group` gövdesi -- yalnızca sohbet/REST üzerinden
+         *     birden fazla alıcıya aynı anda dağıtım (Faz 5, #205). Bu isteğin
+         *     AI kanalı karşılığı yoktur; bkz.
+         *     `ArtifactTransferService.execute_group`'un kendi docstring'i.
          */
         GroupTransferSendRequest: {
             /**
@@ -4096,63 +4221,63 @@ export interface components {
         };
         /**
          * InvitedEmailCreate
-         * @description Pydantic schema to whitelist/invite an email.
+         * @description Bir e-postayı beyaz listeye alma/davet etme için Pydantic şeması.
          */
         InvitedEmailCreate: {
             /**
              * Email
              * Format: email
-             * @description Invited email address
+             * @description Davet edilen e-posta adresi
              */
             email: string;
             /**
-             * @description Pre-assigned role for the invitee
+             * @description Davet edilen kişiye önceden atanmış rol
              * @default employee
              */
             role: components["schemas"]["UserRole"];
         };
         /**
          * InvitedEmailResponse
-         * @description Pydantic schema returning whitelisted/invited email details.
+         * @description Beyaz listeye alınmış/davet edilmiş e-posta detaylarını döndüren Pydantic şeması.
          */
         InvitedEmailResponse: {
             /**
              * Id
-             * @description Unique invitation ID
+             * @description Benzersiz davet ID'si
              */
             id: string;
             /**
              * Email
              * Format: email
-             * @description Invited email address
+             * @description Davet edilen e-posta adresi
              */
             email: string;
-            /** @description Pre-assigned role */
+            /** @description Önceden atanmış rol */
             role: components["schemas"]["UserRole"];
             /**
              * Company Id
-             * @description Company the invitee will join upon registration
+             * @description Davet edilen kişinin kayıt sonrası katılacağı şirket
              */
             company_id: string;
             /**
              * Is Used
-             * @description Invitation utilization status
+             * @description Davetin kullanım durumu
              */
             is_used: boolean;
         };
         /**
          * LoginRequest
-         * @description Pydantic schema for credentials validation on login.
+         * @description Giriş sırasında kimlik bilgilerini doğrulamak için Pydantic şeması.
          */
         LoginRequest: {
             /**
              * Username
-             * @description Username or Email address of user
+             * @description Kullanıcının kullanıcı adı veya e-posta adresi
              */
             username: string;
             /**
              * Password
-             * @description Raw account password
+             * @description Ham hesap şifresi
              */
             password: string;
         };
@@ -4168,7 +4293,7 @@ export interface components {
         };
         /**
          * MevzuatReferenceSchema
-         * @description A legislation reference suggested for the document.
+         * @description Evrak için önerilen bir mevzuat atfı.
          */
         MevzuatReferenceSchema: {
             /**
@@ -4184,7 +4309,7 @@ export interface components {
         };
         /**
          * MissingField
-         * @description A required field that is absent from the document, with its legal basis.
+         * @description Belgede bulunmayan, yasal dayanağıyla birlikte zorunlu bir alan.
          */
         MissingField: {
             /**
@@ -4215,32 +4340,32 @@ export interface components {
         };
         /**
          * PaginatedResponse
-         * @description SOTA paginated response structure wrapper DTO.
+         * @description Sayfalanmış yanıt yapısını saran DTO.
          */
         PaginatedResponse: {
             /**
              * Items
-             * @description List of items in the current page
+             * @description Mevcut sayfadaki öğelerin listesi
              */
             items: unknown[];
             /**
              * Total
-             * @description Total number of items across all pages
+             * @description Tüm sayfalardaki toplam öğe sayısı
              */
             total: number;
             /**
              * Page
-             * @description Current page number
+             * @description Mevcut sayfa numarası
              */
             page: number;
             /**
              * Size
-             * @description Number of items per page
+             * @description Sayfa başına öğe sayısı
              */
             size: number;
             /**
              * Pages
-             * @description Total number of pages available
+             * @description Toplam sayfa sayısı
              */
             pages: number;
         };
@@ -4248,27 +4373,27 @@ export interface components {
         PaginatedResponse_AuditLogResponse_: {
             /**
              * Items
-             * @description List of items in the current page
+             * @description Mevcut sayfadaki öğelerin listesi
              */
             items: components["schemas"]["AuditLogResponse"][];
             /**
              * Total
-             * @description Total number of items across all pages
+             * @description Tüm sayfalardaki toplam öğe sayısı
              */
             total: number;
             /**
              * Page
-             * @description Current page number
+             * @description Mevcut sayfa numarası
              */
             page: number;
             /**
              * Size
-             * @description Number of items per page
+             * @description Sayfa başına öğe sayısı
              */
             size: number;
             /**
              * Pages
-             * @description Total number of pages available
+             * @description Toplam sayfa sayısı
              */
             pages: number;
         };
@@ -4276,27 +4401,27 @@ export interface components {
         PaginatedResponse_CompanyResponse_: {
             /**
              * Items
-             * @description List of items in the current page
+             * @description Mevcut sayfadaki öğelerin listesi
              */
             items: components["schemas"]["CompanyResponse"][];
             /**
              * Total
-             * @description Total number of items across all pages
+             * @description Tüm sayfalardaki toplam öğe sayısı
              */
             total: number;
             /**
              * Page
-             * @description Current page number
+             * @description Mevcut sayfa numarası
              */
             page: number;
             /**
              * Size
-             * @description Number of items per page
+             * @description Sayfa başına öğe sayısı
              */
             size: number;
             /**
              * Pages
-             * @description Total number of pages available
+             * @description Toplam sayfa sayısı
              */
             pages: number;
         };
@@ -4304,27 +4429,27 @@ export interface components {
         PaginatedResponse_FeedbackResponse_: {
             /**
              * Items
-             * @description List of items in the current page
+             * @description Mevcut sayfadaki öğelerin listesi
              */
             items: components["schemas"]["FeedbackResponse"][];
             /**
              * Total
-             * @description Total number of items across all pages
+             * @description Tüm sayfalardaki toplam öğe sayısı
              */
             total: number;
             /**
              * Page
-             * @description Current page number
+             * @description Mevcut sayfa numarası
              */
             page: number;
             /**
              * Size
-             * @description Number of items per page
+             * @description Sayfa başına öğe sayısı
              */
             size: number;
             /**
              * Pages
-             * @description Total number of pages available
+             * @description Toplam sayfa sayısı
              */
             pages: number;
         };
@@ -4332,27 +4457,27 @@ export interface components {
         PaginatedResponse_TrainingRunResponse_: {
             /**
              * Items
-             * @description List of items in the current page
+             * @description Mevcut sayfadaki öğelerin listesi
              */
             items: components["schemas"]["TrainingRunResponse"][];
             /**
              * Total
-             * @description Total number of items across all pages
+             * @description Tüm sayfalardaki toplam öğe sayısı
              */
             total: number;
             /**
              * Page
-             * @description Current page number
+             * @description Mevcut sayfa numarası
              */
             page: number;
             /**
              * Size
-             * @description Number of items per page
+             * @description Sayfa başına öğe sayısı
              */
             size: number;
             /**
              * Pages
-             * @description Total number of pages available
+             * @description Toplam sayfa sayısı
              */
             pages: number;
         };
@@ -4360,27 +4485,27 @@ export interface components {
         PaginatedResponse_TrainingSampleResponse_: {
             /**
              * Items
-             * @description List of items in the current page
+             * @description Mevcut sayfadaki öğelerin listesi
              */
             items: components["schemas"]["TrainingSampleResponse"][];
             /**
              * Total
-             * @description Total number of items across all pages
+             * @description Tüm sayfalardaki toplam öğe sayısı
              */
             total: number;
             /**
              * Page
-             * @description Current page number
+             * @description Mevcut sayfa numarası
              */
             page: number;
             /**
              * Size
-             * @description Number of items per page
+             * @description Sayfa başına öğe sayısı
              */
             size: number;
             /**
              * Pages
-             * @description Total number of pages available
+             * @description Toplam sayfa sayısı
              */
             pages: number;
         };
@@ -4391,27 +4516,28 @@ export interface components {
         };
         /**
          * PasswordChangeRequest
-         * @description Pydantic schema for updating current user's password securely.
+         * @description Mevcut kullanıcının parolasını güvenli şekilde güncellemek için Pydantic şeması.
          */
         PasswordChangeRequest: {
             /**
              * Current Password
-             * @description The user's current password
+             * @description Kullanıcının mevcut parolası
              */
             current_password: string;
             /**
              * New Password
-             * @description The user's new secure password
+             * @description Kullanıcının yeni güvenli parolası
              */
             new_password: string;
         };
         /**
          * PermissionGrantCreate
-         * @description Pydantic schema for delegating a permission to a user (Admin/Manager only).
+         * @description Bir kullanıcıya yetki devretmek için Pydantic şeması (yalnızca Admin/Manager).
          *
-         *     The target user is the ``{user_id}`` path parameter of
-         *     ``POST /users/{user_id}/permissions``, not a field here -- one row is
-         *     always "this action, to this specific person", never a bulk operation.
+         *     Hedef kullanıcı, ``POST /users/{user_id}/permissions``'ın
+         *     ``{user_id}`` path parametresidir, burada bir alan değil -- bir satır
+         *     her zaman "bu eylem, bu belirli kişiye" demektir, asla toplu bir
+         *     işlem değildir.
          */
         PermissionGrantCreate: {
             /**
@@ -4454,7 +4580,7 @@ export interface components {
         };
         /**
          * PermissionGrantResponse
-         * @description Pydantic schema for a persisted permission grant.
+         * @description Kalıcı bir yetki için Pydantic şeması.
          */
         PermissionGrantResponse: {
             /** Id */
@@ -4495,7 +4621,7 @@ export interface components {
         };
         /**
          * PoolItemCreate
-         * @description Pydantic schema for pushing one document into a specific pool.
+         * @description Bir evrakı belirli bir havuza itmek için Pydantic şeması.
          */
         PoolItemCreate: {
             /**
@@ -4508,7 +4634,7 @@ export interface components {
         };
         /**
          * PoolPushRequest
-         * @description Pydantic schema for a bulk push: one document, several recipients or a whole unit.
+         * @description Toplu itme için Pydantic şeması: bir evrak, birden çok alıcı veya tüm bir birim.
          */
         PoolPushRequest: {
             /**
@@ -4531,7 +4657,7 @@ export interface components {
         };
         /**
          * PoolPushResultItem
-         * @description Pydantic schema for one recipient's outcome within a bulk push.
+         * @description Toplu itme içinde bir alıcının sonucu için Pydantic şeması.
          */
         PoolPushResultItem: {
             /** User Id */
@@ -4546,24 +4672,25 @@ export interface components {
         };
         /**
          * ReasoningLevel
-         * @description Speed-vs-quality tradeoff requested for a single AI request.
+         * @description Tek bir AI isteği için talep edilen hız-kalite takası.
          * @enum {string}
          */
         ReasoningLevel: "fast" | "balanced" | "deep";
         /**
          * RefreshRequest
-         * @description Pydantic schema for access token renewal via refresh token.
+         * @description Refresh token aracılığıyla access token yenileme için Pydantic şeması.
          */
         RefreshRequest: {
             /**
              * Refresh Token
-             * @description Long-lived JWT Refresh Token
+             * @description Uzun ömürlü JWT Refresh Token
              */
             refresh_token: string;
         };
         /**
          * RoutingSuggestionRequest
-         * @description Request a unit-routing decision for a draft, independent of drafting it.
+         * @description Bir taslağı oluşturmaktan bağımsız olarak, onun için bir birim
+         *     yönlendirme kararı iste.
          */
         RoutingSuggestionRequest: {
             /**
@@ -4582,24 +4709,27 @@ export interface components {
         };
         /**
          * SensitivityLevel
-         * @description Official Turkish document confidentiality grades (``gizlilik derecesi``).
+         * @description Resmi Türkçe belge gizlilik dereceleri (``gizlilik derecesi``).
          *
-         *     Ordered from least to most restrictive so callers can compare levels
-         *     directly (``level >= SensitivityLevel.GIZLI``). ``UNMARKED`` sits below
-         *     ``TASNIF_DISI`` (the explicit "unclassified" grade) -- a document that
-         *     never stated a grade at all is not the same fact as one that was
-         *     positively marked unclassified, but neither blocks anything on its own.
+         *     Çağıranların seviyeleri doğrudan karşılaştırabilmesi için en az
+         *     kısıtlayıcıdan en çok kısıtlayıcıya sıralanmıştır
+         *     (``level >= SensitivityLevel.GIZLI``). ``UNMARKED``, ``TASNIF_DISI``'nin
+         *     (açık "tasnif dışı" derecesi) altında yer alır -- hiç derece
+         *     belirtmeyen bir belge, olumlu olarak tasnif dışı işaretlenmiş bir
+         *     belgeyle aynı gerçek değildir, ama ikisi de kendi başına hiçbir şeyi
+         *     engellemez.
          *
-         *     ``rank`` is the same ordering as an int, because Qdrant payload filters
-         *     compare numbers, not enum members: chunk/document metadata stores
-         *     ``sensitivity_rank`` alongside this value's string for exactly that
-         *     reason (see ``app.ai.retrieval`` range-filter wiring).
+         *     ``rank``, bir int ile aynı sıralamadır, çünkü Qdrant payload
+         *     filtreleri enum üyelerini değil sayıları karşılaştırır: parça/belge
+         *     metadatası tam olarak bu nedenle bu değerin dizesiyle birlikte
+         *     ``sensitivity_rank``'i saklar (bkz. ``app.ai.retrieval`` aralık-filtre
+         *     bağlantısı).
          * @enum {string}
          */
         SensitivityLevel: "unmarked" | "tasnif_disi" | "hizmete_ozel" | "ozel" | "gizli" | "cok_gizli";
         /**
          * TokenResponse
-         * @description Pydantic schema for token response payload.
+         * @description Token yanıtı payload'u için Pydantic şeması.
          */
         TokenResponse: {
             /**
@@ -4614,14 +4744,14 @@ export interface components {
             refresh_token: string;
             /**
              * Token Type
-             * @description Token type prefix
+             * @description Token tipi ön eki
              * @default bearer
              */
             token_type: string;
         };
         /**
          * TrainingRunResponse
-         * @description Pydantic schema for one training run.
+         * @description Bir eğitim çalıştırması için Pydantic şeması.
          */
         TrainingRunResponse: {
             /** Id */
@@ -4652,7 +4782,7 @@ export interface components {
         };
         /**
          * TrainingSampleResponse
-         * @description Pydantic schema for one compiled preference-pair sample.
+         * @description Derlenmiş bir tercih-çifti örneği için Pydantic şeması.
          */
         TrainingSampleResponse: {
             /** Id */
@@ -4686,7 +4816,7 @@ export interface components {
         };
         /**
          * TrainingSampleStatsResponse
-         * @description Pydantic schema for `GET /companies/{id}/training-samples/stats`.
+         * @description `GET /companies/{id}/training-samples/stats` için Pydantic şeması.
          */
         TrainingSampleStatsResponse: {
             /** Total */
@@ -4702,13 +4832,13 @@ export interface components {
         };
         /**
          * TransferSendRequest
-         * @description `POST /transfers/send` body -- the manual chat-initiated send.
+         * @description `POST /transfers/send` gövdesi -- manuel, sohbetten başlatılan gönderim.
          *
-         *     Recipient is always an explicit id here: this channel is fed by
-         *     `UserSearchDrawer`/`PersonPickerBody` (Faz 2), which already resolves a
-         *     name to a user before the request is ever made. Name-based resolution
-         *     (`RecipientResolutionService`) exists for the Faz 4 AI channel, not
-         *     this one.
+         *     Alıcı burada her zaman açık bir id'dir: bu kanal, istek yapılmadan
+         *     önce zaten bir ismi bir kullanıcıya çözümleyen
+         *     `UserSearchDrawer`/`PersonPickerBody` (Faz 2) tarafından beslenir.
+         *     İsim tabanlı çözümleme (`RecipientResolutionService`) bu kanal için
+         *     değil, Faz 4 AI kanalı için mevcuttur.
          */
         TransferSendRequest: {
             /**
@@ -4733,7 +4863,7 @@ export interface components {
         };
         /**
          * UnitCreate
-         * @description Pydantic schema for creating a new routable unit.
+         * @description Yeni bir yönlendirilebilir birim oluşturmak için Pydantic şeması.
          */
         UnitCreate: {
             /**
@@ -4749,7 +4879,7 @@ export interface components {
         };
         /**
          * UnitMemberCreate
-         * @description Pydantic schema for adding a user to a unit.
+         * @description Bir kullanıcıyı bir birime eklemek için Pydantic şeması.
          */
         UnitMemberCreate: {
             /**
@@ -4771,7 +4901,7 @@ export interface components {
         };
         /**
          * UnitMemberResponse
-         * @description Pydantic schema for a unit membership, joined with the member's basic identity.
+         * @description Üyenin temel kimliğiyle birleştirilmiş bir birim üyeliği için Pydantic şeması.
          */
         UnitMemberResponse: {
             /**
@@ -4802,7 +4932,7 @@ export interface components {
         };
         /**
          * UnitResponse
-         * @description Pydantic schema for unit details output.
+         * @description Birim detayları çıktısı için Pydantic şeması.
          */
         UnitResponse: {
             /**
@@ -4828,7 +4958,7 @@ export interface components {
         };
         /**
          * UnitUpdate
-         * @description Pydantic schema for updating an existing unit. All fields optional.
+         * @description Var olan bir birimi güncellemek için Pydantic şeması. Tüm alanlar isteğe bağlı.
          */
         UnitUpdate: {
             /** Name */
@@ -4852,122 +4982,123 @@ export interface components {
         };
         /**
          * UserCreate
-         * @description Pydantic schema for creating a new user account.
+         * @description Yeni bir kullanıcı hesabı oluşturmak için Pydantic şeması.
          *
-         *     Deliberately has no ``clearance_level`` field: registration is
-         *     self-service (gated only by the invite whitelist, no auth required), so
-         *     letting a registrant set their own confidentiality ceiling would be a
-         *     self-escalation hole. Every new account starts at
-         *     ``UserModel.clearance_level``'s column default and can only be raised
-         *     afterwards by an admin via ``PUT /users/{id}``.
+         *     Kasıtlı olarak ``clearance_level`` alanı yoktur: kayıt self-servistir
+         *     (sadece davet beyaz listesi ile kısıtlanır, kimlik doğrulama gerekmez),
+         *     bu yüzden kayıt olan kişinin kendi gizlilik tavanını belirlemesine izin
+         *     vermek, kendi kendine yetki yükseltme açığı olurdu. Her yeni hesap
+         *     ``UserModel.clearance_level``'ın kolon varsayılanıyla başlar ve sonradan
+         *     sadece bir admin tarafından ``PUT /users/{id}`` ile yükseltilebilir.
          */
         UserCreate: {
             /**
              * Username
-             * @description Unique username
+             * @description Benzersiz kullanıcı adı
              */
             username: string;
             /**
              * Email
              * Format: email
-             * @description Unique email address
+             * @description Benzersiz e-posta adresi
              */
             email: string;
             /**
              * Password
-             * @description Plain text password
+             * @description Düz metin parola
              */
             password: string;
             /**
-             * @description Assigned role for authorization
+             * @description Yetkilendirme için atanan rol
              * @default employee
              */
             role: components["schemas"]["UserRole"];
         };
         /**
          * UserResponse
-         * @description Pydantic schema for user account details output.
+         * @description Kullanıcı hesabı detayları çıktısı için Pydantic şeması.
          */
         UserResponse: {
             /**
              * Id
-             * @description Unique user ID
+             * @description Benzersiz kullanıcı ID'si
              */
             id: string;
             /**
              * Company Id
-             * @description Owning company (NULL for root)
+             * @description Sahip şirket (root için NULL)
              */
             company_id?: string | null;
             /**
              * Username
-             * @description Unique username
+             * @description Benzersiz kullanıcı adı
              */
             username: string;
             /**
              * Email
              * Format: email
-             * @description Unique email address
+             * @description Benzersiz e-posta adresi
              */
             email: string;
-            /** @description Assigned authorization role */
+            /** @description Atanan yetkilendirme rolü */
             role: components["schemas"]["UserRole"];
-            /** @description Confidentiality ceiling (EMPLOYEE role only). */
+            /** @description Gizlilik tavanı (sadece EMPLOYEE rolü için). */
             clearance_level: components["schemas"]["SensitivityLevel"];
             /**
              * Is Active
-             * @description Status of user account
+             * @description Kullanıcı hesabının durumu
              */
             is_active: boolean;
             /**
              * Is Deleted
-             * @description Soft deletion flag status
+             * @description Soft delete bayrağının durumu
              */
             is_deleted: boolean;
         };
         /**
          * UserRole
-         * @description User role types used throughout the system for RBAC.
+         * @description Sistem genelinde RBAC için kullanılan kullanıcı rol türleri.
          *
-         *     Four roles, one per level of the tenancy hierarchy:
+         *     Kiracılık hiyerarşisinin her seviyesi için bir tane olmak üzere dört rol:
          *
-         *     - ROOT: platform operator, not bound to any company (``UserModel.
-         *       company_id`` is NULL only for this role). Sees every company, never a
-         *       company's business data directly -- see ``app.core.authz`` for how a
-         *       root subject must explicitly scope to a company before any
-         *       company-resource action is permitted.
-         *     - ADMIN: a company admin, created by root, scoped to exactly one
-         *       company.
-         *     - MANAGER: a company manager, designated by that company's admin.
-         *     - EMPLOYEE: a company employee, designated by an admin or manager.
+         *     - ROOT: herhangi bir şirkete bağlı olmayan platform operatörü
+         *       (``UserModel.company_id`` yalnızca bu rol için NULL'dur). Her
+         *       şirketi görür, asla bir şirketin iş verisini doğrudan görmez -- bir
+         *       root öznesinin herhangi bir şirket-kaynağı eylemine izin verilmeden
+         *       önce açıkça bir şirkete nasıl kapsanması gerektiği için
+         *       ``app.core.authz``'ye bakın.
+         *     - ADMIN: root tarafından oluşturulan, tam olarak bir şirkete kapsanan
+         *       bir şirket admini.
+         *     - MANAGER: o şirketin admini tarafından atanan bir şirket müdürü.
+         *     - EMPLOYEE: bir admin veya müdür tarafından atanan bir şirket çalışanı.
          *
-         *     ROOT, ADMIN and MANAGER all clear every confidentiality level (see
-         *     ``GuardrailPolicy.role_clearance_map``) -- MANAGER represents a company
-         *     manager, trusted with full access the same as ADMIN. EMPLOYEE's ceiling
-         *     is not fixed by role at all: it comes from that individual's own
-         *     ``UserModel.clearance_level``, since two employees can legitimately need
-         *     different access.
+         *     ROOT, ADMIN ve MANAGER'ın hepsi her gizlilik seviyesini açar (bkz.
+         *     ``GuardrailPolicy.role_clearance_map``) -- MANAGER, ADMIN ile aynı tam
+         *     erişime güvenilen bir şirket müdürünü temsil eder. EMPLOYEE'nin tavanı
+         *     rol tarafından hiç sabitlenmemiştir: o bireyin kendi
+         *     ``UserModel.clearance_level``'ından gelir, çünkü iki çalışan meşru
+         *     biçimde farklı erişime ihtiyaç duyabilir.
          * @enum {string}
          */
         UserRole: "root" | "admin" | "manager" | "employee";
         /**
          * UserUpdate
-         * @description Pydantic schema for updating a user account.
+         * @description Bir kullanıcı hesabını güncellemek için Pydantic şeması.
          */
         UserUpdate: {
             /**
              * Email
-             * @description Optional updated email address
+             * @description İsteğe bağlı güncellenmiş e-posta adresi
              */
             email?: string | null;
-            /** @description Optional updated authorization role */
+            /** @description İsteğe bağlı güncellenmiş yetkilendirme rolü */
             role?: components["schemas"]["UserRole"] | null;
             /**
              * Is Active
-             * @description Optional updated status of user account
+             * @description İsteğe bağlı güncellenmiş kullanıcı hesabı durumu
              */
             is_active?: boolean | null;
-            /** @description Optional updated confidentiality ceiling (EMPLOYEE role only -- ADMIN/MANAGER clear everything regardless of this value). Admin-only, same as role/is_active. */
+            /** @description İsteğe bağlı güncellenmiş gizlilik tavanı (sadece EMPLOYEE rolü için -- ADMIN/MANAGER bu değerden bağımsız olarak her şeyi geçer). role/is_active gibi sadece admin için. */
             clearance_level?: components["schemas"]["SensitivityLevel"] | null;
         };
         /** ValidationError */
@@ -5600,6 +5731,37 @@ export interface operations {
             };
         };
     };
+    cancel_chat_session_api_v1_chat_sessions__session_id__cancel_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_companies_api_v1_companies_get: {
         parameters: {
             query?: {
@@ -5995,26 +6157,6 @@ export interface operations {
             };
         };
     };
-    get_corpus_graph_api_v1_documents_graph_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-        };
-    };
     analyze_document_api_v1_documents_analyze_post: {
         parameters: {
             query?: never;
@@ -6027,37 +6169,6 @@ export interface operations {
                 "multipart/form-data": components["schemas"]["Body_analyze_document_api_v1_documents_analyze_post"];
             };
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_document_graph_api_v1_documents__storage_path__graph_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                storage_path: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -6164,6 +6275,26 @@ export interface operations {
             };
         };
     };
+    get_corpus_graph_api_v1_documents_graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     update_document_fields_api_v1_documents__storage_path__fields_patch: {
         parameters: {
             query?: never;
@@ -6200,6 +6331,37 @@ export interface operations {
         };
     };
     generate_detailed_summary_api_v1_documents__storage_path__detailed_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                storage_path: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_document_graph_api_v1_documents__storage_path__graph_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -6565,6 +6727,37 @@ export interface operations {
                 "application/json": components["schemas"]["DraftDestinationUpdateRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_draft_review_api_v1_drafts__draft_id__review_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

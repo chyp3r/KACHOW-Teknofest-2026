@@ -14,17 +14,18 @@ from app.core.context import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
-# Create async engine for PostgreSQL connection -- the app's restricted,
-# non-owner role from Faz 3 (Postgres RLS) onward. See settings.DATABASE_URL's
-# own docstring for why this must not be a table-owning/superuser connection.
+# PostgreSQL bağlantısı için eşzamansız motor oluştur -- Faz 3'ten (Postgres
+# RLS) itibaren uygulamanın kısıtlı, owner olmayan rolü. Bunun neden bir
+# tablo-sahibi/superuser bağlantısı olmaması gerektiği için
+# settings.DATABASE_URL'in kendi docstring'ine bakın.
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=False,  # Set to True for debug SQL query logging
+    echo=False,  # Debug SQL sorgu loglaması için True yapın
     future=True,
-    pool_pre_ping=True,  # Test connections before using
+    pool_pre_ping=True,  # Kullanmadan önce bağlantıları test et
 )
 
-# Async session maker
+# Eşzamansız oturum oluşturucu
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     class_=AsyncSession,
@@ -33,11 +34,11 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
-#: The schema-owner connection -- see settings.ALEMBIC_DATABASE_URL's
-#: docstring. Used only by get_owner_db below, for the narrow set of
-#: pre-tenant identity lookups that must bypass row-level security by
-#: necessity (see that function's own docstring), never as a general escape
-#: hatch.
+#: Şema sahibi bağlantısı -- bkz. settings.ALEMBIC_DATABASE_URL'in
+#: docstring'i. Yalnızca aşağıdaki get_owner_db tarafından, satır düzeyi
+#: güvenliği zorunlu olarak atlaması gereken dar bir tenant-öncesi kimlik
+#: arama seti için kullanılır (bkz. o fonksiyonun kendi docstring'i), asla
+#: genel bir kaçış kapağı olarak değil.
 owner_engine = create_async_engine(
     settings.effective_alembic_database_url,
     echo=False,
@@ -55,27 +56,27 @@ OwnerAsyncSessionLocal = async_sessionmaker(
 
 
 async def _apply_tenant_guc(session: AsyncSession, company_id: Optional[str], is_root: bool) -> None:
-    """Set the Postgres GUCs the RLS policies (migration 0013_rls) key off of.
+    """RLS politikalarının (migration 0013_rls) anahtarladığı Postgres GUC'larını ayarla.
 
-    Must be the *first* statement run on ``session``. ``AsyncSession`` begins
-    its transaction lazily, on first use, and ``set_config(..., true)`` (==
-    ``SET LOCAL``) only lasts for the transaction it's issued in -- calling
-    this before the caller runs anything else makes it the statement that
-    begins the transaction, so the setting survives for every later
-    statement on this session, right up to the final commit/rollback.
-    Calling it any later would let an earlier, GUC-less statement start (and
-    on the request path, possibly finish) its own transaction first, and the
-    setting would evaporate the moment that one committed.
+    ``session`` üzerinde çalıştırılan *ilk* ifade olmalıdır. ``AsyncSession``
+    işlemine tembel biçimde, ilk kullanımda başlar, ve ``set_config(..., true)``
+    (== ``SET LOCAL``) yalnızca verildiği işlem boyunca sürer -- çağıran
+    başka bir şey çalıştırmadan önce bunu çağırmak, onu işlemi başlatan
+    ifade yapar, bu yüzden ayar bu oturumdaki her sonraki ifade için,
+    nihai commit/rollback'e kadar hayatta kalır. Bunu daha sonra çağırmak,
+    daha önceki, GUC'suz bir ifadenin önce kendi işlemini başlatmasına (ve
+    istek yolunda, muhtemelen bitirmesine) izin verirdi, ve ayar o işlem
+    commit olduğu anda buharlaşırdı.
 
     Args:
-        session: A freshly opened session, nothing executed on it yet.
-        company_id: Scopes ``app.current_company_id``. ``None``/falsy
-            becomes the empty string, which matches no real row's
-            ``company_id`` (all NOT NULL, non-empty) -- the fail-secure
-            "no tenant identified" state.
-        is_root: Sets ``app.is_root``, which the RLS policies OR into their
-            ``company_id`` comparison so a scoped-in root subject can read
-            across companies.
+        session: Yeni açılmış bir oturum, üzerinde henüz hiçbir şey çalıştırılmadı.
+        company_id: ``app.current_company_id``'yi kapsar. ``None``/falsy,
+            gerçek hiçbir satırın ``company_id``'siyle eşleşmeyen (hepsi
+            NOT NULL, boş değil) boş dizeye dönüşür -- güvenli-başarısız
+            "tanımlanmış tenant yok" durumu.
+        is_root: RLS politikalarının ``company_id`` karşılaştırmalarına OR
+            ile eklediği ``app.is_root``'u ayarlar, böylece kapsama alınmış
+            bir root öznesi şirketler arasında okuyabilir.
     """
     await session.execute(
         text("SELECT set_config('app.current_company_id', :cid, true)"),
@@ -88,19 +89,20 @@ async def _apply_tenant_guc(session: AsyncSession, company_id: Optional[str], is
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency yielding an asynchronous SQLAlchemy database session.
+    """Eşzamansız bir SQLAlchemy veritabanı oturumu veren FastAPI bağımlılığı.
 
-    Applies the current request's tenant GUCs (see ``_apply_tenant_guc``)
-    before yielding -- resolved from ``app.core.context.get_current_tenant``,
-    which ``app.api.middleware.tenant.TenantContextMiddleware`` populates
-    from the request's JWT before any dependency runs. No tenant context (an
-    anonymous request, or one whose auth dependency hasn't rejected it yet)
-    resolves to an empty company scope and ``is_root=False``: row-level
-    security then returns zero rows on every RLS'd table, the fail-secure
-    default -- the same shape ``app.core.permissions.role_checker.
-    clearance_for`` already documents for "unknown clearance clears nothing".
+    Vermeden önce mevcut isteğin tenant GUC'larını uygular (bkz.
+    ``_apply_tenant_guc``) -- herhangi bir bağımlılık çalışmadan önce
+    ``app.api.middleware.tenant.TenantContextMiddleware``'in isteğin
+    JWT'sinden doldurduğu ``app.core.context.get_current_tenant``'tan
+    çözülür. Tenant bağlamı yoksa (anonim bir istek, veya auth bağımlılığı
+    henüz reddetmemiş biri) boş bir şirket kapsamına ve ``is_root=False``'a
+    çözülür: satır düzeyi güvenlik daha sonra her RLS'li tabloda sıfır satır
+    döndürür, güvenli-başarısız varsayılan -- ``app.core.permissions.
+    role_checker.clearance_for``'un "bilinmeyen yetki hiçbir şeyi
+    açmaz" için zaten belgelediği aynı şekil.
 
-    Cleans up resources and rolls back on failure automatically.
+    Kaynakları temizler ve başarısızlıkta otomatik olarak geri alır.
     """
     async with AsyncSessionLocal() as session:
         try:
@@ -124,23 +126,24 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def get_owner_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency yielding a session on the schema-owner connection.
+    """Şema sahibi bağlantısında bir oturum veren FastAPI bağımlılığı.
 
-    For the narrow set of pre-tenant identity lookups that must search
-    ``users``/``invited_emails`` by a globally-unique ``username``/``email``
-    *before* any company context exists to scope a row-level-security policy
-    by: ``POST /auth/login``, ``POST /auth/refresh``, ``POST /users``
-    (invite-gated registration). See ``settings.ALEMBIC_DATABASE_URL``'s
-    docstring.
+    Bir satır düzeyi güvenlik politikasının kapsayacağı herhangi bir şirket
+    bağlamı var olmadan *önce* ``users``/``invited_emails``'i küresel
+    olarak benzersiz bir ``username``/``email`` ile aramak zorunda olan
+    dar tenant-öncesi kimlik arama seti için: ``POST /auth/login``,
+    ``POST /auth/refresh``, ``POST /users`` (davet ile kapılı kayıt).
+    ``settings.ALEMBIC_DATABASE_URL``'in docstring'ine bakın.
 
-    Deliberately bypasses row-level security entirely -- the owner
-    connection always can, regardless of any policy (see migration
-    ``0013_rls``'s own module docstring on why the app's normal connection
-    must NOT be able to do this). Safe here *only* because every query these
-    three routes run is inherently cross-tenant by definition -- a
-    username/email is unique system-wide, not per company -- never because
-    the caller is trusted with anything more than that. Every other route
-    continues to use ``get_db``.
+    Bilinçli olarak satır düzeyi güvenliği tamamen atlar -- owner bağlantısı
+    herhangi bir politikadan bağımsız olarak her zaman yapabilir (bunun
+    uygulamanın normal bağlantısının neden YAPAMAMASI gerektiği için
+    migration ``0013_rls``'in kendi modül docstring'ine bakın). Burada
+    yalnızca *bu üç rotanın çalıştırdığı her sorgu tanımı gereği doğal
+    olarak şirketler arası olduğu için* güvenlidir -- bir username/email
+    sistem genelinde benzersizdir, şirket başına değil -- asla çağıranın
+    bundan fazlasıyla güvenildiği için değil. Diğer her rota ``get_db``'yi
+    kullanmaya devam eder.
     """
     async with OwnerAsyncSessionLocal() as session:
         try:
@@ -161,20 +164,20 @@ async def get_owner_db() -> AsyncGenerator[AsyncSession, None]:
 async def tenant_session(
     company_id: Optional[str], is_root: bool = False
 ) -> AsyncGenerator[AsyncSession, None]:
-    """A ``get_db``-equivalent session for code with no request to read tenant context from.
+    """Tenant bağlamını okuyacak bir isteği olmayan kod için ``get_db``-eşdeğeri bir oturum.
 
-    For out-of-request writers/readers that already know which company
-    they're acting for: ``app.domains.units.provider.
-    get_active_units_for_routing``, the users/units seeders
-    (``app.domains.users.seeder``, ``app.domains.units.seeder``), the four
-    best-effort recorders (``app.domains.drafts.draft_recorder``,
+    Zaten hangi şirket için hareket ettiklerini bilen istek-dışı
+    yazarlar/okuyucular için: ``app.domains.units.provider.
+    get_active_units_for_routing``, kullanıcı/birim seeder'ları
+    (``app.domains.users.seeder``, ``app.domains.units.seeder``), dört
+    en iyi çaba kaydedicisi (``app.domains.drafts.draft_recorder``,
     ``app.observability.run_recorder``/``guardrail_recorder``,
-    ``app.domains.chat.chat_recorder`` -- since migration ``0016_recorder_
-    tables_rls``, see ``RunModel.company_id``'s docstring), and
-    ``app.events.subscribers``' notification-writing listeners. Applies the
-    same GUCs ``get_db`` does (see ``_apply_tenant_guc``), from explicit
-    arguments instead of ``app.core.context.get_current_tenant`` -- there is
-    no request in flight to have populated it.
+    ``app.domains.chat.chat_recorder`` -- migration ``0016_recorder_
+    tables_rls``'ten beri, bkz. ``RunModel.company_id``'nin docstring'i),
+    ve ``app.events.subscribers``'in bildirim yazan dinleyicileri.
+    ``get_db``'nin yaptığı aynı GUC'ları (bkz. ``_apply_tenant_guc``),
+    ``app.core.context.get_current_tenant`` yerine açık argümanlardan
+    uygular -- bunu doldurmuş uçan bir istek yoktur.
     """
     async with AsyncSessionLocal() as session:
         try:
@@ -193,7 +196,7 @@ async def tenant_session(
 
 
 async def verify_db_connection() -> bool:
-    """Verify that we can establish a connection to the PostgreSQL database."""
+    """PostgreSQL veritabanına bağlantı kurabildiğimizi doğrula."""
     try:
         async with AsyncSessionLocal() as session:
             result = await session.execute(text("SELECT 1"))

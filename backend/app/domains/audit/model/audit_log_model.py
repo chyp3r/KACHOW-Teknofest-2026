@@ -8,36 +8,38 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class AuditLogModel(Base, TimestampMixin):
-    """One tamper-evident row in a company's (or root's system-wide) audit
-    hash chain.
+    """Bir şirketin (veya root'un sistem geneli) audit hash zincirinde
+    kurcalamaya karşı kanıt sağlayan (tamper-evident) tek bir satır.
 
-    `hash = sha256(prev_hash || canonical_json(row))` (see
-    `AuditLogRepository._compute_hash`) -- `prev_hash` links back to the
-    previous row in the *same* chain, so altering or deleting any row
-    breaks every hash after it. `seq` is monotonic *within one chain*, not
-    globally: `verify_chain` walks rows in `seq` order for one `company_id`
-    and recomputes the chain from scratch.
+    `hash = sha256(prev_hash || canonical_json(row))` (bkz.
+    `AuditLogRepository._compute_hash`) -- `prev_hash`, *aynı* zincirdeki
+    önceki satıra geri bağlanır, bu yüzden herhangi bir satırı değiştirmek
+    veya silmek ondan sonraki her hash'i bozar. `seq` *bir zincir içinde*
+    monoton artar, global olarak değil: `verify_chain` bir `company_id`
+    için satırları `seq` sırasında gezer ve zinciri sıfırdan yeniden
+    hesaplar.
 
-    `company_id` is nullable -- the one exception among this codebase's
-    tenant tables -- because a `UserRole.ROOT` subject can perform genuinely
-    system-wide actions with no single company as their target (see
-    `app.core.authz.attributes.Resource.company_id`'s own docstring for the
-    same allowance). This does not weaken RLS: the existing
-    `tenant_isolation` policy shape (`company_id = current_setting(...) OR
-    is_root`) already resolves a `NULL` `company_id` to "only visible under
-    `app.is_root`", which is exactly the intended visibility for a
-    system-wide row.
+    `company_id` nullable'dır -- bu kod tabanının kiracı tablolarındaki tek
+    istisna -- çünkü bir `UserRole.ROOT` öznesi, hedefi tek bir şirket
+    olmayan gerçekten sistem geneli eylemler gerçekleştirebilir (aynı izin
+    için bkz. `app.core.authz.attributes.Resource.company_id`'nin kendi
+    docstring'i). Bu, RLS'yi zayıflatmaz: mevcut `tenant_isolation`
+    politikası şekli (`company_id = current_setting(...) OR is_root`) zaten
+    `NULL` bir `company_id`'yi "yalnızca `app.is_root` altında görünür"
+    olarak çözer, ki bu tam olarak sistem geneli bir satır için amaçlanan
+    görünürlüktür.
     """
 
     __tablename__ = "audit_log"
     __table_args__ = (
-        #: Postgres does NOT treat multiple `company_id IS NULL` rows as
-        #: colliding under a UNIQUE constraint (`NULL <> NULL`), so this
-        #: constraint alone cannot police the system-wide (`company_id IS
-        #: NULL`) chain's sequence uniqueness -- `AuditLogRepository.append`
-        #: computes `seq` via `company_id IS NOT DISTINCT FROM :company_id`
-        #: specifically to stay correct for that chain too (the same class
-        #: of NULL-grouping bug fixed in `DraftRepository.list_drafts`).
+        #: Postgres, birden fazla `company_id IS NULL` satırını bir UNIQUE
+        #: kısıtı altında çakışıyor saymaz (`NULL <> NULL`), bu yüzden bu
+        #: kısıt tek başına sistem geneli (`company_id IS NULL`) zincirin
+        #: sıra tekilliğini (sequence uniqueness) denetleyemez --
+        #: `AuditLogRepository.append`, `seq`'i tam olarak o zincir için de
+        #: doğru kalması için `company_id IS NOT DISTINCT FROM :company_id`
+        #: üzerinden hesaplar (`DraftRepository.list_drafts`'ta düzeltilen
+        #: aynı sınıftan NULL-gruplama hatası).
         UniqueConstraint("company_id", "seq", name="uq_audit_log_company_seq"),
     )
 
@@ -50,18 +52,20 @@ class AuditLogModel(Base, TimestampMixin):
         String, ForeignKey("users.id"), nullable=True, index=True
     )
     actor_role: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    #: Set only when a ROOT subject acted through the (not-yet-implemented --
-    #: see the tenancy plan's own §1.1 note on the scope-switch header)
-    #: `X-Company-Scope` path; `NULL` for everything else, including every
-    #: row this phase actually writes.
+    #: Yalnızca bir ROOT öznesi (henüz uygulanmamış -- bkz. kiracılık
+    #: planının kapsam-değiştirme başlığına dair kendi §1.1 notu)
+    #: `X-Company-Scope` yolu üzerinden hareket ettiğinde ayarlanır; bu
+    #: aşamanın gerçekte yazdığı her satır dahil, geri kalan her şey için
+    #: `NULL`.
     acting_as_company_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     action: Mapped[str] = mapped_column(String, nullable=False, index=True)
     resource_type: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     resource_id: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    #: "permit" | "deny" -- mirrors `app.core.authz.engine.Decision.permit`,
-    #: but this table also records actions with no ABAC decision behind
-    #: them at all (a company create by ROOT has no `authorize()` call to
-    #: report), where this is simply "permit" (the action happened).
+    #: "permit" | "deny" -- `app.core.authz.engine.Decision.permit`'i
+    #: yansıtır, ama bu tablo arkasında hiç ABAC kararı olmayan eylemleri de
+    #: kaydeder (ROOT tarafından bir şirket oluşturmanın bildirecek bir
+    #: `authorize()` çağrısı yoktur), burada bu basitçe "permit"tir (eylem
+    #: gerçekleşti).
     decision: Mapped[str] = mapped_column(String, nullable=False, default="permit")
     reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     before: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)

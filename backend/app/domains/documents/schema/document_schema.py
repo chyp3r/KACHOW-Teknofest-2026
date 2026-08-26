@@ -13,11 +13,11 @@ from app.shared.validator.storage_path_validator import validate_storage_path
 
 
 class PiiFindingSchema(BaseModel):
-    """One PII pattern match, surfaced without the raw sensitive value.
+    """Ham hassas değer olmadan sunulan bir PII kalıp eşleşmesi.
 
-    ``preview`` is always the redacted form (see ``app.ai.guardrails.pii.
-    PiiFinding``) -- this schema crosses the API boundary, so the same rule
-    that keeps a raw TCKN/IBAN out of logs and the audit trail applies here.
+    ``preview`` her zaman sansürlenmiş formdur (bkz. ``app.ai.guardrails.pii.
+    PiiFinding``) -- bu şema API sınırını geçtiği için, ham bir TCKN/IBAN'ı
+    loglardan ve denetim izinden uzak tutan aynı kural burada da geçerlidir.
     """
 
     kind: str = Field(description="Bulgu türü (örn. 'tckn', 'iban', 'telefon', 'adres').")
@@ -25,7 +25,7 @@ class PiiFindingSchema(BaseModel):
 
 
 class GuardrailAssessmentSchema(BaseModel):
-    """Input-side guardrail outcome for one document (see
+    """Bir evrak için girdi tarafı guardrail sonucu (bkz.
     ``app.ai.guardrails.sensitivity.assess``)."""
 
     sensitivity_level: SensitivityLevel = Field(
@@ -65,7 +65,7 @@ class GuardrailAssessmentSchema(BaseModel):
 
 
 class ExtractionInfoSchema(BaseModel):
-    """Provenance of the text the analysis was performed on."""
+    """Analizin üzerinde yapıldığı metnin kaynağı."""
 
     extractor: str = Field(description="Metni çıkaran bileşen.")
     page_count: int = Field(description="İşlenen sayfa sayısı.")
@@ -80,21 +80,22 @@ class ExtractionInfoSchema(BaseModel):
 
 
 class MevzuatReferenceSchema(BaseModel):
-    """A legislation reference suggested for the document."""
+    """Evrak için önerilen bir mevzuat atfı."""
 
     mevzuat: str = Field(description="Mevzuat adı ve varsa madde numarası.")
     aciklama: str = Field(description="Bu hükmün evrakla ilişkisi.")
 
 
 class DetectedMarkSchema(BaseModel):
-    """One region flagged as possibly a signature, stamp, or handwritten
-    annotation (see ``app.infrastructure.extractors.marks.DetectedMark``, the
-    infrastructure-layer type this mirrors rather than reuses directly --
-    same reasoning as ``ExtractionInfoSchema`` not reusing ``ExtractedDocument``).
+    """Muhtemelen bir imza, mühür veya el yazısı not olarak işaretlenmiş bir
+    bölge (bkz. ``app.infrastructure.extractors.marks.DetectedMark``; bu
+    şema o altyapı katmanı tipini doğrudan yeniden kullanmak yerine
+    yansıtır -- ``ExtractionInfoSchema``'nın ``ExtractedDocument``'ı yeniden
+    kullanmamasıyla aynı mantık).
 
-    A heuristic review hint, not a forensic determination: there is no
-    hand-labelled signature/stamp dataset for this project's document
-    corpus, so nothing here carries a measured accuracy.
+    Adli bir tespit değil, sezgisel bir inceleme ipucudur: bu projenin
+    evrak külliyatı için elle etiketlenmiş bir imza/mühür veri kümesi
+    yoktur, bu yüzden buradaki hiçbir değer ölçülmüş bir doğruluk taşımaz.
     """
 
     kind: str = Field(description="'signature', 'stamp' veya 'handwriting'.")
@@ -106,9 +107,9 @@ class DetectedMarkSchema(BaseModel):
 
 
 class SignatureAssessmentSchema(BaseModel):
-    """Signature/stamp detection outcome for one document -- a review aid,
-    never an authoritative substitute for `fields.imza_sahibi` (the typed
-    name) or for actually opening the document. See `DetectedMarkSchema`.
+    """Bir evrak için imza/mühür tespit sonucu -- bir inceleme yardımcısıdır,
+    `fields.imza_sahibi`'nin (tipli isim) veya evrakı fiilen açmanın yerine
+    asla yetkili bir alternatif değildir. Bkz. `DetectedMarkSchema`.
     """
 
     is_signed: bool = Field(
@@ -125,11 +126,12 @@ class SignatureAssessmentSchema(BaseModel):
 
 
 class DocumentAnalysisResponseSchema(BaseModel):
-    """Full first-review (ön inceleme) result for an incoming document.
+    """Gelen bir evrak için tam ön inceleme sonucu.
 
-    Composes the AI-layer contracts (`EvrakField`, `MissingField`) instead of
-    restating their fields: they are framework-free Pydantic data models, and
-    duplicating fourteen field definitions would create a second source of truth.
+    Alanlarını yeniden yazmak yerine AI katmanı sözleşmelerini (`EvrakField`,
+    `MissingField`) bir araya getirir: bunlar framework'ten bağımsız Pydantic
+    veri modelleridir ve on dört alan tanımını tekrarlamak ikinci bir gerçek
+    kaynağı yaratırdı.
     """
 
     file_name: str = Field(description="Yüklenen dosyanın adı.")
@@ -141,14 +143,15 @@ class DocumentAnalysisResponseSchema(BaseModel):
     document_type: DocumentType = Field(description="Belirlenen evrak türü.")
     document_type_label: str = Field(description="Evrak türünün Türkçe adı.")
     summary: str = Field(description="Evrakın kısa Türkçe özeti.")
-    #: Defaulted to None, not empty string: distinguishes "never requested"
-    #: from "generated but somehow empty", and lets the ~20 on-disk
-    #: *_analysis.json caches predating this field keep validating --
-    #: get_cached_analysis returns None (-> HTTP 404) on any validation
-    #: failure, so this is load-bearing, not decorative (same constraint
-    #: that governed `signature` above). Populated on-demand by
-    #: DocumentService.generate_detailed_summary, never by analyze_document
-    #: itself -- see that method's own docstring for why.
+    #: Boş string değil None olarak varsayılır: "hiç istenmedi" ile
+    #: "üretildi ama bir şekilde boş"u ayırt eder ve bu alandan önce var
+    #: olan diskteki ~20 *_analysis.json önbelleğinin doğrulanmaya devam
+    #: etmesini sağlar -- get_cached_analysis herhangi bir doğrulama
+    #: hatasında None döner (-> HTTP 404), bu yüzden bu süslemeden çok
+    #: işlevseldir (yukarıdaki `signature` için geçerli olan aynı kısıt).
+    #: DocumentService.generate_detailed_summary tarafından isteğe bağlı
+    #: doldurulur, analyze_document'ın kendisi tarafından asla -- neden
+    #: olduğu için o metodun kendi docstring'ine bakın.
     detailed_summary: Optional[str] = Field(
         default=None,
         description=(
@@ -176,29 +179,30 @@ class DocumentAnalysisResponseSchema(BaseModel):
 
 
 class DocumentFieldsUpdateSchema(BaseModel):
-    """Payload for manually correcting a document's extracted fields.
+    """Bir evrakın çıkarılan alanlarını elle düzeltmek için gövde.
 
-    The full ``EvrakField`` set is replaced wholesale rather than patched
-    key-by-key -- the frontend form always round-trips every field it
-    rendered (including ones already correctly detected), so a partial
-    payload would have no way to distinguish "leave this alone" from "the
-    user cleared it".
+    Tam ``EvrakField`` kümesi anahtar anahtar yamalanmak yerine bütünüyle
+    değiştirilir -- ön yüz formu render ettiği her alanı (zaten doğru
+    tespit edilenler dahil) her zaman geri gönderir, bu yüzden kısmi bir
+    gövdenin "buna dokunma" ile "kullanıcı temizledi"yi ayırt etmesinin
+    hiçbir yolu olmazdı.
     """
 
     fields: EvrakField = Field(description="Kullanıcı tarafından düzeltilmiş üstveri alanları.")
 
 
 class DocumentTextSchema(BaseModel):
-    """The extracted/OCR text of a previously analysed document.
+    """Daha önce analiz edilmiş bir evrakın çıkarılmış/OCR edilmiş metni.
 
-    Backs the "view and correct OCR text" panel section. Deliberately kept
-    off ``DocumentAnalysisResponseSchema`` rather than added as a field on
-    it: that schema is persisted verbatim under the analysis cache's
-    ``"analysis"`` key and re-sent on every document-list selection, so
-    hanging multi-thousand-character text off it would store the text twice
-    per document (see ``DocumentService._save_document_analysis_cache``,
-    which already persists ``extracted_text``/``pages`` as sibling keys) and
-    pay that transfer cost on every unrelated read.
+    "OCR metnini görüntüle ve düzelt" panel bölümünü destekler. Bilerek
+    ``DocumentAnalysisResponseSchema``'ya bir alan olarak eklenmek yerine
+    ondan ayrı tutulur: o şema, analiz önbelleğinin ``"analysis"`` anahtarı
+    altında olduğu gibi kalıcı hale getirilir ve her evrak-listesi
+    seçiminde yeniden gönderilir, bu yüzden binlerce karakterlik metni ona
+    asmak evrak başına metni iki kez saklamak (bkz.
+    ``DocumentService._save_document_analysis_cache``, ``extracted_text``/
+    ``pages``'i zaten kardeş anahtarlar olarak kalıcı hale getiriyor) ve bu
+    aktarım maliyetini her ilgisiz okumada ödemek anlamına gelirdi.
     """
 
     pages: List[str] = Field(description="Sayfa sayfa çıkarılan/OCR edilmiş metin.")
@@ -208,28 +212,29 @@ class DocumentTextSchema(BaseModel):
     used_ocr: bool = Field(description="Metin OCR ile okunduysa true.")
 
 
-#: Per-page and total caps on hand-corrected page text. Generous relative to
-#: any real official-correspondence page -- the longest real document in
-#: this project's own corpus (CY-034) is ~10,664 characters across 5
-#: pages -- while still bounding a single request's payload size. Follows
-#: DraftRequestSchema.instructions' max_length precedent above.
+#: Elle düzeltilmiş sayfa metni için sayfa başına ve toplam üst sınırlar.
+#: Gerçek bir resmi yazışma sayfasına göre cömerttir -- bu projenin kendi
+#: külliyatındaki en uzun gerçek evrak (CY-034) 5 sayfa boyunca ~10.664
+#: karakterdir -- ama yine de tek bir isteğin gövde boyutunu sınırlar.
+#: Yukarıdaki DraftRequestSchema.instructions'ın max_length emsalini izler.
 MAX_TEXT_PAGE_LENGTH = 20_000
 MAX_TEXT_TOTAL_LENGTH = 100_000
 
 
 class DocumentTextUpdateSchema(BaseModel):
-    """Payload for saving hand-corrected OCR/extracted text.
+    """Elle düzeltilmiş OCR/çıkarılan metni kaydetmek için gövde.
 
-    Carries ``pages`` only, never a joined ``extracted_text`` -- the server
-    always re-derives the join from the submitted pages (see
-    ``DocumentService.update_document_text``). There is no lossless inverse
-    of ``"\\n\\n".join(pages)`` (a double-spaced source page splits back
-    into far more fragments than it started with), so accepting a
-    client-submitted joined text would risk silently diverging from what
-    the pages actually say. The server separately rejects a page count that
-    doesn't match the cached document, since ``PageMap``,
-    ``get_document_outline``/``get_document_section`` and
-    ``signature.marks[].page`` all index by page number.
+    Yalnızca ``pages`` taşır, birleştirilmiş bir ``extracted_text`` asla
+    taşımaz -- sunucu birleşimi her zaman gönderilen sayfalardan yeniden
+    türetir (bkz. ``DocumentService.update_document_text``).
+    ``"\\n\\n".join(pages)``'in kayıpsız bir tersi yoktur (çift boşluklu bir
+    kaynak sayfa geri bölündüğünde başladığından çok daha fazla parçaya
+    ayrılır), bu yüzden istemcinin gönderdiği birleştirilmiş metni kabul
+    etmek, sayfaların fiilen söylediğinden sessizce sapma riski taşırdı.
+    Sunucu ayrıca önbellekteki evrakla eşleşmeyen bir sayfa sayısını
+    reddeder, çünkü ``PageMap``, ``get_document_outline``/
+    ``get_document_section`` ve ``signature.marks[].page`` hepsi sayfa
+    numarasına göre indekslenir.
     """
 
     pages: List[str] = Field(
@@ -251,11 +256,11 @@ class DocumentTextUpdateSchema(BaseModel):
 
 
 class DraftClassificationSchema(BaseModel):
-    """The narrow slice of Görev 1's output the draft flow actually consumes.
+    """Görev 1'in çıktısının taslak akışının fiilen tükettiği dar dilimi.
 
-    Replaces ``DraftRequestSchema.classification: dict`` (was a free-form,
-    unvalidated dict fed straight into prompts -- a correctness hole and an
-    injection surface at once).
+    ``DraftRequestSchema.classification: dict``'in yerini alır (doğrudan
+    prompt'lara beslenen serbest biçimli, doğrulanmamış bir dict idi --
+    aynı anda hem bir doğruluk açığı hem bir enjeksiyon yüzeyi).
     """
 
     document_type: DocumentType = Field(description="Gelen evrakın türü.")
@@ -267,7 +272,7 @@ class DraftClassificationSchema(BaseModel):
 
 
 class DraftRequestSchema(BaseModel):
-    """Payload for initiating a drafting and routing workflow."""
+    """Taslak oluşturma ve yönlendirme iş akışını başlatmak için gövde."""
 
     storage_path: str = Field(
         min_length=1,
@@ -295,7 +300,7 @@ class DraftRequestSchema(BaseModel):
 
 
 class DraftResponseSchema(BaseModel):
-    """Result of the drafting and routing workflow."""
+    """Taslak oluşturma ve yönlendirme iş akışının sonucu."""
 
     draft_id: str = Field(default="", description="Kalıcı taslak kaydının kimliği.")
     draft: str = Field(description="Üretilen nihai resmî yazı taslağı.")

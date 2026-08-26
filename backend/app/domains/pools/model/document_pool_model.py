@@ -6,22 +6,25 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class DocumentPoolModel(Base, TimestampMixin):
-    """A named collection of documents belonging to a user, a unit, or a company.
+    """Bir kullanıcıya, bir birime veya bir şirkete ait adlandırılmış bir
+    belge koleksiyonu.
 
-    The shartname's "evrak havuzu" maps to three owner shapes, not one: a
-    channel's own personal pool (every upload lands there, lazily created --
-    see `DocumentPoolRepository.get_or_create_default`), a unit's shared
-    pool a manager pushes into for the whole team, and (reserved, unused
-    today) a company-wide pool. `owner_type`/`owner_id` is a loose polymorphic
-    reference rather than three nullable FK columns, matching this codebase's
-    existing looseness for `permission_grants.subject_type`/`subject_id`.
+    Şartnamenin "evrak havuzu"su tek değil üç sahip biçimine eşlenir: bir
+    kanalın kendi kişisel havuzu (her yükleme oraya iner, tembel olarak
+    oluşturulur -- bkz. `DocumentPoolRepository.get_or_create_default`),
+    bir manager'ın tüm ekip için push ettiği bir birimin paylaşılan
+    havuzu, ve (ayrılmış, bugün kullanılmayan) şirket-geneli bir havuz.
+    `owner_type`/`owner_id`, üç nullable FK kolonu yerine gevşek
+    polimorfik bir referanstır, bu kod tabanının `permission_grants.
+    subject_type`/`subject_id` için mevcut esnekliğiyle eşleşir.
     """
 
     __tablename__ = "document_pools"
     __table_args__ = (
-        #: At most one *default* pool per owner -- see `permission_grants`'
-        #: sibling partial-index pattern in `UnitMembershipModel` for why
-        #: this is an `Index`, not a `UniqueConstraint`.
+        #: Sahip başına en fazla bir *varsayılan* havuz -- bunun neden bir
+        #: `UniqueConstraint` değil de bir `Index` olduğu için
+        #: `UnitMembershipModel`'deki `permission_grants`'ın kardeş
+        #: kısmi-index örüntüsüne bakın.
         Index(
             "uq_document_pools_one_default_per_owner",
             "owner_type",
@@ -36,6 +39,7 @@ class DocumentPoolModel(Base, TimestampMixin):
         String, ForeignKey("companies.id"), nullable=False, index=True
     )
     #: "user" | "unit" | "company".
+    #: (owner_type için olası değerler)
     owner_type: Mapped[str] = mapped_column(String, nullable=False, index=True)
     #: A `users.id`, `units.id`, or `companies.id` depending on `owner_type`
     #: -- not a foreign key for the same reason `permission_grants.

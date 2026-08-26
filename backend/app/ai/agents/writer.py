@@ -7,12 +7,12 @@ from app.ai.prompts.manager import PromptManager, get_prompt_manager
 
 
 class WriterAgent(BaseAgent):
-    """Writer Agent responsible for generating high-quality reports, summaries, articles, and text responses.
+    """Yüksek kaliteli raporlar, özetler, makaleler ve metin yanıtları üretmekten sorumlu Yazar Ajanı.
 
-    ``validators`` here only guards a future ``.run()``/``.run_structured()``
-    call -- ``draft_graph.writer_node`` uses ``.stream()``, which cannot
-    validate before emission, so the actual guard on the accumulated draft
-    text lives in that node.
+    Buradaki ``validators`` yalnızca gelecekteki bir ``.run()``/``.run_structured()``
+    çağrısını korur -- ``draft_graph.writer_node`` ``.stream()`` kullanır, bu da
+    yayınlamadan önce doğrulama yapamaz; bu yüzden biriken taslak metin
+    üzerindeki gerçek koruma o node içinde bulunur.
     """
 
     def __init__(
@@ -25,7 +25,7 @@ class WriterAgent(BaseAgent):
         super().__init__(
             llm_client=llm_client,
             name="WriterAgent",
-            description="Generates text, reports, drafts, summaries, and structured written responses.",
+            description="Metin, rapor, taslak, özet ve yapılandırılmış yazılı yanıtlar üretir.",
             system_prompt=system_prompt,
             validators=[assert_no_prompt_leak],
         )

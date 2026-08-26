@@ -4,11 +4,11 @@ from app.api.exceptions.base import BaseAppException
 
 
 class AIException(BaseAppException):
-    """Exception raised when LLM generation or LangGraph workflow execution fails."""
+    """LLM üretimi veya LangGraph iş akışı yürütmesi başarısız olduğunda fırlatılan istisna."""
 
     def __init__(
         self,
-        message: str = "An error occurred while executing the AI workflow.",
+        message: str = "Yapay zeka iş akışı çalıştırılırken bir hata oluştu.",
         error_code: str = "AI_EXECUTION_ERROR",
         details: Optional[Dict[str, Any]] = None,
     ):

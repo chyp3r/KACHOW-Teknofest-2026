@@ -1,35 +1,38 @@
-"""The output-side guardrail gate: the last check before a reply reaches a user.
+"""Çıktı tarafı guardrail geçidi: bir yanıt kullanıcıya ulaşmadan önceki son kontrol.
 
-Generalises ``app.ai.response.builder`` (which still exists as a thin
-backward-compatible wrapper around :func:`evaluate_response`). Before this
-module, the only output-side check anywhere in the assist/chat path was
-``assert_no_prompt_leak`` -- nothing checked whether a reply was actually
-grounded in what was retrieved this turn, and nothing checked whether a
-reply echoed personal data out of a document the requester may not be
-cleared to see. This is the gap the user's "db'den saçma sapan bilgi
-vermemeliyiz" concern names directly: a groundedness failure is a
-hallucination risk, an unauthorized PII echo is a leakage risk, and neither
-was checked before this module existed.
+``app.ai.response.builder``'ı genelleştirir (o modül hâlâ
+:func:`evaluate_response` etrafında ince, geriye dönük uyumlu bir sarmalayıcı
+olarak var). Bu modülden önce, assist/chat yolundaki tek çıktı tarafı
+kontrolü ``assert_no_prompt_leak``'ti -- bir yanıtın bu turda gerçekten
+alınan içeriğe dayanıp dayanmadığını kontrol eden hiçbir şey yoktu, ve bir
+yanıtın, isteği yapanın görmeye yetkili olmayabileceği bir belgeden kişisel
+veri yansıtıp yansıtmadığını kontrol eden hiçbir şey yoktu. Bu, kullanıcının
+"db'den saçma sapan bilgi vermemeliyiz" endişesinin doğrudan adlandırdığı
+boşluktur: bir dayanaklılık hatası bir halüsinasyon riskidir, yetkisiz bir
+PII yansıması bir sızıntı riskidir, ve bu modül var olmadan önce ikisi de
+kontrol edilmiyordu.
 
-Three checks run, in order, each able to escalate the verdict:
+Sırayla çalışan üç kontrol vardır, her biri verdikti daha ağır bir seviyeye
+yükseltebilir:
 
-1. ``assert_no_prompt_leak`` -- unchanged, still an instant hard block.
-2. Groundedness (``app.ai.verification.draft_verifier.check_groundedness``,
-   reused not reimplemented) -- an ungrounded claim is redacted out of the
-   reply rather than replacing the whole thing, since a partially-fabricated
-   answer to "kaç sayfa bu belge" is more useful with the fabricated span
-   removed than swapped for a generic refusal.
-3. PII leakage (``app.ai.guardrails.pii.redact_pii``) -- only engaged when a
-   document was actually attached this turn (``sensitivity is not None``); a
-   PII-shaped span the user typed into the conversation themselves is not
-   something this gate touches. When a document is attached and its content
-   echoes into the reply as PII, the span is masked. If that document was
-   itself confidentiality-marked (``SensitivityAssessment.requires_review``)
-   and the requester's clearance doesn't cover it (or no clearance is known
-   at all, which is this system's default-secure posture until the RBAC
-   phase wires a real one), the response is blocked outright instead --
-   the "unauthorized leakage" tier from the resolved policy, not the
-   ordinary "mask and continue" tier.
+1. ``assert_no_prompt_leak`` -- değişmedi, hâlâ anında sert bir engelleme.
+2. Dayanaklılık (``app.ai.verification.draft_verifier.check_groundedness``,
+   yeniden uygulanmadı, yeniden kullanıldı) -- dayanaksız bir iddia, yanıtın
+   tamamının yerine geçmek yerine yanıttan kırpılarak kaldırılır, çünkü
+   "kaç sayfa bu belge" sorusuna kısmen uydurulmuş bir yanıt, uydurulan
+   kısım kaldırılmış haliyle genel bir reddedişle değiştirilmesinden daha
+   kullanışlıdır.
+3. PII sızıntısı (``app.ai.guardrails.pii.redact_pii``) -- yalnızca bu
+   turda gerçekten bir belge eklendiğinde devreye girer (``sensitivity is
+   not None``); kullanıcının konuşmaya kendisinin yazdığı PII şeklindeki bir
+   metin parçası bu geçidin dokunduğu bir şey değildir. Bir belge eklendiğinde
+   ve içeriği PII olarak yanıta yansıdığında, o metin parçası maskelenir.
+   Eğer o belge kendisi gizlilik damgalıysa
+   (``SensitivityAssessment.requires_review``) ve isteği yapanın yetkisi
+   bunu kapsamıyorsa (veya RBAC aşaması gerçek bir yetki bağlayana kadar bu
+   sistemin varsayılan-güvenli duruşu olan hiç yetki bilinmiyorsa), yanıt
+   bunun yerine tamamen engellenir -- çözümlenmiş politikadaki "yetkisiz
+   sızıntı" katmanı, sıradan "maskele ve devam et" katmanı değil.
 """
 
 import logging
@@ -52,15 +55,15 @@ FALLBACK_REPLY = (
     "Sorunuzu farklı bir şekilde tekrar sorar mısınız?"
 )
 
-#: Turkish placeholder swapped in for a claim `check_groundedness` couldn't
-#: trace to this turn's sources.
+#: `check_groundedness`'in bu turun kaynaklarına dayandıramadığı bir iddia
+#: yerine geçen Türkçe yer tutucu.
 _UNGROUNDED_MARKER = "[doğrulanamayan ifade kaldırıldı]"
 
 GateAction = Literal["pass", "redact", "block"]
 
 
 class GateVerdict(BaseModel):
-    """The output gate's decision for one reply."""
+    """Çıktı geçidinin bir yanıt için verdiği karar."""
 
     action: GateAction = Field(description="'pass' | 'redact' | 'block'.")
     text: str = Field(description="Kullanıcıya gösterilecek metin.")
@@ -68,13 +71,14 @@ class GateVerdict(BaseModel):
 
 
 def _redact_unsupported_claims(text: str, claims: list) -> str:
-    """Replace each ungrounded claim's text with a redaction marker.
+    """Her dayanaksız iddianın metnini bir kırpma işaretiyle değiştir.
 
-    Best-effort string replacement: ``UnsupportedClaim.value`` is whitespace-
-    normalised by ``draft_verifier._findall`` and so may not byte-match the
-    exact span in ``text`` when the original had irregular spacing. A claim
-    that can't be found is left in place rather than guessed at -- it still
-    shows up in ``reasons``, so the miss is visible rather than silent.
+    En iyi çaba string değiştirme: ``UnsupportedClaim.value``,
+    ``draft_verifier._findall`` tarafından boşluk normalize edilmiştir ve bu
+    yüzden orijinalde düzensiz boşluklama olduğunda ``text``'teki tam
+    aralıkla bayt bazında eşleşmeyebilir. Bulunamayan bir iddia tahmin
+    edilmek yerine olduğu gibi bırakılır -- yine de ``reasons``'da görünür,
+    böylece kaçırılma sessiz değil, görünür olur.
     """
     redacted = text
     for claim in claims:
@@ -92,41 +96,43 @@ def evaluate_response(
     policy: Optional[GuardrailPolicy] = None,
     judge_verdict: Optional[GuardrailJudgeVerdict] = None,
 ) -> GateVerdict:
-    """Validate and finalise a generated reply before it reaches the user.
+    """Üretilen bir yanıtı, kullanıcıya ulaşmadan önce doğrula ve kesinleştir.
 
     Args:
-        reply: The raw, already-generated reply text.
-        source_materials: Trusted material this turn actually drew on --
-            tool results and cached document text, joined. Empty means "no
-            sources to check against", which is a legitimate state (a
-            conversational turn with no document and no tool calls) and
-            simply finds no unsupported claims rather than flagging
-            everything, since a reply with nothing to be ungrounded *from*
-            is not evidence of fabrication.
-        sensitivity: This turn's source document's input-side assessment
-            (see ``app.ai.guardrails.sensitivity.assessment_from_analysis``),
-            when a document is attached. None when there is no document.
-        requester_clearance: The requester's clearance level. None means "no
-            clearance is known" -- until the RBAC phase wires a real one
-            from an authenticated user, this is always the case, and the
-            gate treats it the same as "does not clear the source's level"
-            rather than the same as "clears everything". Fail secure, not
-            fail open.
-        policy: Guardrail policy to gate against. Defaults to the process
-            policy.
-        judge_verdict: The guardrail nuance layer's opinion on this reply
-            (see ``app.ai.guardrails.llm_nuance.judge_output_leakage``),
-            already computed by the caller -- this function does no I/O of
-            its own, same separation ``draft_graph.verify_node`` keeps
-            between ``verify_draft`` (sync) and ``judge_draft`` (async).
-            ``None`` when the judge is disabled, degraded, or wasn't asked
-            (no document attached, so there's nothing to judge leakage
-            against).
+        reply: Ham, zaten üretilmiş yanıt metni.
+        source_materials: Bu turun gerçekten yararlandığı güvenilir
+            materyal -- araç sonuçları ve önbelleğe alınmış belge metni,
+            birleştirilmiş. Boş olması "karşılaştırılacak kaynak yok"
+            anlamına gelir; bu meşru bir durumdur (belgesiz ve araç
+            çağrısı olmayan bir sohbet turu) ve her şeyi işaretlemek yerine
+            basitçe hiçbir dayanaksız iddia bulmaz, çünkü *dayanaksız
+            olunacak* hiçbir şeyi olmayan bir yanıt, uydurma kanıtı değildir.
+        sensitivity: Bir belge eklendiğinde bu turun kaynak belgesinin
+            girdi tarafı değerlendirmesi (bkz.
+            ``app.ai.guardrails.sensitivity.assessment_from_analysis``).
+            Belge yoksa None.
+        requester_clearance: İsteği yapanın yetki seviyesi. None, "hiçbir
+            yetki bilinmiyor" anlamına gelir -- RBAC aşaması kimliği
+            doğrulanmış bir kullanıcıdan gerçek bir yetki bağlayana kadar
+            bu her zaman geçerlidir, ve geçit bunu "her şeyi kapsıyor" ile
+            aynı değil, "kaynağın seviyesini kapsamıyor" ile aynı şekilde
+            ele alır. Güvenli tarafta başarısız ol, açık tarafta değil.
+        policy: Karşı geçit yapılacak guardrail politikası. Varsayılan
+            olarak süreç politikası.
+        judge_verdict: Guardrail nüans katmanının bu yanıt hakkındaki
+            görüşü (bkz.
+            ``app.ai.guardrails.llm_nuance.judge_output_leakage``), zaten
+            çağıran tarafından hesaplanmış -- bu fonksiyon kendi başına
+            hiçbir I/O yapmaz, ``draft_graph.verify_node``'un
+            ``verify_draft`` (senkron) ile ``judge_draft`` (asenkron)
+            arasında koruduğu ayrımla aynı. Hakem devre dışıysa, bozulduysa
+            veya sorulmadıysa (belge eklenmemiş, dolayısıyla sızıntı için
+            yargılanacak bir şey yok) ``None``.
 
     Returns:
-        The gate's verdict: ``pass`` (reply unchanged), ``redact`` (reply
-        edited in place), or ``block`` (replaced with :data:`FALLBACK_REPLY`
-        entirely).
+        Geçidin verdikti: ``pass`` (yanıt değişmedi), ``redact`` (yanıt
+        yerinde düzenlendi), veya ``block`` (tamamen
+        :data:`FALLBACK_REPLY` ile değiştirildi).
     """
     if not reply:
         return GateVerdict(action="pass", text=reply)
@@ -147,23 +153,24 @@ def evaluate_response(
         redacted = _redact_unsupported_claims(redacted, unsupported)
         reasons.append(f"{len(unsupported)} doğrulanamayan ifade kaldırıldı")
 
-    # PII handling only engages when a document is actually attached this
-    # turn (`sensitivity is not None`). Without one, a detected PII-shaped
-    # span is something the user themselves typed into the conversation --
-    # masking that back at them is surprising, not protective. With one,
-    # any PII the reply echoes traces back to that document, whether or not
-    # it carries a confidentiality marking.
+    # PII işleme yalnızca bu turda gerçekten bir belge eklendiğinde devreye
+    # girer (`sensitivity is not None`). Belge yoksa, tespit edilen
+    # PII-şeklindeki bir metin parçası kullanıcının kendisinin konuşmaya
+    # yazdığı bir şeydir -- bunu ona geri maskeleyerek göstermek koruyucu
+    # değil, şaşırtıcıdır. Belge varsa, yanıtın yansıttığı herhangi bir
+    # PII, gizlilik damgası taşısın taşımasın, o belgeye kadar izlenir.
     if sensitivity is not None:
         _preview, pii_findings = redact_pii(reply, confidence_floor=active_policy.pii_confidence_floor)
-        # The judge catches what no pattern matches: a reply that discloses
-        # a source's meaning without ever emitting a literal PII string.
-        # Only trusted when the judge clears judge_promotion_confidence -- a
-        # low-confidence "maybe sensitive" guess should not carry the same
-        # weight as a checksum-validated TCKN match, and must never be able
-        # to block a reply entirely on its own (see the block condition
-        # below): a bare LLM guess is exactly what produced the unexplained
-        # "mesajda PII var, kısıldı" false positives Görev's bug report
-        # names.
+        # Hakem, hiçbir kalıbın yakalayamadığını yakalar: hiç harfiyen bir
+        # PII string'i üretmeden bir kaynağın anlamını ifşa eden bir yanıt.
+        # Yalnızca hakem judge_promotion_confidence eşiğini aştığında
+        # güvenilir -- düşük güvenli bir "belki hassas" tahmini,
+        # checksum ile doğrulanmış bir TCKN eşleşmesiyle aynı ağırlığı
+        # taşımamalı ve asla tek başına bir yanıtı tamamen engelleyebilecek
+        # bir güce sahip olmamalıdır (aşağıdaki engelleme koşuluna bakın):
+        # yalın bir LLM tahmini, Görev'in bug raporunun adlandırdığı
+        # açıklanamayan "mesajda PII var, kısıldı" yanlış pozitiflerini
+        # üreten tam olarak budur.
         semantic_leak = bool(
             judge_verdict
             and judge_verdict.sensitive
@@ -175,13 +182,13 @@ def evaluate_response(
                 requester_clearance is not None
                 and requester_clearance >= sensitivity.effective_level
             )
-            # Hard block requires BOTH a deterministic finding (a real,
-            # checksum/pattern-matched PII span, never the judge alone) AND
-            # the source document's own confidentiality marking
-            # (`sensitivity.requires_review`, i.e. GİZLİ/ÇOK GİZLİ). A
-            # semantic-only judge signal against an unmarked or unclear
-            # document falls through to the softer mask/truncate paths
-            # below instead of ever blocking outright.
+            # Sert engelleme HEM deterministik bir bulguyu (gerçek,
+            # checksum/kalıp eşleşmeli bir PII metin parçası, asla sadece
+            # hakem değil) HEM DE kaynak belgenin kendi gizlilik damgasını
+            # (`sensitivity.requires_review`, yani GİZLİ/ÇOK GİZLİ) gerektirir.
+            # Damgasız veya belirsiz bir belgeye karşı yalnızca-anlamsal bir
+            # hakem sinyali, hiçbir zaman tamamen engellemek yerine aşağıdaki
+            # daha yumuşak maskele/kısalt yollarına düşer.
             if sensitivity.requires_review and pii_findings and not cleared:
                 rule_ids = sorted({finding.rule_id for finding in pii_findings if finding.rule_id})
                 logger.warning(
@@ -200,23 +207,25 @@ def evaluate_response(
                 )
 
             if pii_findings:
-                # Not confidentiality-marked, or the requester is cleared
-                # for it -- still mask the PII itself as defense-in-depth.
-                # Applied to `redacted` (not the original `reply`), so a
-                # groundedness redaction above and a PII mask here both
-                # land in the same output instead of one silently
-                # discarding the other.
+                # Gizlilik damgalı değil, veya isteği yapan bunun için
+                # yetkili -- yine de derinlemesine savunma olarak PII'nin
+                # kendisini maskele. `redacted`'e uygulanır (orijinal
+                # `reply`'e değil), böylece yukarıdaki bir dayanaklılık
+                # kırpması ile buradaki bir PII maskesi, biri diğerini
+                # sessizce silmek yerine aynı çıktıda buluşur.
                 redacted, _findings = redact_pii(redacted, confidence_floor=active_policy.pii_confidence_floor)
                 kinds = sorted({finding.kind for finding in pii_findings})
                 reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi ({', '.join(kinds)})")
             elif semantic_leak:
-                # No specific span to mask -- the judge flagged the reply's
-                # meaning as a whole, not a locatable string, so there is
-                # nothing narrower to redact than the full reply. Never
-                # reached when sensitivity.requires_review and pii_findings
-                # both held (that's the block branch above), so this is
-                # either an unmarked source or a semantic-only signal
-                # against a marked one -- neither warrants a full block.
+                # Maskelenecek belirli bir metin parçası yok -- hakem,
+                # konumlandırılabilir bir string değil, yanıtın anlamını
+                # bir bütün olarak işaretledi, dolayısıyla tam yanıttan
+                # daha dar kırpılacak bir şey yok. sensitivity.requires_review
+                # ve pii_findings ikisi de geçerliyken asla buraya
+                # ulaşılmaz (o, yukarıdaki engelleme dalıdır), dolayısıyla
+                # bu ya damgasız bir kaynak ya da damgalı bir kaynağa karşı
+                # yalnızca-anlamsal bir sinyaldir -- ikisi de tam bir
+                # engellemeyi hak etmez.
                 redacted = (
                     "Bu yanıt, kaynağın ifşa etmemesi gereken bir bilgiyi "
                     "içerebileceği için kısaltıldı."
@@ -230,20 +239,22 @@ def evaluate_response(
 
 
 def classify_reason_kind(reasons: list[str]) -> str:
-    """Map a :class:`GateVerdict`'s reasons to one ``GuardrailEventModel.kind``.
+    """Bir :class:`GateVerdict`'in gerekçelerini tek bir
+    ``GuardrailEventModel.kind``'e eşle.
 
-    Best-effort: a single verdict can combine a groundedness redaction and a
-    PII mask in the same call, but the audit trail needs exactly one ``kind``
-    per row -- this picks the most specific/severe match rather than trying
-    to represent a compound decision in a single-valued column.
+    En iyi çaba: tek bir verdikt aynı çağrıda bir dayanaklılık kırpmasını
+    ve bir PII maskesini birleştirebilir, ama denetim izinin satır başına
+    tam olarak bir ``kind``'e ihtiyacı vardır -- bu, birleşik bir kararı
+    tek değerli bir sütunda temsil etmeye çalışmak yerine en özgül/ciddi
+    eşleşmeyi seçer.
 
     Args:
-        reasons: A verdict's ``reasons`` list.
+        reasons: Bir verdiktin ``reasons`` listesi.
 
     Returns:
-        One of ``"leakage"``, ``"pii"``, ``"llm_judge"``, ``"groundedness"``,
-        ``"injection"``, or the generic ``"output_gate"`` when nothing more
-        specific matched.
+        ``"leakage"``, ``"pii"``, ``"llm_judge"``, ``"groundedness"``,
+        ``"injection"`` değerlerinden biri, veya daha özgül bir şey
+        eşleşmediyse genel ``"output_gate"``.
     """
     joined = " ".join(reasons)
     if "yetkisiz" in joined:

@@ -6,7 +6,7 @@ from app.core.enums.reasoning_level import ReasoningLevel
 
 
 class ChatMessageRequest(BaseModel):
-    """Client request for a new chat interaction."""
+    """Yeni bir sohbet etkileşimi için istemci isteği."""
 
     message: str = Field(
         min_length=1, max_length=8000, description="Kullanıcının gönderdiği mesaj veya istek."
@@ -48,7 +48,7 @@ class ChatMessageRequest(BaseModel):
 
 
 class ChatMessageResponse(BaseModel):
-    """Orchestrated response for the chat interaction."""
+    """Sohbet etkileşimi için orkestre edilmiş yanıt."""
 
     reply: str = Field(
         description="Kullanıcıya gösterilecek olan nihai metin/mesaj yanıtı."
@@ -66,12 +66,12 @@ class ChatMessageResponse(BaseModel):
 
 
 class ChatResumeRequest(BaseModel):
-    """Resume a chat run paused at the human-in-the-loop gate.
+    """İnsan-döngüde (human-in-the-loop) kapısında duraklatılmış bir sohbet çalışmasını devam ettirir.
 
-    Two interrupt kinds share this one request shape: ``answer`` fills in a
-    draft's missing-information placeholders (Görev 2's "eksik bilgi talep
-    etme" requirement); ``approve``/``revise``/``reject`` resolve a draft
-    that needed a human's sign-off before proceeding to unit routing.
+    İki kesinti türü bu tek istek şeklini paylaşır: ``answer`` bir taslağın
+    eksik bilgi yer tutucularını doldurur (Görev 2'nin "eksik bilgi talep
+    etme" gereksinimi); ``approve``/``revise``/``reject``, birim yönlendirmeye
+    geçmeden önce bir insanın onayına ihtiyaç duyan bir taslağı çözümler.
     """
 
     session_id: str = Field(

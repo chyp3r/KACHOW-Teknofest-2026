@@ -4,11 +4,11 @@ from app.api.exceptions.base import BaseAppException
 
 
 class AuthorizationException(BaseAppException):
-    """Exception raised when access is denied."""
+    """Erişim reddedildiğinde fırlatılan istisna."""
 
     def __init__(
         self,
-        message: str = "You do not have permission to perform this action.",
+        message: str = "Bu işlemi gerçekleştirmek için yetkiniz yok.",
         error_code: str = "PERMISSION_DENIED",
         details: Optional[Dict[str, Any]] = None,
     ):

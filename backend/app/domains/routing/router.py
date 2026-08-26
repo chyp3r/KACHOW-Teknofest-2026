@@ -23,12 +23,12 @@ async def suggest_routing(
     routing_graph=Depends(get_routing_graph),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Produce a unit-routing decision for a draft, independent of drafting it.
+    """Bir taslak için, taslağı oluşturmaktan bağımsız olarak birim yönlendirme kararı üretir.
 
-    Standalone from ``POST /documents/draft`` so a human who edits a draft
-    after it was generated can get a fresh routing decision without paying
-    for a new generation -- the routing graph runs on the fast tier and reads
-    only the draft text and its confidence score.
+    ``POST /documents/draft`` uç noktasından bağımsızdır; böylece bir taslak
+    oluşturulduktan sonra onu düzenleyen bir kullanıcı, yeni bir üretim
+    maliyetine katlanmadan güncel bir yönlendirme kararı alabilir -- yönlendirme
+    grafiği hızlı katmanda çalışır ve yalnızca taslak metnini ve güven skorunu okur.
     """
     try:
         state = await asyncio.wait_for(

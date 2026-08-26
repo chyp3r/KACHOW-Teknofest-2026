@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddedChunk(BaseModel):
-    """Pydantic model representing a single chunk that has been split and embedded."""
+    """Bölünmüş ve embedding'i üretilmiş tek bir parçayı temsil eden Pydantic modeli."""
 
     text: str
     vector: List[float]
@@ -20,13 +20,13 @@ class EmbeddedChunk(BaseModel):
 
 
 class EmbeddingService:
-    """Central service orchestrating document splitting and embedding vector generation."""
+    """Belge bölme ve embedding vektörü üretimini yöneten merkezi servis."""
 
     def __init__(self, embeddings_client: BaseEmbeddingsClient):
-        """Initialize the Embedding Service.
+        """Embedding Servisini başlatır.
 
         Args:
-            embeddings_client: An instance of BaseEmbeddingsClient.
+            embeddings_client: Bir BaseEmbeddingsClient örneği.
         """
         self.embeddings_client = embeddings_client
         logger.info("Initialized EmbeddingService successfully.")
@@ -34,15 +34,15 @@ class EmbeddingService:
     async def process_text(
         self, text: str, chunker: BaseChunker, **kwargs: Any
     ) -> List[EmbeddedChunk]:
-        """Split text into chunks and generate embedding vectors for each chunk.
+        """Metni parçalara böler ve her parça için embedding vektörü üretir.
 
         Args:
-            text: The raw input document text.
-            chunker: The Chunker strategy (Character, Recursive, Semantic, Agentic).
-            **kwargs: Extra parameters to pass to the chunker's split_text method.
+            text: Ham girdi belge metni.
+            chunker: Chunker stratejisi (Character, Recursive, Semantic, Agentic).
+            **kwargs: Chunker'ın split_text metoduna geçirilecek ek parametreler.
 
         Returns:
-            A list of EmbeddedChunk objects.
+            EmbeddedChunk nesnelerinden oluşan bir liste.
         """
         if not text.strip():
             return []
@@ -51,21 +51,21 @@ class EmbeddingService:
             f"EmbeddingService processing text (length={len(text)}) using chunker [{chunker.__class__.__name__}]..."
         )
 
-        # 1. Split text into documents using the chunker strategy
+        # 1. Chunker stratejisini kullanarak metni belgelere böl
         docs = await chunker.split_text(text, **kwargs)
 
         if not docs:
             logger.warning("Chunker returned 0 chunks.")
             return []
 
-        # 2. Extract content from documents
+        # 2. Belgelerden içeriği çıkar
         chunk_texts = [doc.page_content for doc in docs]
 
-        # 3. Generate embedding vectors for all chunks in a batch
+        # 3. Tüm parçalar için embedding vektörlerini toplu olarak üret
         logger.info(f"Generating embeddings for {len(chunk_texts)} chunks...")
         vectors = await self.embeddings_client.embed_documents(chunk_texts)
 
-        # 4. Construct response objects
+        # 4. Yanıt nesnelerini oluştur
         embedded_chunks = []
         for doc, vector in zip(docs, vectors):
             embedded_chunks.append(

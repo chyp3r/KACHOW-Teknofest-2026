@@ -1,11 +1,12 @@
-"""Best-effort persistence of guardrail decisions (see ``GuardrailEventModel``).
+"""Koruma kararlarının en iyi çaba (best-effort) kalıcılığı (bkz.
+``GuardrailEventModel``).
 
-Sibling to ``app.observability.run_recorder``: same short-lived-session
-pattern (nodes are plain closures with no request-scoped ``AsyncSession``),
-same "never let recording break the actual request" swallow-and-log
-contract, and reuses ``settings.RUN_RECORDING_ENABLED`` rather than adding a
-second flag -- a guardrail event is the same kind of audit record as a run,
-just for a different decision.
+``app.observability.run_recorder``'ın kardeşi: aynı kısa ömürlü oturum
+deseni (düğümler, istek kapsamlı bir ``AsyncSession``'ı olmayan sade
+closure'lardır), aynı "kayıt işlemi gerçek isteği asla bozmasın" yutup-günlükle
+sözleşmesi ve ikinci bir bayrak eklemek yerine ``settings.RUN_RECORDING_ENABLED``'ı
+yeniden kullanır -- bir koruma olayı, farklı bir karar için de olsa bir run
+ile aynı türde bir denetim kaydıdır.
 """
 
 import logging
@@ -38,41 +39,42 @@ async def record_event(
     llm_model_version: Optional[str] = None,
     prompt_template_version: Optional[str] = None,
 ) -> None:
-    """Record one guardrail decision.
+    """Bir koruma kararını kaydet.
 
     Args:
-        stage: "input" or "output".
+        stage: "input" veya "output".
         kind: "pii" | "sensitivity" | "injection" | "magic_byte" |
             "archive_bomb" | "groundedness" | "leakage" | "llm_judge" |
-            "relevance" (see ``app.ai.workflows.relevance``).
+            "relevance" (bkz. ``app.ai.workflows.relevance``).
         decision: "passed" | "flagged" | "blocked" | "redacted" |
             "needs_review".
-        confidence: 0-1 confidence in the decision.
-        reasons: Short human-readable reasons -- never the raw sensitive
-            value that triggered the decision (see
-            ``app.ai.guardrails.pii.PiiFinding``, which carries only a
-            masked preview for exactly this reason).
-        run_id: The planning-graph run this decision belongs to, when there
-            is one (an upload-time finding has none yet).
-        document_id: The document this decision concerns, when there is one.
-        company_id: The tenant this decision concerns -- threaded through
-            from every call site, including graph-internal ones (see
-            ``PlanningState.company_id``). ``None`` only for a genuinely
-            unresolvable case; the write below degrades to "not recorded"
-            rather than raising, same as any other recorder failure.
-        requester_user_id, requester_role, effective_clearance: Who was
-            asking, and at what clearance -- populated once the RBAC layer
-            (Phase 4) has a real requester to attribute the decision to;
-            ``None`` in the open demo/dev path, matching
-            ``DocumentModel.owner_id``'s same nullable-until-auth pattern.
-        related_document_ids: Every document a response drew on this turn.
-        llm_model_version, prompt_template_version: Which model tag and
-            template revision produced this decision, when an LLM-judge
-            layer (Phase 3) was involved.
+        confidence: Karara dair 0-1 arası güven.
+        reasons: Kısa, insan tarafından okunabilir gerekçeler -- kararı
+            tetikleyen ham hassas değer asla değil (bkz. yalnızca maskelenmiş
+            bir önizleme taşıyan ``app.ai.guardrails.pii.PiiFinding``, tam
+            olarak bu nedenle).
+        run_id: Bu kararın ait olduğu planlama grafiği çalışması, varsa
+            (bir yükleme zamanı bulgusunun henüz bir tanesi yoktur).
+        document_id: Bu kararın ilgilendiği doküman, varsa.
+        company_id: Bu kararın ilgilendiği kiracı -- grafik içi olanlar dahil
+            (bkz. ``PlanningState.company_id``) her çağrı noktasından
+            iletilir. Yalnızca gerçekten çözümlenemeyen bir durumda ``None``;
+            aşağıdaki yazma işlemi, diğer herhangi bir kaydedici hatasında
+            olduğu gibi hata fırlatmak yerine "kaydedilmedi"ye düşer.
+        requester_user_id, requester_role, effective_clearance: Kimin
+            sorduğu ve hangi yetki düzeyinde -- RBAC katmanı (Faz 4)
+            kararı atfedecek gerçek bir istek sahibine sahip olduğunda
+            doldurulur; açık demo/geliştirme yolunda ``None``,
+            ``DocumentModel.owner_id``'nin aynı kimlik doğrulamaya kadar
+            nullable desenine uygun şekilde.
+        related_document_ids: Bu turda bir yanıtın yararlandığı her doküman.
+        llm_model_version, prompt_template_version: Bir LLM-yargıç katmanı
+            (Faz 3) devredeyken bu kararı hangi model etiketinin ve şablon
+            revizyonunun ürettiği.
     """
-    # Unconditional, unlike the DB write below: a Prometheus counter is
-    # metrics, not an audit record, and should stay live even when a
-    # deployment turns RUN_RECORDING_ENABLED off to skip the DB write.
+    # Aşağıdaki DB yazımının aksine koşulsuz: bir Prometheus sayacı bir
+    # denetim kaydı değil metriktir ve bir dağıtım, DB yazımını atlamak için
+    # RUN_RECORDING_ENABLED'ı kapatsa bile canlı kalmalıdır.
     GUARDRAIL_DECISIONS.labels(stage=stage, kind=kind, decision=decision).inc()
     if decision == "blocked" and company_id is not None:
         slug = company_metrics.cached_slug(company_id)

@@ -9,26 +9,30 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class ConversationParticipantModel(Base, TimestampMixin):
-    """One user's membership in one conversation -- this row IS the access grant.
+    """Bir kullanıcının bir konuşmadaki üyeliği -- bu satır erişim
+    izninin KENDİSİDİR.
 
-    `role_in_conversation` is `"owner"` (the group's creator, or anyone
-    later promoted -- meaningless for a DM, where both sides are equal) or
-    `"member"`, open string like `units.role_in_unit`.
+    `role_in_conversation`; `"owner"` (grubun kurucusu veya sonradan
+    terfi ettirilen biri -- her iki tarafın eşit olduğu bir DM için
+    anlamsız) veya `"member"`, `units.role_in_unit` gibi açık string'dir.
 
-    `left_at` is a soft-leave: a former participant keeps read access to
-    the history that already existed while they were in the conversation
-    (their row is still there, just marked left), but may not send new
-    messages and stops appearing in `list_for_conversation`'s "who's
-    active" view. There is no hard delete of this row -- re-joining after
-    leaving a group would otherwise either resurrect a stale row with a
-    confusing history or collide with `uq_conversation_participants_conv_user`.
+    `left_at` yumuşak-ayrılmadır: eski bir katılımcı konuşmadayken zaten
+    var olan geçmişe okuma erişimini korur (satırı hâlâ orada, sadece
+    ayrılmış olarak işaretli), ama yeni mesaj gönderemez ve
+    `list_for_conversation`'ın "kimler aktif" görünümünde görünmeyi
+    bırakır. Bu satırın hard delete'i yoktur -- bir gruptan ayrıldıktan
+    sonra yeniden katılmak, aksi takdirde ya kafa karıştırıcı bir
+    geçmişle eski bir satırı diriltir ya da
+    `uq_conversation_participants_conv_user` ile çakışır.
 
-    `last_read_message_id` is a loose pointer (no FK -- a message can be
-    soft-deleted out from under it) used only to compute an unread count by
-    comparing timestamps against the pointed-to message's `created_at`
-    (message ids are opaque uuid-hex, not ordered, so "unread since" can't
-    compare ids directly). `created_at` (from `TimestampMixin`) already
-    doubles as "joined at" -- no separate column for it.
+    `last_read_message_id` gevşek bir işaretçidir (FK yok -- bir mesaj
+    altından soft-delete edilebilir), yalnızca işaret ettiği mesajın
+    `created_at`'ine karşı zaman damgalarını karşılaştırarak okunmamış
+    sayısını hesaplamak için kullanılır (mesaj id'leri sıralı değil,
+    opak uuid-hex'tir, bu yüzden "şu tarihten beri okunmamış" id'leri
+    doğrudan karşılaştıramaz). `created_at` (`TimestampMixin`'den) zaten
+    "katıldığı tarih" görevini de görür -- bunun için ayrı bir kolon
+    yoktur.
     """
 
     __tablename__ = "conversation_participants"

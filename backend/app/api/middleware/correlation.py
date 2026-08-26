@@ -1,12 +1,12 @@
-"""Request correlation IDs.
+"""İstek korelasyon (correlation) ID'leri.
 
-A ``ContextVar`` rather than ``request.state`` because the value needs to
-reach code with no ``Request`` object in scope at all -- workflow node
-functions running inside a LangGraph invocation, several calls deep from the
-route handler. Contextvars propagate through the async call chain of the same
-task automatically; passing the id as an explicit parameter through every
-layer between the router and a graph node would touch a lot of signatures for
-no benefit over just reading it back out where it's needed.
+``request.state`` yerine bir ``ContextVar`` kullanılır, çünkü değerin, kapsamında
+hiç ``Request`` nesnesi bulunmayan koda ulaşması gerekir -- route handler'dan
+birkaç çağrı derinlikte, bir LangGraph çağrısı içinde çalışan workflow node
+fonksiyonları. Contextvar'lar aynı task'ın asenkron çağrı zinciri boyunca
+otomatik olarak yayılır; id'yi router ile bir graph node'u arasındaki her
+katmandan açık bir parametre olarak geçirmek, ihtiyaç duyulan yerde onu geri
+okumaktan başka bir fayda sağlamadan birçok imzaya dokunmuş olurdu.
 """
 
 import logging
@@ -25,16 +25,16 @@ request_id_var: ContextVar[str] = ContextVar("request_id", default="-")
 
 
 def get_request_id() -> str:
-    """Return the current request's correlation id, or ``"-"`` outside one."""
+    """Mevcut isteğin korelasyon id'sini, isteğin dışındaysa ``"-"`` döndürür."""
     return request_id_var.get()
 
 
 class CorrelationIdMiddleware(BaseHTTPMiddleware):
-    """Read or mint a request id and echo it back on the response.
+    """Bir istek id'si okur veya üretir ve yanıtta geri yansıtır.
 
-    Registered outermost (added last in ``main.py``, since Starlette applies
-    middleware in reverse registration order) so every other middleware and
-    every route handler runs with the id already set.
+    En dışta kayıtlıdır (``main.py``'de son eklenir, çünkü Starlette
+    middleware'leri ters kayıt sırasıyla uygular), böylece diğer her
+    middleware ve her route handler id zaten ayarlanmışken çalışır.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:

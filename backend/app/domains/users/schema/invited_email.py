@@ -2,17 +2,17 @@ from pydantic import BaseModel, EmailStr, Field
 from app.core.enums.user_role import UserRole
 
 class InvitedEmailCreate(BaseModel):
-    """Pydantic schema to whitelist/invite an email."""
-    email: EmailStr = Field(description="Invited email address")
-    role: UserRole = Field(default=UserRole.EMPLOYEE, description="Pre-assigned role for the invitee")
+    """Bir e-postayı beyaz listeye alma/davet etme için Pydantic şeması."""
+    email: EmailStr = Field(description="Davet edilen e-posta adresi")
+    role: UserRole = Field(default=UserRole.EMPLOYEE, description="Davet edilen kişiye önceden atanmış rol")
 
 class InvitedEmailResponse(BaseModel):
-    """Pydantic schema returning whitelisted/invited email details."""
-    id: str = Field(description="Unique invitation ID")
-    email: EmailStr = Field(description="Invited email address")
-    role: UserRole = Field(description="Pre-assigned role")
-    company_id: str = Field(description="Company the invitee will join upon registration")
-    is_used: bool = Field(description="Invitation utilization status")
+    """Beyaz listeye alınmış/davet edilmiş e-posta detaylarını döndüren Pydantic şeması."""
+    id: str = Field(description="Benzersiz davet ID'si")
+    email: EmailStr = Field(description="Davet edilen e-posta adresi")
+    role: UserRole = Field(description="Önceden atanmış rol")
+    company_id: str = Field(description="Davet edilen kişinin kayıt sonrası katılacağı şirket")
+    is_used: bool = Field(description="Davetin kullanım durumu")
 
     model_config = {
         "from_attributes": True

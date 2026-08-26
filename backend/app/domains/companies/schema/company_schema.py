@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class CompanyCreate(BaseModel):
-    """Pydantic schema for creating a new company (root only)."""
+    """Yeni bir şirket oluşturmak için Pydantic şeması (yalnızca root)."""
 
     name: str = Field(min_length=1, max_length=200, description="Şirket adı")
     slug: str = Field(
@@ -17,7 +17,7 @@ class CompanyCreate(BaseModel):
 
 
 class CompanyUpdate(BaseModel):
-    """Pydantic schema for updating an existing company. All fields optional."""
+    """Mevcut bir şirketi güncellemek için Pydantic şeması. Tüm alanlar opsiyoneldir."""
 
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     tax_number: Optional[str] = Field(default=None, max_length=50)
@@ -28,7 +28,7 @@ class CompanyUpdate(BaseModel):
 
 
 class CompanyResponse(BaseModel):
-    """Pydantic schema for company details output."""
+    """Şirket detay çıktısı için Pydantic şeması."""
 
     id: str = Field(description="Şirket ID")
     name: str = Field(description="Şirket adı")
@@ -41,17 +41,18 @@ class CompanyResponse(BaseModel):
 
 
 class CompanyAdminAssign(BaseModel):
-    """Pydantic schema for assigning an existing user as a company admin."""
+    """Mevcut bir kullanıcıyı şirket admini olarak atamak için Pydantic şeması."""
 
     user_id: str = Field(description="Şirket admini yapılacak kullanıcının ID'si")
 
 
 class CompanyAdapterUpdate(BaseModel):
-    """Pydantic schema for hand-authoring a company's runtime style adapter
-    (Faz C2) -- replaces the whole list per field, not an append.
+    """Bir şirketin çalışma zamanı stil adaptörünü elle oluşturmak için
+    Pydantic şeması (Faz C2) -- her alanı, eklemek yerine tüm listeyi
+    değiştirir.
 
-    There is no automated training pipeline yet (Faz C3); this is how an
-    admin configures a company's adapter until one exists.
+    Henüz otomatik bir eğitim pipeline'ı yok (Faz C3); böyle biri var
+    olana kadar bir admin şirketin adaptörünü bu şekilde yapılandırır.
     """
 
     style_rules: List[str] = Field(default_factory=list, max_length=20)
@@ -60,8 +61,8 @@ class CompanyAdapterUpdate(BaseModel):
 
 
 class CompanyAdapterResponse(BaseModel):
-    """Pydantic schema for one company's current adapter -- mirrors
-    ``app.ai.adapters.company_adapter.CompanyAdapter`` field-for-field."""
+    """Bir şirketin mevcut adaptörü için Pydantic şeması -- ``app.ai.
+    adapters.company_adapter.CompanyAdapter`` ile alan alan birebir aynıdır."""
 
     company_id: str
     version: int
@@ -73,10 +74,11 @@ class CompanyAdapterResponse(BaseModel):
 
 
 class CompanyProfileUpdate(BaseModel):
-    """Pydantic schema for setting a company's identity profile -- the
-    agent's own name and the company's letterhead/signer default a draft's
-    header/signature block falls back to when the writing brief leaves that
-    slot unspecified. Every field replaces the profile's current value.
+    """Bir şirketin kimlik profilini ayarlamak için Pydantic şeması --
+    asistanın kendi adı ve şirketin antet/imza sahibi varsayılanı, yazım
+    briefi o alanı belirtmeden bıraktığında bir taslağın başlık/imza
+    bloğunun geri düştüğü değerlerdir. Her alan, profilin mevcut değerinin
+    yerine geçer.
     """
 
     display_name: str = Field(default="", max_length=200, description="Şirketin tam adı")
@@ -112,8 +114,8 @@ class CompanyProfileUpdate(BaseModel):
 
 
 class CompanyProfileResponse(BaseModel):
-    """Pydantic schema for one company's current identity profile --
-    mirrors ``app.ai.identity.company_profile.CompanyProfile`` field-for-field."""
+    """Bir şirketin mevcut kimlik profili için Pydantic şeması -- ``app.ai.
+    identity.company_profile.CompanyProfile`` ile alan alan birebir aynıdır."""
 
     company_id: str
     version: int
@@ -128,11 +130,11 @@ class CompanyProfileResponse(BaseModel):
 
 
 class CompanyRuleItem(BaseModel):
-    """Pydantic schema for one mandatory/recommended drafting rule.
+    """Zorunlu/önerilen bir yazım kuralı için Pydantic şeması.
 
-    ``id`` is optional on write: leave it unset for a new rule (the server
-    assigns a stable ``Kx`` id) or supply the id an earlier read returned
-    to edit that same rule in place -- see
+    ``id`` yazarken opsiyoneldir: yeni bir kural için boş bırakılır
+    (sunucu kalıcı bir ``Kx`` id atar) ya da aynı kuralı yerinde
+    düzenlemek için önceki bir okumanın döndürdüğü id verilir -- bkz.
     ``app.domains.companies.provider.set_company_rules``.
     """
 
@@ -143,14 +145,15 @@ class CompanyRuleItem(BaseModel):
 
 
 class CompanyRulesUpdate(BaseModel):
-    """Pydantic schema for replacing a company's full mandatory rule set."""
+    """Bir şirketin tüm zorunlu kural setini değiştirmek için Pydantic şeması."""
 
     rules: List[CompanyRuleItem] = Field(default_factory=list, max_length=30)
 
 
 class CompanyRulesResponse(BaseModel):
-    """Pydantic schema for one company's current mandatory rule set --
-    mirrors ``app.ai.adapters.company_rules.CompanyRuleSet`` field-for-field."""
+    """Bir şirketin mevcut zorunlu kural seti için Pydantic şeması --
+    ``app.ai.adapters.company_rules.CompanyRuleSet`` ile alan alan birebir
+    aynıdır."""
 
     company_id: str
     version: int

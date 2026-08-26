@@ -106,30 +106,34 @@ STEP_MESSAGES = {
 def _dependency_failed(
     step: str, state: "PlanningState", updates: dict[str, Any]
 ) -> Optional[str]:
-    """Return the name of a failed-or-skipped dependency for ``step``, if any.
+    """``step`` için başarısız olmuş veya atlanmış bir bağımlılık varsa adını döndürür.
 
-    A step whose dependency's own result carries status FAILED must not run
-    on empty/garbage input. Without this a failed draft still let routing
-    run on draft="" and route to human approval -- an outcome visually
-    identical to a real routing decision. The dependency edges themselves
-    live in ``step_graph.STEP_SPECS`` (shared with ``ready_steps``); this
-    function is the other half -- *whether a failure* should skip the step,
-    which is deliberately not `ready_steps`'s concern (see its docstring).
+    Sonucu FAILED durumu taşıyan bir bağımlılığa sahip adım, boş/anlamsız
+    girdi üzerinde çalışmamalıdır. Bu kontrol olmadan, başarısız bir taslak
+    yine de routing adımının draft="" üzerinde çalışıp insan onayına
+    yönlendirmesine izin veriyordu -- bu da görsel olarak gerçek bir routing
+    kararıyla aynı görünen bir sonuç oluşturuyordu. Bağımlılık kenarlarının
+    kendisi ``step_graph.STEP_SPECS`` içinde yaşar (``ready_steps`` ile
+    paylaşılır); bu fonksiyon işin diğer yarısıdır -- *bir başarısızlığın*
+    adımı atlatıp atlatmayacağı, ki bu kasıtlı olarak `ready_steps`'in
+    ilgi alanı değildir (kendi docstring'ine bakın).
 
-    SKIPPED counts the same as FAILED here: a dependency that decided not to
-    produce output (e.g. ``_step_draft`` refusing an off-topic request via
-    ``app.ai.workflows.relevance``) leaves nothing for a dependent step to
-    run on either, even though nothing actually errored.
+    SKIPPED burada FAILED ile aynı sayılır: çıktı üretmemeye karar veren bir
+    bağımlılık (ör. ``_step_draft``'ın ``app.ai.workflows.relevance``
+    üzerinden konu dışı bir isteği reddetmesi), hiçbir şey gerçekte hata
+    vermemiş olsa bile, ona bağlı bir adımın üzerinde çalışacağı hiçbir şey
+    bırakmaz.
 
     Args:
-        step: The plan step about to run.
-        state: The graph state as of the start of this superstep.
-        updates: Updates already computed earlier in this same superstep
-            (a dependency that just ran this turn is not yet in ``state``).
+        step: Çalışmak üzere olan plan adımı.
+        state: Bu süper-adımın başlangıcındaki graf durumu.
+        updates: Aynı süper-adım içinde daha önce hesaplanmış güncellemeler
+            (bu turda henüz çalışmış bir bağımlılık henüz ``state``'te
+            değildir).
 
     Returns:
-        The failed/skipped dependency's step name, or None when every
-        dependency (if any) settled successfully or has not run yet.
+        Başarısız/atlanmış bağımlılığın adım adı, ya da her bağımlılık
+        (varsa) başarıyla sonuçlanmışsa veya henüz çalışmamışsa None.
     """
     spec = STEP_SPECS.get(step, StepSpec(name=step))
     for dependency in spec.depends_on:
@@ -139,44 +143,47 @@ def _dependency_failed(
     return None
 
 
-#: Turns kept verbatim in the prompt sent to the assist step on every turn.
-#: ~6 exchanges is enough for pronoun/ellipsis resolution ("evet, hazırla"
-#: after "taslak ister misiniz?") without growing that prompt without bound.
+#: Her turda assist adımına gönderilen prompt'ta olduğu gibi tutulan turlar.
+#: ~6 karşılıklı konuşma, ("taslak ister misiniz?" sonrası "evet, hazırla"
+#: gibi) zamir/eksiltili anlatım çözümlemesi için yeterlidir, prompt'u
+#: sınırsız büyütmeden.
 HISTORY_WINDOW = get_policy().memory.history_window
 
-#: Raw turns retained in state before consolidation must have folded them
-#: into history_summary. Comfortably larger than HISTORY_WINDOW so
-#: consolidate_memory_node always has the overflow available when it runs
-#: (it runs once per turn, after HISTORY_WINDOW turns are already appended).
+#: State'te tutulan ham turlar, konsolidasyondan önce history_summary'ye
+#: katlanmış olmalıdır. HISTORY_WINDOW'dan rahatça büyük tutulur ki
+#: consolidate_memory_node her çalıştığında taşan kısım her zaman elinde
+#: olsun (bu her turda bir kez, HISTORY_WINDOW turu zaten eklendikten
+#: sonra çalışır).
 HISTORY_RAW_CAP = get_policy().memory.history_raw_cap
 
-#: `plan_evidence` ids that mark a turn as plain small talk -- see
-#: `_run_assist`'s `is_small_talk_turn`.
+#: Bir turu basit muhabbet (small talk) olarak işaretleyen `plan_evidence`
+#: id'leri -- bkz. `_run_assist`'in `is_small_talk_turn`'ü.
 _SMALL_TALK_EVIDENCE = frozenset({"assist.greeting", "assist.courtesy", "assist.farewell"})
 
-#: Tokens set aside for the assist step's own answer when budgeting its
-#: prompt against settings.OLLAMA_NUM_CTX -- a typical conversational reply
-#: is well under this; generous on purpose since underestimating here would
-#: starve the prompt side for no benefit (the model just stops generating
-#: early, the context window doesn't get any bigger).
+#: Assist adımının kendi cevabı için, prompt'unu settings.OLLAMA_NUM_CTX'e
+#: karşı bütçelerken ayrılan token'lar -- tipik bir sohbet yanıtı bunun
+#: oldukça altındadır; kasıtlı olarak cömert tutulmuştur çünkü burada
+#: olduğundan az tahmin etmek prompt tarafını hiçbir faydası olmadan
+#: aç bırakır (model sadece erken üretmeyi durdurur, context penceresi
+#: hiç büyümez).
 ASSIST_COMPLETION_RESERVE_TOKENS = 1024
 
-#: Only bother calling the model once there's a worth-while batch to fold in,
-#: not for every single turn's 1-2-entry dribble past the window.
+#: Modeli sadece katlamaya değer bir birikim olduğunda çağır, her turun
+#: pencereyi aşan 1-2 kayıtlık ufak taşması için değil.
 CONSOLIDATION_BATCH_SIZE = get_policy().memory.consolidation_batch_size
 
 
 def _append_history(
     left: list[dict[str, str]] | None, right: list[dict[str, str]] | None
 ) -> list[dict[str, str]]:
-    """LangGraph reducer: concatenate turns and keep only the trailing window.
+    """LangGraph reducer: turları birleştir ve sadece sondaki pencereyi tut.
 
     Args:
-        left: The channel's existing value.
-        right: The update returned by a node this superstep.
+        left: Kanalın mevcut değeri.
+        right: Bu süper-adımda bir node tarafından döndürülen güncelleme.
 
     Returns:
-        The combined, trimmed history.
+        Birleştirilmiş, kırpılmış geçmiş.
     """
     combined = [*(left or []), *(right or [])]
     return combined[-HISTORY_RAW_CAP:]
@@ -188,20 +195,20 @@ def _pending_consolidation(
     window: int,
     batch_size: int,
 ) -> tuple[list[dict[str, str]], int]:
-    """Turns that have aged out of the verbatim window and aren't summarized yet.
+    """Aynen tutulan pencereden taşmış ve henüz özetlenmemiş turlar.
 
     Args:
-        history: The raw retained turns (up to HISTORY_RAW_CAP).
-        summarized_through: Count of ``history`` entries already folded into
-            ``history_summary``.
-        window: The verbatim window size (HISTORY_WINDOW).
-        batch_size: Minimum number of newly-overflowed turns worth a model call.
+        history: Tutulan ham turlar (HISTORY_RAW_CAP'e kadar).
+        summarized_through: ``history``'nin zaten ``history_summary``'ye
+            katlanmış kayıt sayısı.
+        window: Aynen tutulan pencere boyutu (HISTORY_WINDOW).
+        batch_size: Model çağrısına değecek minimum yeni taşan tur sayısı.
 
     Returns:
-        A tuple of (pending turns, new boundary to advance
-        ``summarized_through`` to). ``pending`` is empty when there's nothing
-        new past ``window``, or fewer than ``batch_size`` new overflowed turns
-        to bother the model for.
+        (bekleyen turlar, ``summarized_through``'un ilerletileceği yeni
+        sınır) tuple'ı. ``window``'u aşan yeni bir şey yoksa, ya da modeli
+        rahatsız etmeye değecek kadar (``batch_size``'dan az) yeni taşan
+        tur yoksa ``pending`` boştur.
     """
     boundary = max(0, len(history) - window)
     pending = history[summarized_through:boundary]
@@ -211,190 +218,200 @@ def _pending_consolidation(
 
 
 class PlanningState(TypedDict, total=False):
-    """LangGraph state for the master orchestration workflow."""
+    """Ana orkestrasyon iş akışı için LangGraph durumu (state)."""
 
     input_text: str
     document_id: str | None
-    #: The authenticated caller, when REQUIRE_AUTH is on (see
-    #: ChatService._invoke). None in the open demo/dev path. Read by the
-    #: run-recording hooks in this module and, alongside
-    #: requester_clearance below, by _run_assist's tool/output-gate wiring.
+    #: REQUIRE_AUTH açıkken kimliği doğrulanmış çağıran (bkz.
+    #: ChatService._invoke). Açık demo/dev yolunda None. Bu modüldeki
+    #: run-kayıt hook'ları tarafından, ve aşağıdaki requester_clearance ile
+    #: birlikte _run_assist'in araç/output-gate bağlantısı tarafından okunur.
     user_id: str | None
-    #: The authenticated caller's tenant (ChatService._invoke), carried the
-    #: same way user_id is -- read by every recorder call in this module
-    #: (start_run/record_step/end_run, the output guardrail's
-    #: record_event) so their writes can be attributed to a company, and by
-    #: the routing sub-call (see routing_node) to scope which units it may
-    #: suggest. Survives a human-in-the-loop pause/resume via the
-    #: checkpointer, same as user_id.
+    #: Kimliği doğrulanmış çağıranın tenant'ı (ChatService._invoke),
+    #: user_id ile aynı şekilde taşınır -- bu modüldeki her recorder
+    #: çağrısı (start_run/record_step/end_run, output guardrail'in
+    #: record_event'i) tarafından, yazımlarının bir şirkete atfedilebilmesi
+    #: için, ve routing alt-çağrısı tarafından (bkz. routing_node) hangi
+    #: birimleri önerebileceğini sınırlamak için okunur. user_id gibi,
+    #: checkpointer üzerinden bir human-in-the-loop duraklat/devam
+    #: ettirmeyi atlatır (kalıcıdır).
     company_id: str | None
-    #: The authenticated caller's ``username`` (ChatService._invoke), carried
-    #: the same way user_id is -- read only by _run_assist, to address the
-    #: caller by name (see app.ai.identity.injection.format_user_address).
-    #: None in the open demo/dev path, or for any caller whose username
-    #: wasn't resolved. Survives a checkpointer resume unchanged, same as
-    #: user_id.
+    #: Kimliği doğrulanmış çağıranın ``username``'i (ChatService._invoke),
+    #: user_id ile aynı şekilde taşınır -- sadece _run_assist tarafından,
+    #: çağırana adıyla hitap etmek için okunur (bkz.
+    #: app.ai.identity.injection.format_user_address). Açık demo/dev
+    #: yolunda, veya username'i çözümlenemeyen herhangi bir çağıran için
+    #: None. user_id gibi, checkpointer devam ettirmesinde değişmeden kalır.
     user_display_name: str | None
-    #: The authenticated caller's resolved SensitivityLevel (see
-    #: app.core.permissions.role_checker.clearance_for), as its string
-    #: value -- graph state must stay JSON-serialisable, same reason
-    #: reasoning_level is stored as .value rather than the enum itself.
-    #: None in the open demo/dev path (REQUIRE_AUTH off); _run_assist and
-    #: build_assistant_tools both treat that as "skip the clearance check"
-    #: per their own docstrings, not "clears nothing" -- output_gate.py's
-    #: own requester_clearance handling is the one place None still means
-    #: fail-secure.
+    #: Kimliği doğrulanmış çağıranın çözümlenmiş SensitivityLevel'ı (bkz.
+    #: app.core.permissions.role_checker.clearance_for), string değeri
+    #: olarak -- graf durumu JSON-serileştirilebilir kalmalıdır,
+    #: reasoning_level'ın enum yerine .value olarak saklanmasıyla aynı
+    #: sebep. Açık demo/dev yolunda (REQUIRE_AUTH kapalı) None; _run_assist
+    #: ve build_assistant_tools bunu kendi docstring'lerine göre "yetki
+    #: kontrolünü atla" olarak ele alır, "hiçbir şeye izin verme" olarak
+    #: değil -- output_gate.py'nin kendi requester_clearance ele alışı,
+    #: None'ın hâlâ "başarısızlıkta güvenli" (fail-secure) anlamına geldiği
+    #: tek yerdir.
     requester_clearance: str | None
-    #: This turn's audit-trail id (see app.observability.run_recorder).
-    #: Generated fresh in planning_node each turn, like plan_steps -- but
-    #: survives a human-in-the-loop pause/resume via the checkpointer
-    #: (resuming re-enters the graph at human_gate, not planning_node, so
-    #: the *same* run_id is what lets end_run() close out the run it
-    #: actually started with).
+    #: Bu turun denetim izi (audit-trail) id'si (bkz.
+    #: app.observability.run_recorder). plan_steps gibi her turda
+    #: planning_node içinde yeniden üretilir -- ama checkpointer üzerinden
+    #: bir human-in-the-loop duraklat/devam ettirmeyi atlatır (devam etmek
+    #: grafa planning_node'da değil human_gate'te yeniden girer, bu yüzden
+    #: end_run()'ın gerçekten başlattığı run'ı kapatabilmesini sağlayan şey
+    #: *aynı* run_id'dir).
     run_id: str
-    #: Speed-vs-quality tier for this run ("fast"/"balanced"/"deep"); read by
-    #: draft_graph via _run_draft. Absent resolves to "balanced" downstream.
+    #: Bu run için hız-vs-kalite katmanı ("fast"/"balanced"/"deep");
+    #: draft_graph tarafından _run_draft üzerinden okunur. Yoksa aşağı
+    #: akışta "balanced"a çözümlenir.
     reasoning_level: str
     plan_steps: list[str]
     plan_intent: str
-    #: Which mechanism produced this turn's plan (see
-    #: `planner.PlanDecision.source`'s own docstring for the full set of
-    #: values) -- turn-scoped, reset every turn in `planning_node`, same as
-    #: `plan_intent`/`plan_evidence`. `_step_assist` reads this to tell a
-    #: "assist" decision backed by real evidence (`fused`, `model`) apart
-    #: from one that reached assist purely because nothing else was
-    #: decisive (`model_failed`, `model_unclear`, `clarify_repeat_guard`) --
-    #: see `_deterministic_handoff_target` (Faz 7).
+    #: Bu turun planını hangi mekanizmanın ürettiği (tüm değer kümesi için
+    #: `planner.PlanDecision.source`'un kendi docstring'ine bakın) --
+    #: `plan_intent`/`plan_evidence` gibi tur bazlı, `planning_node`'da her
+    #: turda sıfırlanır. `_step_assist`, gerçek kanıta dayanan bir "assist"
+    #: kararını (`fused`, `model`) başka hiçbir şey belirleyici olmadığı
+    #: için assist'e ulaşan bir karardan (`model_failed`, `model_unclear`,
+    #: `clarify_repeat_guard`) ayırt etmek için bunu okur -- bkz.
+    #: `_deterministic_handoff_target` (Faz 7).
     plan_source: str
-    #: Ids of the lexical rules that fired for this turn's decision (see
-    #: `PlanDecision.evidence`). Turn-scoped, like `plan_intent` itself --
-    #: reset every turn in `planning_node`. `_run_assist` reads it to tell a
-    #: message that resolved to `assist` *because* it looked like a greeting
-    #: or a farewell apart from one that landed there for any other reason
-    #: (a genuine question, an out-of-scope request), which needs its full
-    #: conversational context and must not be treated the same way.
+    #: Bu turun kararı için tetiklenen sözcüksel (lexical) kuralların
+    #: id'leri (bkz. `PlanDecision.evidence`). `plan_intent`'in kendisi
+    #: gibi tur bazlı -- `planning_node`'da her turda sıfırlanır.
+    #: `_run_assist`, bir selamlama veya vedalaşma gibi göründüğü *için*
+    #: `assist`'e çözümlenen bir mesajı, başka bir sebeple (gerçek bir
+    #: soru, kapsam dışı bir istek) oraya varan ve tam konuşma bağlamına
+    #: ihtiyaç duyan, aynı şekilde ele alınmaması gereken bir mesajdan
+    #: ayırt etmek için bunu okur.
     plan_evidence: tuple[str, ...]
-    #: Monotonic turn counter, no longer used to index into `plan_steps`
-    #: (see `ready_steps`/`all_steps_settled` in `step_graph.py`) -- kept
-    #: only as an ingredient of `human_gate_node`'s interrupt-id hash and
-    #: for the step-progress log line.
+    #: Artık `plan_steps`'e indekslemek için kullanılmayan (bkz.
+    #: `step_graph.py`'deki `ready_steps`/`all_steps_settled`) monoton tur
+    #: sayacı -- sadece `human_gate_node`'un interrupt-id hash'inin bir
+    #: bileşeni olarak ve adım-ilerleme log satırı için tutulur.
     current_step_idx: int
-    #: Name of the step `execute_step_node` most recently ran, so
-    #: `route_after_step` can check "did draft just run" without indexing
-    #: `plan_steps[current_step_idx - 1]`.
+    #: `execute_step_node`'un en son çalıştırdığı adımın adı, böylece
+    #: `route_after_step` "draft az önce mi çalıştı"yı
+    #: `plan_steps[current_step_idx - 1]`'i indekslemeden kontrol edebilir.
     _last_ran_step: Optional[str]
     cached_document: dict[str, Any]
     classification_result: dict[str, Any]
-    #: Deterministic pre-draft writing-style resolution -- see
-    #: app.ai.workflows.writing_brief. `{"status", "answers", "resolved",
-    #: "questions"}`; `answers` is what draft_graph._build_brief renders.
-    #: Reset every turn in planning_node, unlike focus.writing_brief (its
-    #: session-scoped carry-forward).
+    #: Taslak öncesi belirlenimci (deterministic) yazım-stili çözümlemesi --
+    #: bkz. app.ai.workflows.writing_brief. `{"status", "answers",
+    #: "resolved", "questions"}`; `answers`, draft_graph._build_brief'in
+    #: render ettiği şeydir. focus.writing_brief'in (oturum bazlı taşıması)
+    #: aksine, planning_node içinde her turda sıfırlanır.
     brief_result: dict[str, Any]
-    #: How many rounds brief_gate_node has re-asked this turn -- plays the
-    #: same role gate_revision_count plays for human_gate_node's hash: a
-    #: re-ask after a blank required answer must not collide with round 0's
-    #: interrupt_id.
+    #: brief_gate_node'un bu turda kaç kez yeniden sorduğu -- boş bir
+    #: zorunlu cevaptan sonraki yeniden sorma, 0. turun interrupt_id'siyle
+    #: çakışmamalı; gate_revision_count'un human_gate_node'un hash'i için
+    #: oynadığı rolün aynısını oynar.
     brief_gate_round: int
     draft_result: dict[str, Any]
     routing_result: dict[str, Any]
     assist_result: dict[str, Any]
-    #: revise/clarify write their real payload into draft_result/assist_result
-    #: respectively (see _result_key) so downstream code -- human_gate,
-    #: routing, focus_node's versioning, the "reply" the user sees -- treats
-    #: them uniformly with draft/assist. These two exist only so the
-    #: scheduler (step_graph.ready_steps/all_steps_settled, which keys
-    #: readiness on `state[f"{step}_result"]` for every step generically)
-    #: has something to see -- an update key LangGraph's TypedDict schema
-    #: doesn't declare is silently dropped, not stored, which without this
-    #: field left both steps looking permanently unsettled and looping.
+    #: revise/clarify gerçek yüklerini sırasıyla draft_result/assist_result
+    #: içine yazar (bkz. _result_key), böylece aşağı akıştaki kod --
+    #: human_gate, routing, focus_node'un versiyonlaması, kullanıcının
+    #: gördüğü "reply" -- onlara draft/assist ile aynı şekilde davranır.
+    #: Bu ikisi sadece zamanlayıcının (step_graph.ready_steps/
+    #: all_steps_settled, hazır olma durumunu her adım için genel olarak
+    #: `state[f"{step}_result"]`'e bağlar) görecek bir şeyi olsun diye
+    #: vardır -- LangGraph'ın TypedDict şeması bildirmediği bir güncelleme
+    #: anahtarı sessizce düşürülür, saklanmaz; bu alan olmadan her iki adım
+    #: da kalıcı olarak yerleşmemiş görünür ve döngüye girerdi.
     revise_result: dict[str, Any]
     clarify_result: dict[str, Any]
-    #: Same arrangement as clarify: the out-of-scope refusal's real payload
-    #: goes into assist_result (it is a reply like any other), and this field
-    #: exists only so the scheduler can see the step settle.
+    #: clarify ile aynı düzenleme: kapsam dışı reddin gerçek yükü
+    #: assist_result'a gider (o da diğerleri gibi bir cevaptır), ve bu alan
+    #: sadece zamanlayıcının adımın yerleştiğini görebilmesi için vardır.
     refuse_result: dict[str, Any]
-    #: A pending transfer proposal, when the assist step's own
-    #: `propose_transfer` tool call produced one this turn (see
-    #: `app.ai.tools.transfer_tools.build_transfer_tools`, wired into
-    #: `_run_assist`) -- deterministic recipient/artifact resolution +
-    #: policy check, never the execution itself. `outcome` is one of
-    #: `"unresolved"`, `"recipient_not_found"`, `"artifact_ambiguous"`,
-    #: `"policy_denied"` (all terminal, no gate -- the tool's own return
-    #: string already told the user), `"needs_disambiguation"`/
-    #: `"needs_confirmation"` (routed to `transfer_gate_node` by
-    #: `route_after_step`), or `"confirmed"` (set by `transfer_gate_node`
-    #: once the human approves, routing to `transfer_execute` via
-    #: `route_after_transfer_gate`). See the plan's §I for the full
-    #: `artifact_transfer_intents.state` lifecycle this outcome tracks a
-    #: turn-scoped view of.
+    #: assist adımının kendi `propose_transfer` araç çağrısı bu turda bir
+    #: transfer önerisi ürettiyse (bkz.
+    #: `app.ai.tools.transfer_tools.build_transfer_tools`, `_run_assist`'e
+    #: bağlanmıştır) bekleyen bir transfer önerisi -- belirlenimci
+    #: alıcı/dosya çözümlemesi + politika kontrolü, asla yürütmenin
+    #: kendisi değil. `outcome`; `"unresolved"`, `"recipient_not_found"`,
+    #: `"artifact_ambiguous"`, `"policy_denied"` (hepsi nihai, kapı yok --
+    #: aracın kendi dönüş metni kullanıcıya zaten söylemiştir),
+    #: `"needs_disambiguation"`/`"needs_confirmation"` (`route_after_step`
+    #: tarafından `transfer_gate_node`'a yönlendirilir), veya
+    #: `"confirmed"` (insan onayladığında `transfer_gate_node` tarafından
+    #: ayarlanır, `route_after_transfer_gate` üzerinden `transfer_execute`'a
+    #: yönlendirir) değerlerinden biridir. Bu outcome'un tur bazlı bir
+    #: görünümünü izlediği tam `artifact_transfer_intents.state`
+    #: yaşam döngüsü için planın §I bölümüne bakın.
     transfer_resolve_result: dict[str, Any]
-    #: `_step_transfer_execute`'s outcome -- set only after
-    #: `transfer_gate_node` reaches `"confirmed"`. Also the scheduler's
-    #: settlement marker for every terminal-without-execution path above
-    #: (`{"status": SKIPPED, ...}`), the same dual role `revise_result`/
-    #: `clarify_result`/`refuse_result` play for their own steps.
+    #: `_step_transfer_execute`'in sonucu -- sadece `transfer_gate_node`
+    #: `"confirmed"`e ulaştıktan sonra ayarlanır. Ayrıca yukarıdaki her
+    #: yürütmesiz-nihai yol için zamanlayıcının yerleşme işaretçisi
+    #: (`{"status": SKIPPED, ...}`), `revise_result`/`clarify_result`/
+    #: `refuse_result`'ın kendi adımları için oynadığı çifte rolün aynısı.
     transfer_execute_result: dict[str, Any]
-    #: How many interrupt rounds `transfer_gate_node` has shown this turn --
-    #: plays the same role `brief_gate_round`/`gate_revision_count` play for
-    #: their own gates: a disambiguation round followed by a confirmation
-    #: round must not collide on the same deterministic `interrupt_id`.
+    #: `transfer_gate_node`'un bu turda kaç interrupt turu gösterdiği --
+    #: bir belirsizlik giderme (disambiguation) turunu izleyen bir onay
+    #: turu aynı belirlenimci `interrupt_id` üzerinde çakışmamalı;
+    #: `brief_gate_round`/`gate_revision_count`'un kendi kapıları için
+    #: oynadığı rolün aynısını oynar.
     transfer_gate_round: int
     final_output: dict[str, Any]
-    #: How many times the human approval gate's own "revizyon iste" action
-    #: has re-run the revise sub-graph *within this turn* (see
-    #: gate_revise_node/route_after_gate). Reset to 0 every turn in
-    #: planning_node, bounded by settings.HITL_MAX_GATE_REVISIONS.
+    #: İnsan onay kapısının kendi "revizyon iste" eyleminin *bu tur
+    #: içinde* revise alt-grafını kaç kez yeniden çalıştırdığı (bkz.
+    #: gate_revise_node/route_after_gate). planning_node içinde her turda
+    #: 0'a sıfırlanır, settings.HITL_MAX_GATE_REVISIONS ile sınırlıdır.
     gate_revision_count: int
-    #: The human's typed revision note from the gate's most recent
-    #: "revizyon iste" click, consumed by gate_revise_node and cleared
-    #: immediately after -- never read anywhere else.
+    #: İnsanın kapının en son "revizyon iste" tıklamasından yazdığı
+    #: revizyon notu, gate_revise_node tarafından tüketilir ve hemen
+    #: sonrasında temizlenir -- başka hiçbir yerde okunmaz.
     gate_revision_note: str
-    #: How many times human_gate_node has re-asked this turn for a
-    #: *missing_information* round that did not go through gate_revise_node
-    #: (a residual/unanswered placeholder, or a "reject"/"approve" resume
-    #: with no answers) -- plays the same role gate_revision_count plays for
-    #: the revision-loop rounds. Without a counter of its own, a residual
-    #: round's interrupt_id hash (kind + draft text + current_step_idx +
-    #: gate_revision_count, none of which change on a residual round) comes
-    #: out byte-identical to the round it re-asks, the frontend's dedup
-    #: silently drops the repeat interrupt event, and the session hangs
-    #: waiting for an answer the client believes it already sent. Reset to 0
-    #: every turn in planning_node.
+    #: human_gate_node'un bu turda gate_revise_node'dan geçmemiş bir
+    #: *missing_information* turu için kaç kez yeniden sorduğu (kalıntı/
+    #: cevaplanmamış bir yer tutucu, veya cevapsız bir "reject"/"approve"
+    #: devamı) -- revizyon-döngüsü turları için gate_revision_count'un
+    #: oynadığı rolün aynısını oynar. Kendi sayacı olmadan, bir kalıntı
+    #: turun interrupt_id hash'i (kind + taslak metni + current_step_idx +
+    #: gate_revision_count, kalıntı bir turda hiçbiri değişmez) yeniden
+    #: sorduğu turla bayt bayt aynı çıkar, frontend'in dedup'ı tekrarlanan
+    #: interrupt olayını sessizce düşürür, ve oturum istemcinin zaten
+    #: gönderdiğine inandığı bir cevabı bekleyerek asılı kalır.
+    #: planning_node içinde her turda 0'a sıfırlanır.
     needs_input_round: int
-    #: Persists across separate ainvoke() calls on the same checkpointer
-    #: thread_id (see ChatService._thread_id) -- this is the whole memory
-    #: story; there is no separate store to keep consistent with it. Holds up
-    #: to HISTORY_RAW_CAP raw turns; only the trailing HISTORY_WINDOW are sent
-    #: verbatim to the assist step (see _prior_turns).
+    #: Aynı checkpointer thread_id'si üzerindeki ayrı ainvoke() çağrıları
+    #: boyunca kalıcıdır (bkz. ChatService._thread_id) -- hafıza hikayesinin
+    #: tamamı budur; onunla tutarlı tutulması gereken ayrı bir store
+    #: yoktur. HISTORY_RAW_CAP'e kadar ham tur tutar; sadece sondaki
+    #: HISTORY_WINDOW olduğu gibi assist adımına gönderilir (bkz.
+    #: _prior_turns).
     history: Annotated[list[dict[str, str]], _append_history]
-    #: Rolling summary of turns that have aged out of the verbatim window
-    #: (see consolidate_memory_node). Plain string field -- LangGraph's
-    #: default "last write wins" channel semantics are exactly what's wanted
-    #: here since only consolidate_memory_node ever writes it.
+    #: Aynen tutulan pencereden taşmış turların yuvarlanan özeti (bkz.
+    #: consolidate_memory_node). Düz string alan -- LangGraph'ın
+    #: varsayılan "son yazan kazanır" kanal semantiği tam olarak burada
+    #: istenen şey, çünkü onu sadece consolidate_memory_node yazar.
     history_summary: str
-    #: Count of `history` entries already folded into history_summary, so
-    #: consolidation only summarizes the newly-overflowed delta each turn
-    #: instead of re-summarizing the whole backlog.
+    #: `history`'nin zaten history_summary'ye katlanmış kayıt sayısı,
+    #: böylece konsolidasyon her turda sadece yeni taşan farkı özetler,
+    #: tüm birikimi yeniden özetlemek yerine.
     history_summarized_through: int
-    #: Task-level state (active draft + its version history, the session's
-    #: accumulated objective, and -- once later phases exist to populate
-    #: them -- a pending clarification and the last-referenced document
-    #: anchor). The one PlanningState channel `planning_node` does NOT
-    #: reset every turn: everything else here answers "what happened this
-    #: turn", this answers "what are we working on across turns". Updated
-    #: by `focus_node`, never by `planning_node`. See `app.ai.session.focus`.
+    #: Görev düzeyinde durum (aktif taslak + sürüm geçmişi, oturumun
+    #: birikmiş amacı, ve -- onları dolduracak daha sonraki fazlar
+    #: olduğunda -- bekleyen bir açıklama isteği ve son referans verilen
+    #: belge çapası). `planning_node`'un her turda SIFIRLAMADIĞI tek
+    #: PlanningState kanalı: buradaki her şey "bu tur ne oldu"yu
+    #: yanıtlarken, bu "turlar boyunca üzerinde ne çalışıyoruz"u yanıtlar.
+    #: `focus_node` tarafından güncellenir, asla `planning_node` tarafından
+    #: değil. Bkz. `app.ai.session.focus`.
     focus: Annotated[SessionFocus, merge_focus]
 
 
 def _requested_correspondence_type(classification: dict[str, Any]) -> str | None:
-    """Read an explicitly classified output correspondence type.
+    """Açıkça sınıflandırılmış bir çıktı yazışma türünü okur.
 
     Args:
-        classification: Combined analysis result.
+        classification: Birleşik analiz sonucu.
 
     Returns:
-        The requested correspondence type, when the metadata carries one.
+        Metadata bir tane taşıyorsa, istenen yazışma türü.
     """
     metadata = classification.get("metadata", {}) or {}
     return classification.get("correspondence_type") or metadata.get(
@@ -406,25 +423,26 @@ async def _load_cached_document(
     document_cache_provider: Callable[[str], Awaitable[dict[str, Any]]] | None,
     document_id: str | None,
 ) -> dict[str, Any]:
-    """Read the cached analysis and extracted text for an uploaded document.
+    """Yüklenen bir belge için önbelleğe alınmış analizi ve çıkarılan metni okur.
 
-    Delegates to ``document_cache_provider`` -- an injected callable (see
-    ``create_planning_graph``'s own docstring), never a direct
-    ``app.domains.documents`` import: this module must stay domain-free
-    (``backend/tests/unit/ai/test_ai_never_imports_domains.py`` enforces it
-    statically), the same reason ``units_provider``/``adapter_provider``
-    are plain callables rather than imported repositories.
+    ``document_cache_provider``'a devreder -- enjekte edilmiş bir callable
+    (bkz. ``create_planning_graph``'ın kendi docstring'i), asla doğrudan bir
+    ``app.domains.documents`` import'u değil: bu modül domain'den bağımsız
+    kalmalıdır (``backend/tests/unit/ai/test_ai_never_imports_domains.py``
+    bunu statik olarak zorunlu kılar), ``units_provider``/
+    ``adapter_provider``'ın import edilmiş repository'ler yerine düz
+    callable olmasıyla aynı sebep.
 
     Args:
-        document_cache_provider: Async callable resolving a document's
-            cached analysis (see ``app.domains.documents.provider.
-            get_cached_document``), or None (a document-less graph build,
-            e.g. some test fixtures) -- degrades to "no cache", same as a
-            cache miss.
-        document_id: The document's storage path, or None.
+        document_cache_provider: Bir belgenin önbelleğe alınmış analizini
+            çözümleyen async callable (bkz.
+            ``app.domains.documents.provider.get_cached_document``), veya
+            None (belgesiz bir graf inşası, ör. bazı test fixture'ları) --
+            bir cache miss ile aynı şekilde "önbellek yok"a düşer.
+        document_id: Belgenin depolama yolu, veya None.
 
     Returns:
-        The cache payload, or an empty dict when there is nothing to load.
+        Önbellek yükü, veya yüklenecek bir şey yoksa boş bir dict.
     """
     if not document_id or document_cache_provider is None:
         return {}
@@ -432,18 +450,18 @@ async def _load_cached_document(
 
 
 def _mevzuat_context(classification: dict[str, Any]) -> str:
-    """Render the legislation the analysis step already retrieved.
+    """Analiz adımının zaten getirmiş olduğu mevzuatı render eder.
 
-    The draft flow no longer runs a separate RAG step. The analysis sub-graph
-    retrieves legislation for the document as part of its own work, so a second
-    retrieval pass repeated the same query behind an extra LLM call and
-    discarded the first result.
+    Taslak akışı artık ayrı bir RAG adımı çalıştırmıyor. Analiz alt-grafı
+    belge için mevzuatı kendi işinin bir parçası olarak getiriyor, bu
+    yüzden ikinci bir getirme geçişi aynı sorguyu ekstra bir LLM çağrısının
+    ardında tekrarlıyor ve ilk sonucu çöpe atıyordu.
 
     Args:
-        classification: The analysis result.
+        classification: Analiz sonucu.
 
     Returns:
-        The excerpts as prompt context, or an empty string.
+        Prompt bağlamı olarak alıntılar, veya boş bir string.
     """
     parts: list[str] = []
 
@@ -461,58 +479,59 @@ def _mevzuat_context(classification: dict[str, Any]) -> str:
 
 
 def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
-    """History entries from before the current turn, most-recent last.
+    """Mevcut turdan önceki geçmiş kayıtları, en yenisi en sonda.
 
-    ``planning_node`` always appends the current user turn to ``history``
-    before the ``assist`` step runs, so the last entry is always the message
-    being answered right now -- excluded here, or it would appear twice once
-    the agent appends it again as the live query turn.
+    ``planning_node``, ``assist`` adımı çalışmadan önce mevcut kullanıcı
+    turunu her zaman ``history``'ye ekler, bu yüzden son kayıt her zaman şu
+    an cevaplanan mesajdır -- burada hariç tutulur, yoksa agent onu canlı
+    sorgu turu olarak tekrar eklediğinde iki kez görünürdü.
 
     Args:
-        state: Current graph state.
-        limit: Maximum number of prior turns to return.
+        state: Mevcut graf durumu.
+        limit: Döndürülecek maksimum önceki tur sayısı.
 
     Returns:
-        Up to ``limit`` prior turns, oldest first.
+        En eskisi önce olmak üzere en fazla ``limit`` kadar önceki tur.
     """
     history = state.get("history") or []
     prior = history[:-1] if history else []
     return prior[-limit:] if limit > 0 else []
 
 
-#: Plan-decision sources that mean no real evidence-backed decision routed
-#: here -- see planner.PlanDecision.source's own docstring. A turn that
-#: reached "assist" through one of these had nothing decisive settle it,
-#: unlike a genuine "fused"/"model" win, which is why only these three
-#: trigger the deterministic recheck below (Faz 7) rather than every assist
-#: turn, which would re-litigate decisions the router already made with
-#: real evidence behind them.
+#: Buraya gerçek kanıta dayalı bir kararın yönlendirmediği anlamına gelen
+#: plan-karar kaynakları -- bkz. planner.PlanDecision.source'un kendi
+#: docstring'i. Bunlardan biri üzerinden "assist"e ulaşan bir turu, gerçek
+#: bir "fused"/"model" kazanımının aksine, hiçbir şey belirleyici olarak
+#: sonuçlandırmamıştır; bu yüzden aşağıdaki belirlenimci yeniden kontrolü
+#: (Faz 7) sadece bu üçü tetikler, arkasında gerçek kanıt olan kararları
+#: router'ın zaten verdiği her assist turunu değil.
 _WEAK_ASSIST_SOURCES = frozenset({"model_failed", "model_unclear", "clarify_repeat_guard"})
 
 
 def _deterministic_handoff_target(state: PlanningState) -> Optional[str]:
-    """Whether a plain lexical re-score finds decisive draft/revise evidence
-    a fallback assist decision missed entirely (Faz 7).
+    """Düz bir sözcüksel yeniden puanlamanın, bir fallback assist kararının
+    tamamen kaçırdığı belirleyici draft/revise kanıtını bulup bulmadığı (Faz 7).
 
-    A message like "Cevabı gönderdiğim gibi bırak, sadece imzayı düzelt"
-    can fail to clear fusion's own tau_high/tau_low thresholds (whatever
-    else is going on in the message dilutes the signal) and still carry a
-    lexical `revise` score well above the noise floor -- the fusion layer's
-    uncertainty is about *which* intent wins outright, not about whether
-    the evidence for draft/revise exists at all. Re-scoring here is free
-    (no model call, the same table `intent_scorer.score_intents` already
-    is) and only ever *adds* a check on top of the router's own decision,
-    never overrides a confident one -- see `_WEAK_ASSIST_SOURCES`.
+    "Cevabı gönderdiğim gibi bırak, sadece imzayı düzelt" gibi bir mesaj,
+    fusion'ın kendi tau_high/tau_low eşiklerini geçemeyebilir (mesajda başka
+    ne oluyorsa sinyali sulandırır) ve yine de gürültü tabanının oldukça
+    üzerinde bir sözcüksel `revise` skoru taşıyabilir -- fusion katmanının
+    belirsizliği *hangi* intent'in kesin olarak kazandığıyla ilgilidir,
+    draft/revise için kanıtın var olup olmadığıyla değil. Burada yeniden
+    puanlama bedavadır (model çağrısı yok, `intent_scorer.score_intents`'in
+    zaten kullandığı aynı tablo) ve router'ın kendi kararının üzerine
+    sadece bir kontrol *ekler*, güvenilir bir kararı asla geçersiz kılmaz --
+    bkz. `_WEAK_ASSIST_SOURCES`.
 
     Args:
-        state: Current graph state.
+        state: Mevcut graf durumu.
 
     Returns:
-        ``"draft"`` or ``"revise"`` when that intent's lexical score clears
-        ``PRESENCE_FLOOR``, else ``None``. ``revise`` can never win here
-        without ``SessionFocus.active_draft`` set -- `score_intents` itself
-        gates every `revise` rule on `has_active_draft`, so its score is
-        structurally 0.0 without one.
+        O intent'in sözcüksel skoru ``PRESENCE_FLOOR``'u geçiyorsa
+        ``"draft"`` veya ``"revise"``, aksi halde ``None``. ``revise``,
+        ``SessionFocus.active_draft`` ayarlanmadan burada asla kazanamaz --
+        `score_intents`'in kendisi her `revise` kuralını `has_active_draft`'a
+        bağlar, bu yüzden active_draft yoksa skoru yapısal olarak 0.0'dır.
     """
     focus = state.get("focus") or SessionFocus()
     has_active_draft = focus.active_draft is not None
@@ -534,28 +553,31 @@ def _summarize_step_outcome(
     assist_result: dict[str, Any],
     classification_result: dict[str, Any],
 ) -> Optional[str]:
-    """One short, honest sentence recording what a non-assist step did.
+    """Assist-dışı bir adımın ne yaptığını kaydeden kısa, dürüst bir cümle.
 
-    ``_run_assist`` appends its own reply to ``history`` already. Every other
-    step -- draft, revise, analyze, clarify -- settles a result the user sees
-    in ``final_output`` but that never reaches ``history`` or
-    ``history_summary``. A later turn that only has the summary to go on then
-    sees nothing but the *user's own request text* ("bu taslağı kısalt") with
-    no record of what actually happened to it -- and nothing to contradict a
-    plausible-sounding but false claim that it succeeded. This closes that
-    gap with a status marker, not the full draft text (already retained in
-    ``SessionFocus.draft_history`` for anything that needs the real content).
+    ``_run_assist`` zaten kendi cevabını ``history``'ye ekler. Diğer her
+    adım -- draft, revise, analyze, clarify -- kullanıcının
+    ``final_output``'ta gördüğü ama ``history``'ye veya
+    ``history_summary``'ye hiç ulaşmayan bir sonuçla yerleşir. Devamında
+    sadece özete dayanabilen daha sonraki bir tur, o zaman sadece
+    *kullanıcının kendi istek metnini* ("bu taslağı kısalt") görür, ona
+    gerçekte ne olduğuna dair bir kayıt olmadan -- ve başarılı olduğuna
+    dair makul görünen ama yanlış bir iddiayı çürütecek hiçbir şey olmadan.
+    Bu, o boşluğu tam taslak metni değil (gerçek içeriğe ihtiyaç duyan her
+    şey için zaten ``SessionFocus.draft_history``'de tutulur), bir durum
+    işaretiyle kapatır.
 
     Args:
-        plan_intent: This turn's resolved intent.
-        draft_result: This turn's settled ``draft_result``.
-        assist_result: This turn's settled ``assist_result`` (carries
-            ``clarify``'s question -- see ``_step_clarify``).
-        classification_result: This turn's settled ``classification_result``.
+        plan_intent: Bu turun çözümlenmiş intent'i.
+        draft_result: Bu turun yerleşmiş ``draft_result``'ı.
+        assist_result: Bu turun yerleşmiş ``assist_result``'ı (``clarify``'ın
+            sorusunu taşır -- bkz. ``_step_clarify``).
+        classification_result: Bu turun yerleşmiş ``classification_result``'ı.
 
     Returns:
-        A short assistant-role note, or None for ``assist`` (already
-        self-recorded) and for an intent with nothing settled yet.
+        Kısa bir assistant-rollü not, veya ``assist`` için (zaten kendi
+        kendini kaydetmiştir) ve henüz hiçbir şey yerleşmemiş bir intent
+        için None.
     """
     if plan_intent in (None, "assist"):
         return None
@@ -597,9 +619,9 @@ def _summarize_step_outcome(
     return None
 
 
-#: Turkish labels for SensitivityLevel, for the prompt-facing note only --
-#: the enum's own .value (e.g. "cok_gizli") is what every deterministic
-#: check compares against, this is purely what the model reads.
+#: SensitivityLevel için Türkçe etiketler, sadece prompt'a giden not için --
+#: enum'un kendi .value'su (ör. "cok_gizli") her belirlenimci kontrolün
+#: karşılaştırdığı şeydir, bu tamamen modelin okuduğu şeydir.
 _SENSITIVITY_LABELS: dict[SensitivityLevel, str] = {
     SensitivityLevel.UNMARKED: "İşaretlenmemiş",
     SensitivityLevel.TASNIF_DISI: "Tasnif Dışı",
@@ -614,24 +636,25 @@ def _build_security_boundary_note(
     sensitivity: Optional[SensitivityAssessment],
     requester_clearance: Optional[SensitivityLevel],
 ) -> str:
-    """Compose the Turkish note rendered into the assistant's system prompt.
+    """Asistanın sistem prompt'una render edilen Türkçe notu oluşturur.
 
-    A secondary, prompt-level layer only (see ``assistant.md``'s own
-    disclaimer to that effect) -- ``document_tools.py``'s deny-at-retrieval
-    check and ``output_gate.py`` are what actually enforce the boundary;
-    this exists to catch a paraphrase-around-the-facts case neither of those
-    regex/pattern-based checks can see, the same reasoning behind the
-    guardrail judge (``app.ai.guardrails.llm_nuance``).
+    Sadece ikincil, prompt seviyesinde bir katman (bkz. ``assistant.md``'nin
+    bu konudaki kendi çekincesi) -- sınırı gerçekten uygulayan
+    ``document_tools.py``'nin retrieval-sırasında-reddetme kontrolü ve
+    ``output_gate.py``'dir; bu, ne regex/pattern tabanlı kontrolün de
+    göremediği gerçeklerin etrafından dolanan bir ifade değişikliği
+    (paraphrase) durumunu yakalamak için vardır, guardrail hakeminin
+    (``app.ai.guardrails.llm_nuance``) arkasındaki mantıkla aynı.
 
     Args:
-        sensitivity: This turn's attached document's assessment, or None
-            when no document is attached.
-        requester_clearance: The requester's resolved clearance, or None
-            when unknown (unauthenticated / REQUIRE_AUTH off).
+        sensitivity: Bu turda ekli belgenin değerlendirmesi, veya ekli
+            belge yoksa None.
+        requester_clearance: İstek sahibinin çözümlenmiş yetkisi, veya
+            bilinmiyorsa (kimlik doğrulaması yok / REQUIRE_AUTH kapalı) None.
 
     Returns:
-        The note text. Never empty -- always states what's actually known,
-        even when that's "nothing."
+        Not metni. Asla boş değil -- gerçekten bilinen şeyi her zaman
+        belirtir, o şey "hiçbir şey" olsa bile.
     """
     clearance_label = (
         _SENSITIVITY_LABELS.get(requester_clearance, requester_clearance.value)
@@ -670,119 +693,126 @@ def create_planning_graph(
     units_provider: Any = None,
     document_cache_provider: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
 ):
-    """Create and compile the master orchestration workflow.
+    """Ana orkestrasyon iş akışını oluşturur ve derler.
 
-    Planning is deterministic (see :mod:`app.ai.workflows.planner`). The previous
-    implementation asked a model to choose from a fixed four-way decision table,
-    which cost a structured generation plus a retry loop on every single request
-    and needed sixty lines of output-shape repair to be usable at all.
+    Planlama belirlenimcidir (deterministic) (bkz.
+    :mod:`app.ai.workflows.planner`). Önceki implementasyon, sabit dört yönlü
+    bir karar tablosundan seçim yapması için bir modele soruyordu; bu her
+    tek istekte bir structured generation artı bir yeniden deneme döngüsüne
+    mal oluyordu ve kullanılabilir olması için altmış satırlık çıktı-şekli
+    onarımı gerektiriyordu.
 
     Args:
-        llm_client: Quality-tier model, used for the assist step.
-        document_analysis_graph: Compiled analysis sub-graph.
-        rag_graph: Compiled retrieval sub-graph, also handed to the assist
-            step's ``search_legislation`` tool.
-        draft_graph: Compiled drafting sub-graph.
-        routing_graph: Compiled routing sub-graph.
-        vector_store: Vector store backing the assist step's document search.
-        embeddings_client: Embeddings client backing the assist step's
-            document search.
-        fast_llm_client: Small model for intent classification on ambiguous
-            messages. Falls back to ``llm_client``.
-        guard_llm_client: Optional client for the guardrail judge. Defaults to
-            ``fast_llm_client or llm_client`` -- pass
-            ``app.ai.llms.get_guard_llm_client()`` to route to Evren's
-            dedicated ``guard`` model instead of the general fast-tier model.
-        mevzuat_retriever: Optional retriever handed to the revise
-            sub-graph for conditional legislation re-retrieval (see
-            ``app.ai.revision.retrieval``). None always skips it.
-        adapter_provider: Optional async callable resolving a company's
-            runtime style adapter (Faz C2, see
+        llm_client: Assist adımı için kullanılan kalite katmanı modeli.
+        document_analysis_graph: Derlenmiş analiz alt-grafı.
+        rag_graph: Derlenmiş getirme (retrieval) alt-grafı, ayrıca assist
+            adımının ``search_legislation`` aracına da verilir.
+        draft_graph: Derlenmiş taslak oluşturma alt-grafı.
+        routing_graph: Derlenmiş routing alt-grafı.
+        vector_store: Assist adımının belge aramasını destekleyen vector store.
+        embeddings_client: Assist adımının belge aramasını destekleyen
+            embeddings istemcisi.
+        fast_llm_client: Belirsiz mesajlarda intent sınıflandırması için
+            küçük model. ``llm_client``'a geri düşer.
+        guard_llm_client: Guardrail hakemi için isteğe bağlı istemci.
+            Varsayılan ``fast_llm_client or llm_client`` -- genel hızlı
+            katman modeli yerine Evren'in özel ``guard`` modeline
+            yönlendirmek için ``app.ai.llms.get_guard_llm_client()`` geçirin.
+        mevzuat_retriever: Koşullu mevzuat yeniden-getirme için revise
+            alt-grafına verilen isteğe bağlı retriever (bkz.
+            ``app.ai.revision.retrieval``). None her zaman atlar.
+        adapter_provider: Bir şirketin çalışma zamanı stil adaptörünü
+            çözümleyen isteğe bağlı async callable (Faz C2, bkz.
             ``app.domains.companies.provider.get_company_adapter``) --
-            forwarded to the revise sub-graph built below; ``draft_graph``
-            gets its own copy at construction time (see
-            ``app.api.dependency.get_draft_graph``), not through here. None
-            always skips adapter resolution.
-        profile_provider: Optional async callable resolving a company's
-            identity profile (see
+            aşağıda inşa edilen revise alt-grafına iletilir; ``draft_graph``
+            kendi kopyasını inşa zamanında alır (bkz.
+            ``app.api.dependency.get_draft_graph``), buradan değil. None
+            her zaman adaptör çözümlemesini atlar.
+        profile_provider: Bir şirketin kimlik profilini çözümleyen isteğe
+            bağlı async callable (bkz.
             ``app.domains.companies.provider.get_company_profile``) --
-            resolved once per assist turn and rendered into the assistant's
-            ``{{agent_identity}}`` placeholder (see
-            ``format_agent_identity``). None reproduces pre-feature
-            behaviour exactly (the system default identity, every turn).
-        rules_provider: Optional async callable resolving a company's
-            mandatory drafting rules (see
+            her assist turunda bir kez çözümlenir ve asistanın
+            ``{{agent_identity}}`` yer tutucusuna render edilir (bkz.
+            ``format_agent_identity``). None, özellik-öncesi davranışı
+            tam olarak yeniden üretir (sistem varsayılan kimliği, her turda).
+        rules_provider: Bir şirketin zorunlu yazım kurallarını çözümleyen
+            isteğe bağlı async callable (bkz.
             ``app.domains.companies.provider.get_company_rules``) --
-            forwarded to the revise sub-graph built below, same as
-            ``adapter_provider``; ``draft_graph`` gets its own copy at
-            construction time. None always skips rules resolution.
-        checkpointer: Optional LangGraph checkpointer (see
-            ``app.infrastructure.checkpointing``). Required for the
-            ``human_gate`` node's ``interrupt()`` calls to actually pause and
-            resume the run; without one, HITL steps are skipped and the graph
-            falls through as if they never triggered -- degraded, not broken.
-            Only this graph gets a checkpointer: the four sub-graphs are
-            invoked via ``.ainvoke()`` from inside ``execute_step_node``
-            rather than registered as nodes, so they are independent Pregel
-            instances that would each need their own unrelated checkpoint
-            lineage.
-        transfer_provider: Optional object exposing the `TransferGraphProvider`
-            surface (`app.domains.transfers.provider`) -- resolution,
-            recipient lookup/recommendation, and the intent state machine's
-            transitions, each opening its own session per call, the same
-            injected-callable pattern `adapter_provider`/`units_provider`
-            already use. Reached only from the assist step's own
-            `propose_transfer` tool (`app.ai.tools.transfer_tools`), never
-            from a dedicated plan step -- transfer is not a resolvable
-            intent (see `planner.PLAN_BY_INTENT`'s own docstring). `None`
-            (the default, matching `settings.AI_TRANSFER_ENABLED`'s own
-            default) means the tool is simply never offered to the model --
-            degraded, not broken, same as an absent `checkpointer`.
-        units_provider: Optional async callable resolving a company's own
-            active routable unit names (see
+            ``adapter_provider`` ile aynı şekilde aşağıda inşa edilen
+            revise alt-grafına iletilir; ``draft_graph`` kendi kopyasını
+            inşa zamanında alır. None her zaman kurallar çözümlemesini atlar.
+        checkpointer: İsteğe bağlı LangGraph checkpointer (bkz.
+            ``app.infrastructure.checkpointing``). ``human_gate`` node'unun
+            ``interrupt()`` çağrılarının run'ı gerçekten duraklatıp devam
+            ettirebilmesi için gereklidir; olmadan, HITL adımları atlanır
+            ve graf hiç tetiklenmemiş gibi devam eder -- kırılmış değil,
+            düşük performanslı. Checkpointer'ı sadece bu graf alır: dört
+            alt-graf, node olarak kaydedilmek yerine ``execute_step_node``
+            içinden ``.ainvoke()`` üzerinden çağrılır, bu yüzden her biri
+            kendi ilgisiz checkpoint soyuna ihtiyaç duyacak bağımsız Pregel
+            örnekleridir.
+        transfer_provider: `TransferGraphProvider` yüzeyini
+            (`app.domains.transfers.provider`) ortaya koyan isteğe bağlı
+            nesne -- çözümleme, alıcı arama/önerme, ve intent durum
+            makinesinin geçişleri, her biri çağrı başına kendi oturumunu
+            açar, `adapter_provider`/`units_provider`'ın zaten kullandığı
+            aynı enjekte-edilmiş-callable deseni. Sadece assist adımının
+            kendi `propose_transfer` aracından (`app.ai.tools.transfer_tools`)
+            erişilir, asla özel bir plan adımından değil -- transfer
+            çözümlenebilir bir intent değildir (bkz.
+            `planner.PLAN_BY_INTENT`'in kendi docstring'i). `None`
+            (varsayılan, `settings.AI_TRANSFER_ENABLED`'ın kendi
+            varsayılanıyla eşleşir) aracın modele hiç sunulmadığı anlamına
+            gelir -- kırılmış değil, düşük performanslı, eksik bir
+            `checkpointer` ile aynı.
+        units_provider: Bir şirketin kendi aktif yönlendirilebilir birim
+            adlarını çözümleyen isteğe bağlı async callable (bkz.
             `app.domains.units.provider.get_active_units_for_routing`,
-            already used by `routing_graph`'s own `units_provider`) --
-            folded into `app.ai.identity.parties.SelfParty.unit_names` so
-            the pre-draft writing brief (`_step_brief`) recognises a user
-            referring to one of the company's own departments as the
-            sender, not a document's addressee. `None` degrades to no unit
-            names at all, same as an absent `profile_provider`.
-        document_cache_provider: Optional async callable (see
-            `app.domains.documents.provider.get_cached_document`) resolving
-            an uploaded document's analysis cache for the planning step
-            (`state["cached_document"]`) -- injected rather than imported
-            for the same reason as `units_provider`/`adapter_provider` (see
-            `_load_cached_document`'s own docstring). `None` degrades to
-            "no cache" for every document_id, same as before this
-            parameter existed.
+            `routing_graph`'ın kendi `units_provider`'ı tarafından zaten
+            kullanılıyor) -- `app.ai.identity.parties.SelfParty.unit_names`'e
+            katlanır, böylece taslak-öncesi yazım brief'i (`_step_brief`)
+            kullanıcının şirketin kendi departmanlarından birine gönderen
+            olarak atıfta bulunduğunu, bir belgenin alıcısı olarak değil,
+            tanır. `None`, eksik bir `profile_provider` ile aynı şekilde
+            hiç birim adı olmamasına düşer.
+        document_cache_provider: Planlama adımı için (`state["cached_document"]`)
+            yüklenen bir belgenin analiz önbelleğini çözümleyen isteğe bağlı
+            async callable (bkz.
+            `app.domains.documents.provider.get_cached_document`) --
+            `units_provider`/`adapter_provider` ile aynı sebeple import
+            edilmek yerine enjekte edilir (bkz. `_load_cached_document`'ın
+            kendi docstring'i). `None`, bu parametre var olmadan önceki gibi,
+            her document_id için "önbellek yok"a düşer.
 
     Returns:
-        The compiled LangGraph workflow.
+        Derlenmiş LangGraph iş akışı.
     """
     has_checkpointer = checkpointer is not None
     assistant_agent = AssistantAgent(llm_client)
-    # Sized against llm_client.count_tokens -- the same client the assist
-    # step's real generation call goes through, so the budget enforced here
-    # matches what the provider actually sees.
+    # llm_client.count_tokens'a göre boyutlandırılır -- assist adımının
+    # gerçek generation çağrısının geçtiği aynı istemci, bu yüzden burada
+    # uygulanan bütçe sağlayıcının gerçekte gördüğüyle eşleşir.
     context_builder = ContextBuilder(llm_client)
     intent_client = fast_llm_client or llm_client
-    # Reuses the fast tier already resolved for intent classification -- a
-    # short consolidation pass doesn't warrant a third model in the mix.
+    # Intent sınıflandırması için zaten çözümlenmiş hızlı katmanı yeniden
+    # kullanır -- kısa bir konsolidasyon geçişi karışıma üçüncü bir model
+    # eklemeyi gerektirmez.
     memory_summarizer_agent = MemorySummarizerAgent(intent_client)
     guardrail_judge_agent = GuardrailJudgeAgent(guard_llm_client or intent_client)
-    # Unfit on purpose, same as the indexing side (documents/service.py):
-    # its sparse indices are corpus-independent CRC32 hashes, and query-side
-    # IDF weights default to a uniform 1.0 without a fitted vocabulary, which
-    # is still a meaningful lexical signal for RRF fusion against the dense
-    # vector.
+    # Kasıtlı olarak fit edilmemiş, indeksleme tarafıyla aynı
+    # (documents/service.py): sparse indeksleri corpus'tan bağımsız CRC32
+    # hash'leridir, ve sorgu tarafındaki IDF ağırlıkları fit edilmiş bir
+    # kelime dağarcığı olmadan varsayılan olarak tekdüze 1.0'a düşer; bu
+    # yine de dense vektöre karşı RRF füzyonu için anlamlı bir sözcüksel
+    # sinyaldir.
     qa_sparse_encoder = SparseBM25Encoder()
 
     async def _resolve_profile(company_id: Optional[str]) -> CompanyProfile:
-        """This company's identity profile, or an empty one when no
-        ``profile_provider`` was configured, no ``company_id`` is on this
-        turn's state, or resolution itself fails -- a profile is never
-        allowed to block or alter the assist turn. Mirrors
-        ``draft_graph._resolve_adapter`` exactly."""
+        """Bu şirketin kimlik profili, ya da hiçbir ``profile_provider``
+        yapılandırılmamışsa, bu turun state'inde ``company_id`` yoksa, veya
+        çözümlemenin kendisi başarısız olursa boş bir profil -- bir profil
+        assist turunu asla engelleyemez veya değiştiremez. Tam olarak
+        ``draft_graph._resolve_adapter``'ı yansıtır."""
         if not company_id or profile_provider is None:
             return CompanyProfile.empty(company_id or "")
         try:

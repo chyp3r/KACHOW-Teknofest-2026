@@ -3,6 +3,26 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Eklendi
+- `docs/diagrams/` altında sistemin tamamını (backend + frontend) kapsayan 8
+  Mermaid diyagramı eklendi: use case, Görev 1 ve Görev 2 sıra diyagramları,
+  evrak yaşam döngüsü aktivite diyagramı, dağıtım (deployment) diyagramı,
+  bileşen/mimari diyagramı, veri modeli ER diyagramı ve taslak durum diyagramı.
+
+### Değiştirildi
+- Backend kod tabanındaki İngilizce docstring ve yorumların büyük bölümü
+  (`backend/app/` altında router'lar, ajanlar, workflow'lar, exception
+  mesajları, infrastructure ve domain servisleri dahil) Türkçeye çevrildi;
+  projenin kendi `docs/development/naming.md` standardına uyum sağlandı.
+  FastAPI router docstring'leri ve varsayılan hata mesajları öncelikli olarak
+  çevrildi (Swagger/OpenAPI arayüzünde görünür oldukları için).
+
+### Kaldırıldı
+- Kullanılmayan iskelet/stub dosyaları silindi: `auth` ve `system`
+  domain'lerindeki boş `repository.py`/`service.py`/model/schema stub'ları,
+  `ai/llms/ollama.py` ve `domains/chat/service.py` geriye dönük uyumluluk
+  shim'leri, gereksiz `backend/alembic/versions/.gitkeep`.
+
 ### Düzeltildi
 - Gerçek 23 belgelik derlem üzerinde ölçülen OCR karşılaştırması README'ye
   eklendi (üretimde kullanılan `glm-ocr`'ın ölçülmemiş "95" değeri gerçek

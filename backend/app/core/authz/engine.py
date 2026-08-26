@@ -1,38 +1,42 @@
-"""The decision algorithm: ``authorize(subject, action, resource, env, grants) -> Decision``.
+"""Karar algoritması: ``authorize(subject, action, resource, env, grants) -> Decision``.
 
-Pure and DB-independent by design -- exactly the property that made
-``app.ai.policy.schema.Policy`` fully unit-testable without mocking
-anything, which matters here even more: this repo's test suite is
-overwhelmingly mock-based (see ``AGENTS.md``/``tests/conftest.py``), so a
-decision function that needs a live session or a Redis connection to be
-exercised would only ever be tested through the DB-backed wrapper
-(``app.core.authz.service.AuthzService``), not on its own. ``grants`` is
-passed in already resolved (``app.core.authz.repository.PermissionGrantRepository``
-does the DB read; ``AuthzService`` is what actually calls this with
-non-empty grants) so this module never imports SQLAlchemy or Redis.
+Tasarım gereği saf ve DB'den bağımsız -- ``app.ai.policy.schema.Policy``'yi
+hiçbir şey mock'lamadan tam olarak birim testine tabi tutulabilir kılan
+tam olarak aynı özellik, ki bu burada daha da önemli: bu deponun test paketi
+ağırlıklı olarak mock tabanlıdır (bkz. ``AGENTS.md``/``tests/conftest.py``),
+bu yüzden çalıştırılmak için canlı bir oturuma ya da Redis bağlantısına
+ihtiyaç duyan bir karar fonksiyonu yalnızca DB destekli sarmalayıcı
+(``app.core.authz.service.AuthzService``) üzerinden test edilebilirdi,
+kendi başına değil. ``grants`` zaten çözümlenmiş olarak verilir
+(``app.core.authz.repository.PermissionGrantRepository`` DB okumasını
+yapar; bunu boş olmayan yetkilerle asıl çağıran ``AuthzService``'tir) bu
+yüzden bu modül asla SQLAlchemy ya da Redis içe aktarmaz.
 
-Composition order with the rest of the security stack (unchanged from the
-tenancy plan, restated here since this is where it is enforced):
+Güvenlik yığınının geri kalanıyla bileşim sırası (kiracılık planından
+değişmeden, burada uygulandığı yer olduğu için tekrar belirtilmiştir):
 
-    1. Tenant scope   -- this function's own step 0, plus the repository
-                          layer's mandatory ``company_id`` filter (and, from
-                          a future RLS phase, Postgres row security).
-    2. ABAC decision  -- this function.
-    3. Clearance      -- ``app.core.permissions.role_checker.assert_clearance``,
-                          called separately by the router, *after* this
-                          decision permits.
-    4. Guardrails     -- ``app.ai.guardrails.output_gate`` /
-                          ``app.ai.tools.document_tools``' deny-at-retrieval.
+    1. Kiracı kapsamı -- bu fonksiyonun kendi 0. adımı, artı repository
+                          katmanının zorunlu ``company_id`` filtresi (ve,
+                          gelecekteki bir RLS aşamasından itibaren, Postgres
+                          satır güvenliği).
+    2. ABAC kararı    -- bu fonksiyon.
+    3. Yetkilendirme  -- ``app.core.permissions.role_checker.assert_clearance``,
+                          router tarafından ayrıca, *bu karar izin verdikten
+                          sonra* çağrılır.
+    4. Koruma önlemleri -- ``app.ai.guardrails.output_gate`` /
+                          ``app.ai.tools.document_tools``'ın erişimde-red
+                          mekanizması.
 
-Clearance is deliberately not folded into step 2: ``app.ai.tools.
-document_tools`` compares clearance directly and returns a refusal string to
-the model (not an exception) from inside a compiled LangGraph node, and by
-this repo's own layering rule ``app.ai.*`` never imports ``app.domains.*`` --
-injecting a DB-backed PDP call there would violate it. Keeping clearance a
-separate, always-applied gate also means a caller can never construct a
-grant that bypasses it: ``authorize()`` permitting an action says nothing
-about whether the subject may *read the content* of a resource above its
-clearance ceiling.
+Yetkilendirme seviyesi bilinçli olarak 2. adıma dahil edilmemiştir:
+``app.ai.tools.document_tools`` yetkilendirme seviyesini doğrudan
+karşılaştırır ve derlenmiş bir LangGraph düğümü içinden modele bir istisna
+değil bir red dizesi döner, ve bu deponun kendi katmanlama kuralına göre
+``app.ai.*`` asla ``app.domains.*``'ı içe aktarmaz -- oraya DB destekli bir
+PDP çağrısı enjekte etmek bunu ihlal ederdi. Yetkilendirmeyi ayrı, her zaman
+uygulanan bir kapı olarak tutmak aynı zamanda bir çağıranın bunu atlatan bir
+yetki oluşturamayacağı anlamına da gelir: ``authorize()``'ın bir eylemi
+izin vermesi, öznenin bir kaynağın içeriğini kendi yetkilendirme tavanının
+üzerinde *okuyabileceği* konusunda hiçbir şey söylemez.
 """
 
 from dataclasses import dataclass
@@ -45,34 +49,38 @@ from app.core.enums.user_role import UserRole
 
 @dataclass(frozen=True)
 class GrantView:
-    """A single resolved, currently-active ``permission_grants`` row.
+    """Çözümlenmiş, şu anda etkin tek bir ``permission_grants`` satırı.
 
-    Deliberately not the SQLAlchemy model itself -- keeps this module and
-    ``engine.py`` free of any ORM/DB import. ``app.core.authz.repository``
-    is the only place a ``PermissionGrantModel`` becomes one of these.
+    Bilinçli olarak SQLAlchemy modelinin kendisi değil -- bu modülü ve
+    ``engine.py``'yi her türlü ORM/DB içe aktarımından uzak tutar.
+    ``app.core.authz.repository``, bir ``PermissionGrantModel``'in bunlardan
+    birine dönüştüğü tek yerdir.
 
     Attributes:
-        id: The grant's row id, echoed in ``Decision.matched_rule`` so a
-            denied/permitted request's audit trail can point at exactly
-            which grant decided it.
-        subject_type: ``"user"`` or ``"role"`` -- ``"unit"`` is reserved for
-            a future phase once ``unit_memberships`` exists, and never
-            appears in a resolved ``GrantView`` today.
-        subject_id: A ``users.id`` (subject_type="user") or a ``UserRole``
-            value (subject_type="role").
-        action: An ``Action`` constant, or ``"*"``.
-        resource_type: A ``Resource.type`` value, or ``"*"``.
-        resource_selector: ``{"any": True}`` (matches every resource of
-            ``resource_type``), ``{"owner": "self"}`` (matches only when
-            ``resource.owner_id == subject.user_id``), or ``{"id": "..."}``
-            (matches only that one resource).
-        effect: ``"permit"`` or ``"deny"``.
-        priority: Higher wins among competing ``permit`` grants.
-        time_boxed: True when the grant has a ``valid_from``/``valid_until``
-            window (even if currently inside it) -- the repository already
-            filtered to *currently active* rows, but a time-boxed grant's
-            decision must never be cached past its own expiry, so this flag
-            is what ``AuthzService`` checks to decide cacheability.
+        id: Yetkinin satır id'si, ``Decision.matched_rule``'da yankılanır;
+            böylece izin verilen/reddedilen bir isteğin denetim izi tam
+            olarak hangi yetkinin karar verdiğine işaret edebilir.
+        subject_type: ``"user"`` ya da ``"role"`` -- ``"unit"``,
+            ``unit_memberships`` var olduğunda gelecek bir aşama için
+            ayrılmıştır ve bugün çözümlenmiş bir ``GrantView``'de asla
+            görünmez.
+        subject_id: Bir ``users.id`` (subject_type="user") ya da bir
+            ``UserRole`` değeri (subject_type="role").
+        action: Bir ``Action`` sabiti, ya da ``"*"``.
+        resource_type: Bir ``Resource.type`` değeri, ya da ``"*"``.
+        resource_selector: ``{"any": True}`` (``resource_type``'ın her
+            kaynağıyla eşleşir), ``{"owner": "self"}`` (yalnızca
+            ``resource.owner_id == subject.user_id`` olduğunda eşleşir),
+            ya da ``{"id": "..."}`` (yalnızca o tek kaynakla eşleşir).
+        effect: ``"permit"`` ya da ``"deny"``.
+        priority: Rekabet eden ``permit`` yetkileri arasında daha yüksek
+            olan kazanır.
+        time_boxed: Yetkinin bir ``valid_from``/``valid_until`` penceresi
+            olduğunda True (şu an o pencerenin içinde olsa bile) --
+            repository zaten *şu anda etkin* satırlara filtrelemiştir,
+            ancak süreli bir yetkinin kararı asla kendi süresinin
+            ötesinde önbelleklenmemelidir, bu yüzden ``AuthzService``
+            önbelleklenebilirliğe karar vermek için bu bayrağı denetler.
     """
 
     id: str
@@ -88,21 +96,22 @@ class GrantView:
 
 @dataclass(frozen=True)
 class Decision:
-    """The outcome of one ``authorize()`` call.
+    """Bir ``authorize()`` çağrısının sonucu.
 
     Attributes:
-        permit: Whether the action is allowed.
-        reason: Human-readable explanation, safe to surface in logs/audit
-            trails (never includes secret material -- grants carry no
-            secrets to begin with).
-        matched_rule: The built-in rule (``"<role>:<action>"``) or
-            ``GrantView.id`` that decided this, or ``None`` for the implicit
-            deny (no rule or grant matched at all).
-        cacheable: False for decisions ``AuthzService`` must never persist
-            in the Redis decision cache -- a tenant-boundary deny (cheap to
-            recompute, and caching it buys nothing) or a decision that
-            depended on a time-boxed grant (caching it past the grant's own
-            expiry would keep permitting after the grant lapsed).
+        permit: Eylemin izinli olup olmadığı.
+        reason: Loglarda/denetim izlerinde gösterilmesi güvenli, insan
+            tarafından okunabilir açıklama (asla gizli materyal içermez --
+            yetkiler zaten hiç sır taşımaz).
+        matched_rule: Buna karar veren yerleşik kural (``"<role>:<action>"``)
+            ya da ``GrantView.id``, ya da örtük red için ``None`` (hiçbir
+            kural ya da yetki eşleşmedi).
+        cacheable: ``AuthzService``'in Redis karar önbelleğinde asla
+            kalıcı hale getirmemesi gereken kararlar için False -- bir
+            kiracı-sınırı reddi (yeniden hesaplaması ucuz, önbelleklemek
+            hiçbir şey kazandırmaz) ya da süreli bir yetkiye bağlı bir
+            karar (bunu yetkinin kendi süresinin ötesinde önbelleklemek,
+            yetki sona erdikten sonra da izin vermeye devam ederdi).
     """
 
     permit: bool
@@ -112,21 +121,22 @@ class Decision:
 
 
 def role_permitted(role: UserRole, allowed_roles: Sequence[UserRole]) -> bool:
-    """Whether ``role`` is one of ``allowed_roles``.
+    """``role``'ün ``allowed_roles``'tan biri olup olmadığı.
 
-    Extracted out of ``app.api.dependency.require_roles`` so that dependency
-    is a thin shim over this module (per the tenancy plan's ABAC design)
-    rather than re-implementing the same membership check inline -- with
-    identical behaviour, so no existing route or test making that call
-    changes. Not itself a PDP decision (no tenant/ownership reasoning): it
-    exists purely so "is this role allowed at all" has one place to live
-    next to the rest of the engine.
+    ``app.api.dependency.require_roles``'tan çıkarıldı; böylece o dependency
+    aynı üyelik denetimini satır içinde yeniden uygulamak yerine bu modülün
+    üzerinde ince bir kabuk olur (kiracılık planının ABAC tasarımına göre)
+    -- davranış birebir aynı olduğundan, bu çağrıyı yapan hiçbir mevcut
+    route ya da test değişmez. Kendisi bir PDP kararı değildir (kiracı/
+    sahiplik akıl yürütmesi yoktur): sadece "bu role hiç izin var mı"
+    sorusunun motorun geri kalanının yanında yaşayacağı tek bir yer olsun
+    diye vardır.
     """
     return role in allowed_roles
 
 
 def _resource_selector_matches(selector: dict, subject: Subject, resource: Optional[Resource]) -> bool:
-    """Whether a grant's ``resource_selector`` matches ``resource`` for ``subject``."""
+    """Bir yetkinin ``resource_selector``'ının ``subject`` için ``resource`` ile eşleşip eşleşmediği."""
     if selector.get("any") is True:
         return True
     if resource is None:
@@ -141,13 +151,13 @@ def _resource_selector_matches(selector: dict, subject: Subject, resource: Optio
 
 
 def _grant_matches(grant: GrantView, subject: Subject, action: str, resource: Optional[Resource]) -> bool:
-    """Whether ``grant`` applies to this ``(subject, action, resource)`` triple.
+    """``grant``'ın bu ``(subject, action, resource)`` üçlüsüne uygulanıp uygulanmadığı.
 
-    Subject matching happened one layer up, in
+    Özne (subject) eşleştirmesi bir katman yukarıda,
     ``app.core.authz.repository.PermissionGrantRepository.list_active_for_subject``
-    (it is a WHERE clause there, not repeated here) -- this only re-checks
-    action and resource, which is all a pre-resolved ``GrantView`` still
-    needs deciding.
+    içinde gerçekleşti (orada bir WHERE ifadesidir, burada tekrarlanmaz) --
+    bu yalnızca action ve resource'u yeniden denetler, ki önceden
+    çözümlenmiş bir ``GrantView``'in karar verilmesi gereken tek şeyi budur.
     """
     action_matches = grant.action == action or grant.action == "*"
     if not action_matches:
@@ -166,40 +176,44 @@ def authorize(
     env: Optional[Environment] = None,
     grants: Sequence[GrantView] = (),
 ) -> Decision:
-    """Decide whether ``subject`` may perform ``action`` on ``resource``.
+    """``subject``'in ``resource`` üzerinde ``action``'ı gerçekleştirip gerçekleştiremeyeceğine karar verir.
 
-    Algorithm (see this module's own docstring for how this composes with
-    clearance/guardrails downstream):
+    Algoritma (bunun yetkilendirme/koruma önlemleriyle aşağı akışta nasıl
+    bileşim yaptığı için bu modülün kendi docstring'ine bakın):
 
-        0. Tenant gate: a non-ROOT subject touching a resource outside its
-           own company is denied outright, before any rule or grant is
-           consulted. A ROOT subject is only permitted through when it has
-           explicitly scoped into that company (``env.company_scope``) --
-           an un-scoped ROOT reading company resources is denied here too
-           (root's system-wide read paths use a dedicated ``system:*``
-           action with ``resource=None``, which skips this gate entirely).
-        1. Any matching ``deny`` grant wins outright.
-        2. Among matching ``permit`` grants, the highest ``priority`` wins.
-        3. Otherwise, the built-in role rules (``rules.BUILTIN_RULES``)
-           decide.
-        4. No rule or grant matched: implicit deny.
+        0. Kiracı kapısı: ROOT olmayan bir öznenin kendi şirketi dışındaki
+           bir kaynağa dokunması, herhangi bir kural ya da yetki
+           danışılmadan doğrudan reddedilir. Bir ROOT özne, yalnızca o
+           şirkete açıkça kapsam belirlemişse (``env.company_scope``)
+           geçirilir -- kapsam belirlenmemiş bir ROOT'un şirket kaynaklarını
+           okuması burada da reddedilir (root'un sistem geneli okuma
+           yolları, bu kapıyı tamamen atlayan ``resource=None`` ile özel
+           bir ``system:*`` eylemi kullanır).
+        1. Eşleşen herhangi bir ``deny`` yetkisi doğrudan kazanır.
+        2. Eşleşen ``permit`` yetkileri arasında en yüksek ``priority``
+           kazanır.
+        3. Aksi halde, yerleşik rol kuralları (``rules.BUILTIN_RULES``)
+           karar verir.
+        4. Hiçbir kural ya da yetki eşleşmedi: örtük red.
 
     Args:
-        subject: The caller.
-        action: An ``Action`` constant.
-        resource: The target, or ``None`` for a resource-less/creation-time
-            check (e.g. ``unit:manage`` ahead of ``POST /units``, where
-            there is no unit yet to attach a ``company_id`` to -- the
-            caller's own company is implicitly the scope, so the tenant
-            gate has nothing to check and is skipped).
-        env: Request-time context. Defaults to "now, no root scope switch".
-        grants: Pre-resolved, currently-active grants for this subject and
-            action (see ``GrantView``). Empty by default -- callers that
-            only need the tenant gate + built-in rules (no DB round trip)
-            simply omit this.
+        subject: Çağıran.
+        action: Bir ``Action`` sabiti.
+        resource: Hedef, ya da kaynaksız/oluşturma-zamanı denetimi için
+            ``None`` (örn. ``POST /units`` öncesindeki ``unit:manage``,
+            ki burada henüz bir ``company_id`` iliştirilecek bir unit
+            yoktur -- çağıranın kendi şirketi örtük olarak kapsamdır, bu
+            yüzden kiracı kapısının denetleyecek bir şeyi yoktur ve
+            atlanır).
+        env: İstek-zamanı bağlamı. Varsayılan "şimdi, root kapsam
+            değişikliği yok".
+        grants: Bu özne ve eylem için önceden çözümlenmiş, şu anda etkin
+            yetkiler (bkz. ``GrantView``). Varsayılan olarak boş --
+            yalnızca kiracı kapısı + yerleşik kurallara ihtiyaç duyan
+            çağıranlar (DB gidiş-dönüşü yok) bunu basitçe atlar.
 
     Returns:
-        The decision.
+        Karar.
     """
     if env is None:
         env = Environment()

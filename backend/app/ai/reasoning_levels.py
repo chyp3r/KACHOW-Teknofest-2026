@@ -1,15 +1,17 @@
-"""Reasoning-level presets: a user-selectable speed-vs-quality tradeoff.
+"""Reasoning-level (akıl yürütme seviyesi) ön ayarları: kullanıcının
+seçebileceği bir hız-kalite ödünleşimi.
 
-Three levels, all built from the two LLM tiers and knobs that already exist
-in this codebase (``get_llm_client``/``get_fast_llm_client``, Ollama's
-``reasoning`` kwarg, the draft reflexion loop's attempt cap and judge gate) --
-no level introduces a third resident model. ``deep`` trades wall-clock time
-for quality by spending more inference-time compute on the *existing*
-quality-tier model (thinking mode, extra reflexion passes, a mandatory judge
-pass); ``fast`` trades quality for speed by routing free-text generation
-through the already-warm fast-tier model instead. ``balanced`` reproduces
-today's hardcoded draft_graph.py defaults exactly, so it carries zero
-behavioural change.
+Üç seviye, hepsi bu codebase'de zaten var olan iki LLM katmanı ve
+düğmelerden inşa edilmiş (``get_llm_client``/``get_fast_llm_client``,
+Ollama'nın ``reasoning`` kwarg'ı, taslak reflexion döngüsünün deneme sınırı
+ve judge kapısı) -- hiçbir seviye üçüncü bir yerleşik model eklemez.
+``deep``, *var olan* kalite katmanı modeli üzerinde daha fazla çıkarım
+zamanı hesaplaması harcayarak (thinking mode, ek reflexion geçişleri,
+zorunlu bir judge geçişi) saat süresini kaliteyle takas eder; ``fast``,
+serbest metin üretimini zaten ısınmış hızlı katman modeli üzerinden
+yönlendirerek kaliteyi hızla takas eder. ``balanced``, bugünün sabit
+kodlanmış draft_graph.py varsayılanlarını tam olarak yeniden üretir, bu
+yüzden sıfır davranışsal değişiklik taşır.
 """
 
 from dataclasses import dataclass
@@ -17,22 +19,23 @@ from typing import Literal, Optional
 
 from app.core.enums.reasoning_level import ReasoningLevel
 
-#: Today's hardcoded draft_graph.py defaults, kept here as the single source
-#: of truth so BALANCED is provably identical to pre-reasoning-level behavior.
+#: Bugünün sabit kodlanmış draft_graph.py varsayılanları, tek gerçek kaynağı
+#: olarak burada tutulur; böylece BALANCED'ın reasoning-level öncesi
+#: davranışla özdeş olduğu kanıtlanabilir.
 _BALANCED_DRAFT_MAX_TOKENS = 2048
 _BALANCED_MAX_DRAFT_ATTEMPTS = 2
 
 
 @dataclass(frozen=True)
 class ReasoningLevelPreset:
-    """Resolved knobs for a single reasoning level."""
+    """Tek bir reasoning seviyesi için çözümlenmiş düğmeler."""
 
     level: ReasoningLevel
     label_tr: str
     model_tier: Literal["fast", "quality"]
     reasoning: bool
     max_draft_attempts: int
-    #: None means "respect settings.DRAFT_JUDGE_ENABLED"; True/False forces it.
+    #: None, "settings.DRAFT_JUDGE_ENABLED'a uy" anlamına gelir; True/False onu zorlar.
     judge_enabled: Optional[bool]
     draft_max_tokens: int
     timeout_multiplier: float
@@ -66,8 +69,8 @@ _PRESETS: dict[ReasoningLevel, ReasoningLevelPreset] = {
         reasoning=True,
         max_draft_attempts=3,
         judge_enabled=True,
-        # Thinking-mode's <think>...</think> tokens share num_predict with the
-        # final answer; the balanced budget is too tight once reasoning=True.
+        # Thinking-mode'un <think>...</think> token'ları num_predict'i son
+        # cevapla paylaşır; reasoning=True olduğunda balanced bütçe çok dar kalır.
         draft_max_tokens=3072,
         timeout_multiplier=1.8,
     ),
@@ -75,11 +78,12 @@ _PRESETS: dict[ReasoningLevel, ReasoningLevelPreset] = {
 
 
 def get_reasoning_level_preset(level: "ReasoningLevel | str | None") -> ReasoningLevelPreset:
-    """Resolve a reasoning level to its preset, defaulting safely to BALANCED.
+    """Bir reasoning seviyesini kendi ön ayarına çözümler, güvenle BALANCED'a varsayılan olarak döner.
 
-    ``level`` may arrive from checkpointed LangGraph state or a client
-    request, so an unknown, missing, or malformed value must never raise --
-    it silently falls back to today's default behaviour instead.
+    ``level``, checkpoint'lenmiş LangGraph durumundan veya bir istemci
+    isteğinden gelebilir, bu yüzden bilinmeyen, eksik veya hatalı
+    biçimlendirilmiş bir değer asla hata fırlatmamalıdır -- bunun yerine
+    sessizce bugünün varsayılan davranışına düşer.
     """
     if level is None:
         return _PRESETS[ReasoningLevel.BALANCED]

@@ -11,10 +11,10 @@ from app.domains.pools.model.document_pool_model import DocumentPoolModel
 
 
 class DocumentPoolRepository:
-    """Repository for `document_pools` (see `DocumentPoolModel`).
+    """`document_pools` için repository (bkz. `DocumentPoolModel`).
 
-    Every method takes an explicit `company_id`, same convention as every
-    other repository since the tenancy work.
+    Her metot açık bir `company_id` alır, tenancy çalışmasından bu yana
+    diğer tüm repository'lerle aynı kural.
     """
 
     def __init__(self, db: AsyncSession):
@@ -49,11 +49,13 @@ class DocumentPoolRepository:
     async def get_or_create_default(
         self, owner_type: str, owner_id: str, company_id: str, name: str
     ) -> DocumentPoolModel:
-        """Fetch `owner`'s default pool, lazily creating it on first use.
+        """`owner`'ın varsayılan havuzunu getirir, ilk kullanımda tembel
+        (lazy) olarak oluşturur.
 
-        Called both from `DocumentService` (every upload files itself into
-        the uploader's own default pool) and from the push flow (a
-        recipient's default pool is where a manager-pushed document lands).
+        Hem `DocumentService`'ten (her yükleme kendisini yükleyenin kendi
+        varsayılan havuzuna dosyalar) hem de push akışından (bir manager
+        tarafından push edilen belgenin ineceği yer, alıcının varsayılan
+        havuzudur) çağrılır.
         """
         existing = await self.get_default_for_owner(owner_type, owner_id, company_id)
         if existing is not None:
@@ -71,7 +73,7 @@ class DocumentPoolRepository:
 
 
 class DocumentPoolItemRepository:
-    """Repository for `document_pool_items` (see `DocumentPoolItemModel`)."""
+    """`document_pool_items` için repository (bkz. `DocumentPoolItemModel`)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -96,10 +98,11 @@ class DocumentPoolItemRepository:
     async def get_by_pool_and_document(
         self, pool_id: str, document_id: str
     ) -> Optional[DocumentPoolItemModel]:
-        """The one row `UNIQUE(pool_id, document_id)` guarantees is unique,
-        when it exists -- used by `PoolService.file_transferred_document`
-        to refresh an already-transferred item in place instead of hitting
-        that constraint on a re-send."""
+        """Var olduğunda `UNIQUE(pool_id, document_id)`'nin benzersiz
+        olmasını garantilediği tek satır -- `PoolService.
+        file_transferred_document` tarafından, yeniden gönderimde o
+        kısıtlamaya çarpmak yerine zaten transfer edilmiş bir öğeyi
+        yerinde tazelemek için kullanılır."""
         result = await self.db.execute(
             select(DocumentPoolItemModel).where(
                 DocumentPoolItemModel.pool_id == pool_id,
@@ -109,14 +112,16 @@ class DocumentPoolItemRepository:
         return result.scalar_one_or_none()
 
     async def save(self, item: DocumentPoolItemModel) -> DocumentPoolItemModel:
-        """Flush pending attribute mutations on an already-attached item."""
+        """Zaten bağlı bir öğe üzerindeki bekleyen attribute mutasyonlarını
+        flush eder."""
         await self.db.flush()
         return item
 
     async def list_for_pool(
         self, pool_id: str, company_id: str, skip: int = 0, limit: int = 100
     ) -> List[Tuple[DocumentPoolItemModel, DocumentModel]]:
-        """Every item in `pool_id`, newest first, joined with its document's file name."""
+        """`pool_id` içindeki her öğe, en yeni önce, belgesinin dosya
+        adıyla join edilmiş."""
         result = await self.db.execute(
             select(DocumentPoolItemModel, DocumentModel)
             .join(DocumentModel, DocumentModel.id == DocumentPoolItemModel.document_id)

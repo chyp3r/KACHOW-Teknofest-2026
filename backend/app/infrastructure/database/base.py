@@ -2,6 +2,6 @@ from sqlalchemy.orm import DeclarativeBase
 
 
 class Base(DeclarativeBase):
-    """Declarative Base class for all SQLAlchemy ORM models."""
+    """Tüm SQLAlchemy ORM modelleri için Declarative Base sınıfı."""
 
     pass

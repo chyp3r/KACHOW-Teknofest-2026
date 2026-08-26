@@ -73,54 +73,56 @@ logger = logging.getLogger(__name__)
 UPLOAD_PATH_PREFIX = "uploads"
 MIN_ANALYSABLE_CHAR_COUNT = 20
 
-#: Corpus-graph settings. The cap bounds a per-request disk read (every
-#: surviving document's analysis cache is read in full) -- 200 documents is
-#: roughly 2MB of JSON, still comfortably inside a single request/response
-#: cycle. Beyond that the answer is a precomputed rollup, not a bigger cap
-#: (see the session plan's risk section).
+#: Korpus-grafiği ayarları. Sınır, istek başına yapılan disk okumasını
+#: sınırlar (ayakta kalan her belgenin analiz önbelleği tamamen okunur) --
+#: 200 belge, tek bir istek/yanıt döngüsüne rahatça sığan yaklaşık 2MB
+#: JSON'a denk gelir. Bunun ötesinde çözüm daha büyük bir sınır değil, önceden
+#: hesaplanmış bir özet olmalıdır (bkz. oturum planının risk bölümü).
 MAX_GRAPH_DOCUMENTS = 200
 GRAPH_CACHE_TTL_SECONDS = 60
 
 
 def _graph_to_json_dict(graph: KnowledgeGraph) -> dict[str, Any]:
-    """Flatten a `KnowledgeGraph` into a dict with strictly JSON-native
-    types (lists, not tuples).
+    """`KnowledgeGraph`'ı, kesinlikle JSON-yerel türler (tuple değil, liste)
+    içeren bir sözlüğe düzleştirir.
 
-    `dataclasses.asdict` recurses into nested dataclasses but leaves tuple
-    fields as tuples -- so an uncached call would return `nodes: (...)`
-    while a cached one (after its `json.dumps`/`json.loads` round trip)
-    returns `nodes: [...]`, the same field carrying two different Python
-    types depending on cache state alone. Routing every call through one
-    JSON round trip here makes the shape identical either way.
+    `dataclasses.asdict`, iç içe geçmiş dataclass'lara özyinelemeli olarak
+    iner ama tuple alanları tuple olarak bırakır -- yani önbelleğe alınmamış
+    bir çağrı `nodes: (...)` döndürürken, önbelleğe alınmış bir çağrı
+    (`json.dumps`/`json.loads` gidiş-dönüşünden sonra) `nodes: [...]`
+    döndürür; aynı alan sadece önbellek durumuna bağlı olarak iki farklı
+    Python türü taşır. Her çağrıyı burada tek bir JSON gidiş-dönüşünden
+    geçirmek, şeklin her iki durumda da aynı olmasını sağlar.
     """
     import dataclasses
     import json
 
     return json.loads(json.dumps(dataclasses.asdict(graph), default=str))
 
-#: Q&A index settings. Must stay in sync with the retrieval side in
-#: planning_graph's document_qa step. Chunk size/overlap are sourced from
-#: ChunkingPolicy.qa_* rather than local literals -- see that class's
-#: docstring for why chunking has its own policy section and why it does
-#: not (yet) carry a strategy switch.
+#: Soru-cevap indeksi ayarları. planning_graph'ın document_qa adımındaki
+#: erişim (retrieval) tarafıyla senkron kalmalıdır. Chunk boyutu/örtüşmesi,
+#: yerel sabit değerler yerine ChunkingPolicy.qa_* içinden alınır -- bu
+#: sınıfın neden kendi politika bölümüne sahip olduğu ve neden (henüz) bir
+#: strateji anahtarı taşımadığı için o sınıfın docstring'ine bakın.
 QA_COLLECTION_NAME = "document_qa"
 QA_CHUNK_SIZE = get_policy().chunking.qa_chunk_size
 QA_CHUNK_OVERLAP = get_policy().chunking.qa_chunk_overlap
 
-#: Cached embedding dimension, probed once per process.
+#: İşlem başına bir kez ölçülen, önbelleğe alınmış embedding boyutu.
 _qa_vector_size: Optional[int] = None
 
 
-#: Re-exported under its old private name -- this module's own call sites
-#: and existing tests both spell it `_analysis_cache_key`. The definition
-#: itself moved to `cache_keys.py` so `app.domains.documents.provider`
-#: (read by the planning graph via an injected callable, never a direct
-#: import -- see that module's own docstring) can share it too.
+#: Eski private ismiyle yeniden dışa aktarılır -- bu modülün kendi çağrı
+#: noktaları ve mevcut testler bunu `_analysis_cache_key` olarak yazıyor.
+#: Tanımın kendisi `cache_keys.py`'a taşındı, böylece
+#: `app.domains.documents.provider` (planning graph tarafından enjekte
+#: edilen bir callable üzerinden okunur, asla doğrudan import ile değil --
+#: bkz. o modülün kendi docstring'i) de bunu paylaşabilir.
 _analysis_cache_key = analysis_cache_key
 
 
 class DocumentService:
-    """Business logic for the first-review (ön inceleme) stage of incoming evrak."""
+    """Gelen evrakın ön inceleme aşaması için iş mantığı."""
 
     def __init__(
         self,
@@ -137,46 +139,50 @@ class DocumentService:
         cache: Optional[RedisCache] = None,
         vision_extractor: Optional[VisionExtractorBase] = None,
     ) -> None:
-        """Initialise the service with injected collaborators.
+        """Servisi enjekte edilen bağımlılıklarla başlatır.
 
         Args:
-            storage: Storage backend for the raw uploaded document.
-            extractor: Text extraction chain.
-            analysis_graph: Compiled document analysis workflow.
-            document_repository: Ownership/listing registry (see
-                `DocumentModel`). Optional so callers that only exercise
-                extraction/analysis (most unit tests) don't need a database --
-                when absent, a document is analysed exactly as before but
-                never registered, which also means it never appears in
-                `GET /documents` or passes an ownership check.
-            pool_repository, pool_item_repository: The evrak havuzu (see
-                `app.domains.pools`) every upload files itself into (its
-                owner's personal default pool). Optional for the same
-                reason `document_repository` is -- when absent, a document
-                is registered exactly as before but never pool-filed.
-            quota_service: Enforces `company_quotas.max_documents_per_month`
-                (see `app.domains.quotas`). Optional for the same reason as
-                above -- when absent, uploads are never quota-gated (every
-                pre-Faz-6 caller, and most unit tests).
-            summarizer_agent: Builds the on-demand detailed summary (see
-                `generate_detailed_summary`). Unlike `analysis_graph`, this
-                is not part of a LangGraph workflow -- `analyze_document`
-                never touches it, only `generate_detailed_summary` does.
-                Optional so tests exercising the rest of this service don't
-                need an LLM client; `generate_detailed_summary` itself
-                requires it (see that method's own docstring).
-            cache: Backs `build_corpus_graph`'s 60s cache, mirroring
-                `AnalyticsService._cached`'s own Redis convention. Optional
-                so the corpus graph still works uncached (just recomputed
-                every call) when no cache is wired.
-            vision_extractor: Runs a full-page OCR pass directly, bypassing
-                `extractor` (the fallback chain) entirely -- see
-                `reextract_document_text`, the user's manual override for
-                when the chain's own automatic escalation rule (see
-                `FallbackDocumentExtractor._has_enough_header_fields`)
-                doesn't fire. Optional for the same reason
-                `summarizer_agent` is; only `reextract_document_text`
-                requires it.
+            storage: Yüklenen ham belge için depolama backend'i.
+            extractor: Metin çıkarma zinciri.
+            analysis_graph: Derlenmiş belge analiz iş akışı.
+            document_repository: Sahiplik/listeleme kaydı (bkz.
+                `DocumentModel`). Yalnızca çıkarma/analiz işlemlerini
+                kullanan çağıranların (çoğu birim testi) veritabanına
+                ihtiyaç duymaması için opsiyoneldir -- bulunmadığında belge
+                eskisi gibi analiz edilir ama asla kaydedilmez; bu da onun
+                `GET /documents`'ta görünmeyeceği ve sahiplik kontrolünden
+                geçmeyeceği anlamına gelir.
+            pool_repository, pool_item_repository: Her yüklemenin kendini
+                dosyaladığı evrak havuzu (bkz. `app.domains.pools`, sahibin
+                kişisel varsayılan havuzu). `document_repository` ile aynı
+                sebepten opsiyoneldir -- bulunmadığında belge eskisi gibi
+                kaydedilir ama havuza dosyalanmaz.
+            quota_service: `company_quotas.max_documents_per_month`'ı
+                uygular (bkz. `app.domains.quotas`). Yukarıdakiyle aynı
+                sebepten opsiyoneldir -- bulunmadığında yüklemeler asla
+                kota kontrolünden geçmez (tüm Faz-6 öncesi çağıranlar ve
+                çoğu birim testi için geçerlidir).
+            summarizer_agent: İstek üzerine detaylı özeti oluşturur (bkz.
+                `generate_detailed_summary`). `analysis_graph`'ın aksine bu,
+                bir LangGraph iş akışının parçası değildir -- `analyze_document`
+                buna hiç dokunmaz, yalnızca `generate_detailed_summary` kullanır.
+                Bu servisin geri kalanını test eden testlerin bir LLM
+                istemcisine ihtiyaç duymaması için opsiyoneldir;
+                `generate_detailed_summary`'nin kendisi buna ihtiyaç duyar
+                (bkz. o metodun kendi docstring'i).
+            cache: `build_corpus_graph`'ın 60 saniyelik önbelleğini
+                destekler, `AnalyticsService._cached`'ın kendi Redis
+                geleneğini yansıtır. Önbellek bağlanmadığında korpus
+                grafiğinin yine de (her çağrıda yeniden hesaplanarak)
+                çalışması için opsiyoneldir.
+            vision_extractor: `extractor`'ı (fallback zincirini) tamamen
+                atlayarak doğrudan tam sayfa OCR geçişi çalıştırır -- bkz.
+                `reextract_document_text`; zincirin kendi otomatik yükseltme
+                kuralı (bkz. `FallbackDocumentExtractor._has_enough_header_fields`)
+                tetiklenmediğinde kullanıcının manuel geçersiz kılma
+                seçeneğidir. `summarizer_agent` ile aynı sebepten
+                opsiyoneldir; yalnızca `reextract_document_text` buna
+                ihtiyaç duyar.
         """
         self.storage = storage
         self.extractor = extractor

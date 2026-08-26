@@ -1,9 +1,9 @@
 from typing import List
 
 def validate_file_extension(filename: str, allowed_extensions: List[str]) -> bool:
-    """Check if the file extension is within the allowed list.
-    
-    Returns True if allowed, False otherwise.
+    """Dosya uzantısının izin verilen liste içinde olup olmadığını kontrol eder.
+
+    İzin veriliyorsa True, aksi halde False döner.
     """
     if "." not in filename:
         return False

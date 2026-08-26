@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 
 class DraftDestinationUpdateRequest(BaseModel):
-    """Override a draft version's routed unit -- see
+    """Bir taslak versiyonunun yönlendirildiği birimi geçersiz kıl -- bkz.
     `DraftService.update_destination`."""
 
     destination: str = Field(
@@ -19,7 +19,7 @@ class DraftDestinationUpdateRequest(BaseModel):
 
 
 class DraftResponse(BaseModel):
-    """One persisted draft version (see `DraftModel`)."""
+    """Kalıcı hale getirilmiş bir taslak versiyonu (bkz. `DraftModel`)."""
 
     model_config = {"from_attributes": True}
 

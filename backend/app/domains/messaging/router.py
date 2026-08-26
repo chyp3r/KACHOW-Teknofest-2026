@@ -34,8 +34,8 @@ from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 logger = logging.getLogger(__name__)
 
-# Authentication is mandatory (see require_auth_if_enabled) -- every route in
-# this router carries a real, tenant-bound current_user.
+# Kimlik doğrulama zorunludur (bkz. require_auth_if_enabled) -- bu router'daki
+# her rota gerçek, kiracıya bağlı bir current_user taşır.
 router = APIRouter(
     prefix="/messaging", tags=["messaging"], dependencies=[Depends(require_auth_if_enabled)]
 )
@@ -115,7 +115,7 @@ async def create_conversation(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Open a DM (idempotent) or create a group conversation."""
+    """Bir özel mesajı açar (idempotent) veya bir grup konuşması oluşturur."""
     service = _service(db)
     if request.kind == "dm":
         conversation = await service.open_dm(current_user.company_id, current_user, request.participant_id)
@@ -138,7 +138,7 @@ async def list_conversations(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """The caller's active conversations, most recent activity first."""
+    """Çağıranın aktif konuşmaları, en son etkinlik önce."""
     service = _service(db)
     items, total = await service.list_conversations(
         current_user.company_id, current_user, skip=pagination.offset, limit=pagination.limit
@@ -182,7 +182,7 @@ async def update_conversation(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Rename/archive a group conversation (owner, or Admin/Manager/Root)."""
+    """Bir grup konuşmasını yeniden adlandırır/arşivler (sahibi, veya Admin/Manager/Root)."""
     service = _service(db)
     conversation = await service.update_conversation(
         conversation_id, current_user.company_id, current_user, request.title, request.is_archived
@@ -203,7 +203,7 @@ async def add_participants(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Add members to a group conversation (owner, or Admin/Manager/Root)."""
+    """Bir grup konuşmasına üye ekler (sahibi, veya Admin/Manager/Root)."""
     service = _service(db)
     added = await service.add_participants(
         conversation_id, current_user.company_id, current_user, request.user_ids
@@ -218,7 +218,7 @@ async def remove_participant(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Leave a group (self) or remove another member (owner, or Admin/Manager/Root)."""
+    """Bir gruptan ayrılır (kendisi) veya başka bir üyeyi çıkarır (sahibi, veya Admin/Manager/Root)."""
     service = _service(db)
     await service.remove_participant(conversation_id, current_user.company_id, current_user, user_id)
     return SuccessResponse(data={"removed": True})
@@ -232,7 +232,7 @@ async def list_messages(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Keyset page of messages, newest first (`before_id` to page older)."""
+    """Mesajların keyset sayfası, en yeniden en eskiye (daha eskiye gitmek için `before_id`)."""
     service = _service(db)
     messages = await service.list_messages(
         conversation_id, current_user.company_id, current_user, before_id=before_id, limit=limit
@@ -279,9 +279,9 @@ async def mark_read(
     return SuccessResponse(data={"last_read_message_id": participant.last_read_message_id})
 
 
-#: Same disconnect-polling cadence as `notifications/router.py`'s own SSE
-#: stream -- long enough to not busy-loop, short enough for a dropped
-#: connection to be noticed promptly.
+#: `notifications/router.py`'nin kendi SSE akışıyla aynı bağlantı kesme
+#: sorgulama ritmi -- meşgul döngüye girmeyecek kadar uzun, kopan bir
+#: bağlantının hızlıca fark edilmesi için yeterince kısa.
 _POLL_TIMEOUT_SECONDS = 20.0
 
 
@@ -290,13 +290,13 @@ async def stream_messages(
     http_request: Request,
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
-    """Live-push new messages over SSE, one connection per user across every
-    conversation they're in -- same Redis pub/sub pattern as
-    `notifications/router.py::stream_notifications`, distinct channel
-    prefix (see `messaging_channel_for`'s docstring). A dropped or never-
-    received push is never data loss: `GET /messaging/conversations/{id}/
-    messages` always has the row regardless of whether this stream was
-    connected when it was sent.
+    """SSE üzerinden yeni mesajları canlı gönderir, kullanıcı başına
+    bulundukları her konuşma boyunca tek bir bağlantı --
+    `notifications/router.py::stream_notifications` ile aynı Redis pub/sub
+    deseni, farklı kanal öneki (bkz. `messaging_channel_for`'ın
+    docstring'i). Kaçırılan veya hiç alınmayan bir gönderim asla veri
+    kaybı değildir: bu akış mesaj gönderildiğinde bağlı olsa da olmasa da
+    `GET /messaging/conversations/{id}/messages` her zaman o satıra sahiptir.
     """
     cache = get_cache()
     await cache.connect()

@@ -9,23 +9,26 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class ConversationMessageModel(Base, TimestampMixin):
-    """One message in one conversation -- text, artifact, or system.
+    """Bir konuşmadaki tek bir mesaj -- text, artifact veya system.
 
-    A single table, not split by `kind` -- thread ordering must come from
-    one table (splitting it would turn every thread read into a UNION over
-    time). `kind` is `"text"` (plain human message), `"artifact"` (a taslak/
-    evrak transfer notice -- see `artifact_transfer_id`; introduced fully in
-    Faz 3), or `"system"` (membership events like "X gruba eklendi").
+    `kind`'a göre bölünmemiş tek bir tablo -- thread sıralaması tek bir
+    tablodan gelmelidir (bölmek her thread okumasını zaman üzerinden bir
+    UNION'a çevirirdi). `kind`; `"text"` (düz insan mesajı), `"artifact"`
+    (bir taslak/evrak transfer bildirimi -- bkz. `artifact_transfer_id`;
+    Faz 3'te tam olarak tanıtıldı) veya `"system"` ("X gruba eklendi"
+    gibi üyelik olayları) olabilir.
 
-    `artifact_transfer_id` -> `artifact_transfers.id` (added by migration
-    `0024`, once that table exists -- this column itself predates it,
-    created FK-less by `0022`). An artifact message's card content (title, version, sender, status) is
-    never cached into `body` -- the frontend reads it live from the
-    transfer row, so a withdrawn/failed transfer's card reflects reality
-    instead of a stale snapshot.
+    `artifact_transfer_id` -> `artifact_transfers.id` (o tablo var
+    olduğunda `0024` migration'ı tarafından eklendi -- bu kolonun
+    kendisi ondan öncedir, `0022` tarafından FK'sız oluşturuldu). Bir
+    artifact mesajının kart içeriği (başlık, sürüm, gönderen, durum)
+    asla `body`'ye cache'lenmez -- frontend bunu transfer satırından
+    canlı okur, böylece geri çekilmiş/başarısız bir transferin kartı
+    eski bir anlık görüntü yerine gerçeği yansıtır.
 
-    `sender_id` is nullable only for a future system-authored row (`kind=
-    "system"`); every `"text"`/`"artifact"` message has a real sender.
+    `sender_id` yalnızca gelecekteki system-yazarlı bir satır için
+    (`kind="system"`) nullable'dır; her `"text"`/`"artifact"` mesajının
+    gerçek bir göndereni vardır.
     """
 
     __tablename__ = "conversation_messages"

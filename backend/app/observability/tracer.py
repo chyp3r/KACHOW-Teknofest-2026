@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 _callback_handler: Optional[CallbackHandler] = None
 
 def get_langfuse_callback() -> Optional[CallbackHandler]:
-    """Get or initialize the Langfuse Callback Handler for LangChain / LangGraph."""
+    """LangChain / LangGraph için Langfuse Callback Handler'ı alır veya başlatır."""
     global _callback_handler
     
     if not settings.LANGFUSE_PUBLIC_KEY or not settings.LANGFUSE_SECRET_KEY:
@@ -46,40 +46,44 @@ def build_trace_config(
     langfuse_tags: Optional[list[str]] = None,
     **configurable: Any,
 ) -> dict[str, Any]:
-    """Build a LangGraph config: given configurable keys plus Langfuse tracing.
+    """Bir LangGraph config'i oluşturur: verilen configurable anahtarlar artı Langfuse tracing.
 
-    Replaces three identical private ``_trace_config`` copies that used to
-    live in ``ChatService``, ``DocumentService`` and ``DraftService``.
+    Daha önce ``ChatService``, ``DocumentService`` ve ``DraftService``
+    içinde yaşayan üç özdeş private ``_trace_config`` kopyasının yerini
+    alır.
 
-    The ``langfuse_*`` keyword-only params (as opposed to ``**configurable``,
-    which only ever reaches LangGraph's own node functions) become
-    ``config["metadata"]`` -- these specific key names are what the
-    ``langfuse-langchain`` callback handler reads to attribute a trace to a
-    user/session/tag set (see the Faz 6 tenancy-plan section on company-
-    tagged observability). Company-scoping a trace this way is honest but
-    unverified: ``compose.yml`` still runs ``langfuse/langfuse:2`` against
-    the ``langfuse`` v4 Python SDK dependency, a version pair this repo's own
-    prior notes already flag as likely incompatible (self-hosting v3+
-    requires ClickHouse/MinIO this project does not run) -- tagging costs
-    nothing extra to add and will simply start working the day tracing
-    itself does, but ``runs``/``run_steps``/``guardrail_events`` remain the
-    verified, always-on observability story today, not this.
+    ``langfuse_*`` keyword-only parametreleri (yalnızca LangGraph'ın kendi
+    node fonksiyonlarına ulaşan ``**configurable``'ın aksine)
+    ``config["metadata"]`` haline gelir -- bu spesifik anahtar isimleri,
+    ``langfuse-langchain`` callback handler'ının bir trace'i bir
+    kullanıcı/session/etiket kümesine atfetmek için okuduğu isimlerdir
+    (bkz. Faz 6 tenancy-plan bölümündeki şirket etiketli observability).
+    Bir trace'i bu şekilde şirket kapsamına almak dürüst ama doğrulanmamış
+    bir yaklaşımdır: ``compose.yml`` hâlâ ``langfuse`` v4 Python SDK
+    bağımlılığına karşı ``langfuse/langfuse:2``'yi çalıştırıyor; bu repo'nun
+    kendi önceki notları bu versiyon çiftini muhtemelen uyumsuz olarak
+    zaten işaretlemiş durumda (v3+ kendi kendine barındırma bu projenin
+    çalıştırmadığı ClickHouse/MinIO gerektirir) -- etiketleme eklemek ekstra
+    bir maliyete sahip değildir ve tracing'in kendisi çalışmaya başladığı
+    gün çalışmaya başlayacaktır, ama bugün doğrulanmış, her zaman açık
+    observability hikayesi bu değil, ``runs``/``run_steps``/
+    ``guardrail_events``'tir.
 
     Args:
-        langfuse_user_id: The caller's id, when known.
-        langfuse_session_id: The chat thread/session id, when there is one.
-        langfuse_tags: Free-form tags, e.g. ``[f"company:{slug}",
-            f"role:{role}"]`` -- omit entirely (not just pass ``[]``) when
-            neither is known, so an empty list never overwrites a real one
-            the handler might otherwise infer.
-        **configurable: Values merged into ``config["configurable"]`` (e.g.
-            ``thread_id``, ``status_queue``). Omit for a plain, tracing-only
-            config.
+        langfuse_user_id: Çağıranın id'si, biliniyorsa.
+        langfuse_session_id: Varsa sohbet thread/session id'si.
+        langfuse_tags: Serbest formatlı etiketler, ör. ``[f"company:{slug}",
+            f"role:{role}"]`` -- ikisi de bilinmediğinde tamamen atla
+            (sadece ``[]`` geçme), böylece boş bir liste handler'ın aksi
+            halde çıkarabileceği gerçek bir listenin üzerine asla yazmaz.
+        **configurable: ``config["configurable"]`` içine birleştirilen
+            değerler (ör. ``thread_id``, ``status_queue``). Sade,
+            sadece-tracing bir config için atla.
 
     Returns:
-        A LangGraph-shaped config dict. Tracing degrades to absent rather than
-        raising -- a document upload or a chat turn must not fail because
-        Langfuse is unreachable.
+        LangGraph şeklinde bir config dict. Tracing hata fırlatmak yerine
+        yok olma durumuna bozulur -- bir doküman yüklemesi veya bir sohbet
+        turu, Langfuse'a ulaşılamadığı için başarısız olmamalıdır.
     """
     config: dict[str, Any] = {}
     if configurable:
@@ -103,15 +107,16 @@ def build_trace_config(
 
 
 def company_tags(company_id: Optional[str], role: Optional[str] = None) -> Optional[list[str]]:
-    """Build the ``langfuse_tags`` list for `build_trace_config`, `["company:<slug>",
-    "role:<role>"]`, omitting whichever half is unknown -- `None` (not `[]`)
-    when neither is, so callers can pass this straight through without an
-    extra `if` at every one of the (several) call sites this is shared
-    across.
+    """`build_trace_config` için `["company:<slug>", "role:<role>"]`
+    şeklindeki `langfuse_tags` listesini oluşturur; bilinmeyen yarıyı
+    atlar -- ikisi de bilinmiyorsa `None` (`[]` değil), böylece çağıranlar
+    bunu paylaşıldığı her (birkaç) çağrı noktasında ekstra bir `if`
+    olmadan doğrudan geçirebilir.
 
-    Reuses `app.observability.company_metrics`' already-populated slug cache
-    (see that module) rather than querying the database again here --
-    tracing must never be the reason a request pays an extra query.
+    Burada veritabanını tekrar sorgulamak yerine
+    `app.observability.company_metrics`'in zaten doldurulmuş slug
+    önbelleğini (bkz. o modül) yeniden kullanır -- tracing bir isteğin
+    ekstra bir sorgu ödemesinin nedeni asla olmamalıdır.
     """
     from app.observability import company_metrics
 

@@ -1,17 +1,17 @@
-"""A company's runtime style adapter -- Faz C2, the RLHF layer's
-instant-effect half (see [[app.ai.adapters.injection]] for how it reaches a
-prompt, and #185's own framing).
+"""Bir şirketin çalışma zamanı üslup adaptörü -- Faz C2, RLHF katmanının
+anında-etkili yarısı (bir prompt'a nasıl ulaştığı için bkz.
+[[app.ai.adapters.injection]], ve #185'in kendi çerçevesi).
 
-Deliberately a plain, immutable dataclass with no I/O and no import of
-``app.domains`` anywhere in this module: this codebase's AI Core never
-imports the domains layer (see ``docs/architecture/backend.md``, "Backend
-yalnızca AI Core'u çağırır" -- the dependency only ever points the other
-way). The actual Redis/Postgres-backed reader/writer that produces one of
-these lives in ``app.domains.companies.provider`` instead and is injected
-into the draft/revise graphs as a plain async callable at construction
-time, the exact same pattern ``app.domains.units.provider.
-get_active_units_for_routing`` already established for the routing graph's
-``units_provider``.
+Bilinçli olarak I/O içermeyen ve bu modülün hiçbir yerinde ``app.domains``
+import etmeyen düz, değişmez (immutable) bir dataclass: bu kod tabanının AI
+Core'u domains katmanını asla import etmez (bkz. ``docs/architecture/
+backend.md``, "Backend yalnızca AI Core'u çağırır" -- bağımlılık yalnızca
+diğer yöne işaret eder). Bunlardan birini üreten gerçek Redis/Postgres
+destekli okuyucu/yazıcı bunun yerine ``app.domains.companies.provider``
+içinde yaşar ve oluşturma sırasında draft/revise grafiklerine düz bir async
+callable olarak enjekte edilir -- routing grafiğinin ``units_provider``'ı
+için ``app.domains.units.provider.get_active_units_for_routing``'in zaten
+kurduğu tam olarak aynı desen.
 """
 
 from dataclasses import dataclass, field
@@ -20,41 +20,45 @@ from typing import Any, Awaitable, Callable, Optional
 
 @dataclass(frozen=True)
 class CompanyAdapter:
-    """One company's accumulated style preferences.
+    """Bir şirketin birikmiş üslup tercihleri.
 
-    Carries ONLY style and format, never facts -- enforced structurally,
-    not just by convention: nothing in this class holds anything resembling
-    a claim about the world (a fact, a name, a date), only preferences about
-    *how* to write. ``preferred_examples`` is real generated text, so it is
-    fed into the same ``ornek_sizintisi`` (example-leak) deterministic check
-    ``style_examples`` already goes through (see ``draft_verifier.
-    verify_draft``'s ``style_examples`` parameter) -- a company name or date
-    that leaks out of a preferred example is caught exactly like one
-    leaking out of a retrieved few-shot example, no separate check needed.
+    YALNIZCA üslup ve biçimi taşır, asla gerçekleri taşımaz -- bu sadece bir
+    sözleşme değil, yapısal olarak zorunlu kılınır: bu sınıfta dünya
+    hakkında bir iddiaya (bir gerçek, bir isim, bir tarih) benzeyen hiçbir
+    şey yoktur, yalnızca *nasıl* yazılacağına dair tercihler vardır.
+    ``preferred_examples`` gerçek üretilmiş metindir, bu yüzden
+    ``style_examples``'ın zaten geçtiği aynı ``ornek_sizintisi``
+    (örnek-sızıntısı) deterministik kontrolüne beslenir (bkz.
+    ``draft_verifier.verify_draft``'ın ``style_examples`` parametresi) --
+    tercih edilen bir örnekten sızan bir şirket adı veya tarih, getirilen bir
+    few-shot örneğinden sızan biriyle tıpatıp aynı şekilde yakalanır, ayrı
+    bir kontrole gerek yoktur.
 
     Attributes:
-        company_id: Which tenant this adapter belongs to.
-        version: Bumped on every write (see ``app.domains.companies.
-            provider.set_company_adapter``) -- lets a training run (Faz C3)
-            or an admin's manual edit both be told apart in the audit trail
-            and in ``GET .../adapter``'s response.
-        style_rules: Short Turkish sentences describing a writing
-            preference (e.g. "Kapanışta her zaman 'Arz ederim' kullan").
-            Rendered as a bullet list, applied as guidance, never as a
-            source of fact.
-        preferred_examples: Full example texts the company has approved as
-            representative of its preferred style. Same trust boundary as
-            ``style_examples``: style reference only, subject to the same
-            leak check.
-        avoided_patterns: The mirror of ``style_rules`` -- short
-            descriptions of a pattern this company's drafts should NOT use
-            (e.g. "Edilgen çatı kullanma").
-        trained_at: ISO-8601 timestamp of the last write, or None if this
-            adapter has never been set (see :meth:`empty`).
-        sample_count: How many feedback/training samples informed this
-            version -- 0 for a hand-authored adapter (an admin typing rules
-            directly, before Faz C3's automated mining exists). Purely
-            informational, never used to gate whether the adapter applies.
+        company_id: Bu adaptörün ait olduğu kiracı (tenant).
+        version: Her yazımda artırılır (bkz. ``app.domains.companies.
+            provider.set_company_adapter``) -- bir eğitim çalıştırmasının
+            (Faz C3) veya bir yöneticinin manuel düzenlemesinin denetim
+            izinde ve ``GET .../adapter`` yanıtında birbirinden
+            ayırt edilmesini sağlar.
+        style_rules: Bir yazım tercihini açıklayan kısa Türkçe cümleler
+            (örn. "Kapanışta her zaman 'Arz ederim' kullan"). Madde
+            işaretli liste olarak render edilir, rehberlik olarak uygulanır,
+            asla bir gerçek kaynağı olarak değil.
+        preferred_examples: Şirketin tercih ettiği üslubu temsil ettiğini
+            onayladığı tam örnek metinler. ``style_examples`` ile aynı güven
+            sınırı: yalnızca üslup referansı, aynı sızıntı kontrolüne tabi.
+        avoided_patterns: ``style_rules``'ın aynası -- bu şirketin
+            taslaklarının KULLANMAMASI gereken bir kalıbın kısa açıklamaları
+            (örn. "Edilgen çatı kullanma").
+        trained_at: Son yazımın ISO-8601 zaman damgası, veya bu adaptör hiç
+            ayarlanmamışsa None (bkz. :meth:`empty`).
+        sample_count: Bu sürümü kaç geri bildirim/eğitim örneğinin
+            bilgilendirdiği -- elle yazılmış bir adaptör için 0 (Faz C3'ün
+            otomatik madenciliği var olmadan önce, bir yöneticinin
+            doğrudan kural yazması). Yalnızca bilgilendirme amaçlıdır,
+            adaptörün uygulanıp uygulanmayacağını belirlemek için asla
+            kullanılmaz.
     """
 
     company_id: str
@@ -67,26 +71,26 @@ class CompanyAdapter:
 
     @property
     def is_empty(self) -> bool:
-        """True when there is nothing here worth injecting into a prompt."""
+        """Bir prompt'a enjekte edilmeye değer hiçbir şey yoksa True."""
         return not (self.style_rules or self.preferred_examples or self.avoided_patterns)
 
     @classmethod
     def empty(cls, company_id: str) -> "CompanyAdapter":
-        """The adapter a company with no configured preferences resolves to.
+        """Yapılandırılmış tercihi olmayan bir şirketin çözümlendiği adaptör.
 
-        Never ``None`` -- every caller (``writer_node``, ``rewrite_node``,
-        ...) can unconditionally check ``.is_empty`` instead of also
-        handling a missing adapter as a separate case.
+        Asla ``None`` değil -- her çağıran (``writer_node``, ``rewrite_node``,
+        ...) eksik bir adaptörü ayrı bir durum olarak ele almak yerine
+        koşulsuzca ``.is_empty``'i kontrol edebilir.
         """
         return cls(company_id=company_id)
 
     def to_dict(self) -> dict[str, Any]:
-        """JSON-safe representation -- what actually gets written into
-        ``CompanyModel.settings`` and the Redis cache value.
+        """JSON'a uygun gösterim -- ``CompanyModel.settings`` ve Redis önbellek
+        değerine gerçekten yazılan şey.
 
-        ``company_id`` is deliberately excluded: the settings blob lives
-        *inside* that company's own row, re-stating its id there would be
-        redundant data that could drift from the row's real id.
+        ``company_id`` bilinçli olarak hariç tutulur: settings blob'u zaten
+        o şirketin kendi satırının *içinde* yaşar, orada id'yi tekrar
+        belirtmek, satırın gerçek id'sinden sapabilecek gereksiz veri olurdu.
         """
         return {
             "version": self.version,
@@ -99,8 +103,8 @@ class CompanyAdapter:
 
     @classmethod
     def from_dict(cls, company_id: str, value: Optional[dict[str, Any]]) -> "CompanyAdapter":
-        """Reconstruct from a ``to_dict()``-shaped mapping (or ``None``,
-        for a company that has never had one set)."""
+        """``to_dict()`` biçimli bir eşlemeden (veya hiç ayarlanmamış bir
+        şirket için ``None``'dan) yeniden oluşturur."""
         if not value:
             return cls.empty(company_id)
         return cls(
@@ -114,9 +118,9 @@ class CompanyAdapter:
         )
 
 
-#: Async callable taking a ``company_id`` and returning that company's
-#: current adapter (never raises, never returns None -- see
-#: ``CompanyAdapter.empty``) -- injected into ``create_draft_graph``/
-#: ``create_revise_graph`` the same way ``routing_graph.UnitsProvider`` is,
-#: so this module (and every graph module) never imports ``app.domains``.
+#: Bir ``company_id`` alan ve o şirketin mevcut adaptörünü döndüren async
+#: callable (asla hata fırlatmaz, asla None döndürmez -- bkz.
+#: ``CompanyAdapter.empty``) -- ``routing_graph.UnitsProvider`` ile aynı
+#: şekilde ``create_draft_graph``/``create_revise_graph``'a enjekte edilir,
+#: böylece bu modül (ve her grafik modülü) asla ``app.domains`` import etmez.
 AdapterProvider = Callable[[str], Awaitable[CompanyAdapter]]

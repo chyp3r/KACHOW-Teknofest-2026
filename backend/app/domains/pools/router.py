@@ -61,7 +61,7 @@ async def get_my_pool(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """The caller's own personal document pool, lazily created on first use."""
+    """Çağıranın kendi kişisel evrak havuzu, ilk kullanımda tembel (lazy) olarak oluşturulur."""
     service = _pool_service(db)
     pool = await service.get_or_create_personal_pool(current_user.id, current_user.company_id)
     return SuccessResponse(data=DocumentPoolResponse.model_validate(pool))
@@ -74,7 +74,7 @@ async def list_pool_items(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """List a pool's items, newest first. The pool's own owner, or Admin/Manager/Root."""
+    """Bir havuzun ögelerini en yeniden en eskiye listeler. Havuzun sahibi veya Admin/Manager/Root."""
     service = _pool_service(db)
     items, total = await service.list_pool_items(
         pool_id, current_user.company_id, current_user, skip=pagination.offset, limit=pagination.limit
@@ -95,7 +95,7 @@ async def push_to_pool(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Push one document directly into a specific, already-known pool (Admin/Manager only)."""
+    """Bir evrakı doğrudan belirli, zaten bilinen bir havuza iter (yalnızca Admin/Manager)."""
     service = _pool_service(db)
     item = await service.push_to_pool(
         pool_id, schema.document_id, schema.note, current_user, current_user.company_id
@@ -109,8 +109,9 @@ async def push_bulk(
     current_user: UserModel = Depends(require_roles(UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Push one document into several recipients' (or a whole unit's) personal pools
-    (Admin/Manager only). Per-recipient result: 'pushed' | 'denied_clearance' | 'not_found'."""
+    """Bir evrakı birden çok alıcının (veya bütün bir birimin) kişisel
+    havuzlarına iter (yalnızca Admin/Manager). Alıcı bazında sonuç:
+    'pushed' | 'denied_clearance' | 'not_found'."""
     service = _pool_service(db)
     results = await service.push(schema, current_user, current_user.company_id)
     await _audit_service(db).record(
@@ -132,7 +133,7 @@ async def remove_pool_item(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Remove an item from a pool. The pool's own owner, or Admin/Manager/Root."""
+    """Havuzdan bir öge kaldırır. Havuzun sahibi veya Admin/Manager/Root."""
     service = _pool_service(db)
     await service.remove_item(pool_id, item_id, current_user.company_id, current_user)
     return SuccessResponse(data=None)
@@ -144,7 +145,7 @@ async def acknowledge_pool_item(
     current_user: UserModel = Depends(require_auth_if_enabled),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark a pushed item as read/acknowledged. The pool's own owner, or Admin/Manager/Root."""
+    """İtilmiş bir ögeyi okundu/onaylandı olarak işaretler. Havuzun sahibi veya Admin/Manager/Root."""
     service = _pool_service(db)
     item = await service.acknowledge_item(item_id, current_user.company_id, current_user)
     return SuccessResponse(data=_item_response(item, None).model_dump(mode="json"))
@@ -157,11 +158,12 @@ async def adopt_pool_item(
     db: AsyncSession = Depends(get_db),
     document_service: DocumentService = Depends(get_document_analysis_service),
 ):
-    """Copy-on-write (Faz 5, #205): give a transferred item's own owner a
-    fully independent, editable copy (blob + registry row + analysis cache
-    + Q&A index) instead of the read-only shared-blob snapshot a transfer
-    leaves behind by default. The pool item's own owner only -- no Admin/
-    Manager bypass, see `DocumentService.adopt_pool_item`'s own docstring."""
+    """Copy-on-write (Faz 5, #205): bir transferin varsayılan olarak
+    bıraktığı salt okunur paylaşılan blob anlık görüntüsü yerine, transfer
+    edilen bir ögenin sahibine tamamen bağımsız, düzenlenebilir bir kopya
+    (blob + kayıt satırı + analiz önbelleği + Soru-Cevap indeksi) verir.
+    Yalnızca havuz ögesinin kendi sahibi -- Admin/Manager atlaması yok,
+    bkz. `DocumentService.adopt_pool_item`'in kendi docstring'i."""
     item = await document_service.adopt_pool_item(
         item_id=item_id, current_user=current_user, company_id=current_user.company_id
     )

@@ -1,25 +1,24 @@
-"""The request_handoff tool the assistant agent may call for one turn (Faz 7).
+"""Asistan ajanının bir tur için çağırabileceği request_handoff aracı (Faz 7).
 
-``assistant.md``'s own "Üretim Yasağı" rule tells the model to politely
-refuse anything outside its five core capabilities -- but "Cevap Taslağı
-Hazırlama" (drafting) and revising the active draft *are* two of those five.
-A message that should have routed to ``draft``/``revise`` but landed on
-``assist`` instead (a weak or fallback routing decision, see
-``planning_graph._deterministic_handoff_target`` for the deterministic half
-of this fix) has no text-pattern the assistant's own free-form reply
-reliably signals -- unlike ``propose_transfer``, there is no fixed shape to
-detect after the fact. This tool gives the model an explicit, structured way
-to say "this belongs to draft/revise instead of me" rather than writing the
-content itself (which would violate Üretim Yasağı in spirit even when it
-technically produces a usable letter) or refusing a perfectly legitimate
-request outright.
+``assistant.md``'nin kendi "Üretim Yasağı" kuralı, modele beş temel yeteneğinin
+dışındaki her şeyi kibarca reddetmesini söyler -- ama "Cevap Taslağı Hazırlama"
+(taslak hazırlama) ve aktif taslağı revize etme, o beşten *ikisidir*.
+``draft``/``revise``'e yönlendirilmesi gerekirken bunun yerine ``assist``'e
+düşen bir mesajın (zayıf veya yedek bir yönlendirme kararı; bu düzeltmenin
+deterministik yarısı için bkz. ``planning_graph._deterministic_handoff_target``),
+asistanın kendi serbest formatlı yanıtının güvenilir biçimde sinyal verdiği
+bir metin kalıbı yoktur -- ``propose_transfer``'ın aksine, sonradan tespit
+edilecek sabit bir şekil de yoktur. Bu araç, modele içeriği kendisi yazmak
+(bu, teknik olarak kullanılabilir bir mektup üretse bile ruh olarak Üretim
+Yasağı'nı ihlal eder) veya tamamen meşru bir isteği baştan reddetmek yerine
+"bu, bana değil draft/revise'e ait" demenin açık, yapılandırılmış bir yolunu verir.
 
-Same one-turn, propose-only shape as ``app.ai.tools.transfer_tools``: the
-handler never mutates graph state directly (a tool handler runs inside the
-assist step's own node, see that module's docstring on why), it only hands
-the request back to ``planning_graph._step_assist`` through a side-channel
-callback, which is what actually appends the target flow's own steps to
-``plan_steps``.
+``app.ai.tools.transfer_tools`` ile aynı tek-tur, yalnızca-öner şekli:
+handler asla doğrudan graph durumunu mutasyona uğratmaz (bir araç handler'ı
+assist adımının kendi düğümünün içinde çalışır, nedeni için o modülün
+docstring'ine bakın); isteği yalnızca bir yan kanal geri çağırımı üzerinden
+``planning_graph._step_assist``'e geri verir; bu, hedef akışın kendi
+adımlarını ``plan_steps``'e fiilen ekleyen şeydir.
 """
 
 from typing import Callable, Literal
@@ -50,22 +49,21 @@ def build_handoff_tools(
     has_active_draft: bool,
     on_handoff_requested: Callable[[dict], None],
 ) -> list[ToolSpec]:
-    """Build the ``request_handoff`` tool.
+    """``request_handoff`` aracını inşa eder.
 
     Args:
-        has_active_draft: Whether ``SessionFocus.active_draft`` is set this
-            turn -- ``target="revise"`` is refused (never handed off) when
-            there is nothing to revise, the same guarantee
-            ``_step_revise``/``intent_scorer.score_intents`` already give
-            the deterministic routing path (C-item: revise is never handed
-            off to without an active draft).
-        on_handoff_requested: Side-channel callback receiving
-            ``{"target": ..., "reason": ...}`` when the model calls this
-            tool -- mirrors ``build_transfer_tools``'s
-            ``on_transfer_proposed`` exactly.
+        has_active_draft: Bu turda ``SessionFocus.active_draft``'ın ayarlı
+            olup olmadığı -- revize edilecek hiçbir şey olmadığında
+            ``target="revise"`` reddedilir (asla devredilmez); bu,
+            ``_step_revise``/``intent_scorer.score_intents``'in deterministik
+            yönlendirme yoluna zaten verdiği aynı garantidir (C-öğesi:
+            revise, aktif bir taslak olmadan asla devredilmez).
+        on_handoff_requested: Model bu aracı çağırdığında
+            ``{"target": ..., "reason": ...}`` alan yan kanal geri çağırımı --
+            ``build_transfer_tools``'un ``on_transfer_proposed``'ini tam olarak yansıtır.
 
     Returns:
-        A single-tool list.
+        Tek araçlı bir liste.
     """
 
     async def _request_handoff(target: str, reason: str = "") -> str:

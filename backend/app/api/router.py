@@ -23,7 +23,6 @@ from app.domains.users.router import router as users_router
 
 api_router = APIRouter()
 
-# Register v1 routes
 api_router.include_router(health_router, tags=["health"])
 api_router.include_router(analytics_router, tags=["analytics"])
 api_router.include_router(audit_router, tags=["audit"])

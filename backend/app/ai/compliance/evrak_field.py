@@ -6,12 +6,12 @@ from app.core.enums.compliance_status import ComplianceStatus
 
 
 class EvrakField(BaseModel):
-    """Structured header and signature fields of an incoming official document.
+    """Gelen bir resmi belgenin yapılandırılmış başlık ve imza alanları.
 
-    Every field is optional and defaults to None on purpose: missing-field
-    detection depends on the model reporting honest absence. A field given a
-    meaningful default (for example a "Tasnif Dışı" confidentiality grade) would
-    make every document look complete.
+    Her alan isteğe bağlıdır ve varsayılan olarak bilerek None'dır: eksik alan
+    tespiti, modelin gerçek yokluğu dürüstçe bildirmesine dayanır. Anlamlı bir
+    varsayılan değer verilen bir alan (örneğin "Tasnif Dışı" gizlilik derecesi)
+    her belgeyi eksiksiz gösterirdi.
     """
 
     sayi: Optional[str] = Field(
@@ -81,7 +81,7 @@ class EvrakField(BaseModel):
 
 
 class MissingField(BaseModel):
-    """A required field that is absent from the document, with its legal basis."""
+    """Belgede bulunmayan, yasal dayanağıyla birlikte zorunlu bir alan."""
 
     key: str = Field(description="Eksik alanın teknik adı (örn. 'sayi').")
     label: str = Field(description="Eksik alanın Türkçe adı (örn. 'Sayı').")
@@ -97,7 +97,7 @@ class MissingField(BaseModel):
 
 
 class ComplianceReport(BaseModel):
-    """Outcome of checking a document's fields against the required-field rules."""
+    """Bir belgenin alanlarının zorunlu alan kurallarına göre kontrol edilmesinin sonucu."""
 
     status: ComplianceStatus = Field(description="Belgenin uygunluk durumu.")
     missing_fields: list[MissingField] = Field(

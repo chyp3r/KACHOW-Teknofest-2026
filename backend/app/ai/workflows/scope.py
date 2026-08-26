@@ -1,37 +1,41 @@
-"""Domain admission control: does this request belong to the system at all?
+"""Alan kabul kontrolü: bu istek sistemle ilgili mi, ilgili değil mi?
 
-The router (:mod:`app.ai.workflows.planner`) answers *which* of the system's
-flows a message wants. It has never answered *whether* the message wants any
-of them. Those are different questions, and conflating them is what let
-"Çiğköfte kampanyası için bir metin yaz" reach the drafting pipeline: it
-matches ``draft.explicit_request``'s ``"metni yaz"`` surface outright, so
-every layer downstream -- fusion, the model tie-breaker, the writer agent --
-correctly agreed it was a *drafting* request and dutifully produced a
-marketing text. No amount of intent-table tuning fixes that, because the
-intent was never wrong.
+Router (:mod:`app.ai.workflows.planner`) bir mesajın sistemin akışlarından
+*hangisini* istediğini yanıtlar. Mesajın bunlardan *herhangi birini*
+isteyip istemediğini hiçbir zaman yanıtlamamıştır. Bunlar farklı sorulardır
+ve ikisini birbirine karıştırmak, "Çiğköfte kampanyası için bir metin yaz"
+ifadesinin taslak hazırlama boru hattına ulaşmasına izin veren şeydir:
+bu ifade ``draft.explicit_request``'in ``"metni yaz"`` yüzeyiyle doğrudan
+eşleşir, bu yüzden alt akıştaki her katman -- füzyon, model çekişme
+bozucusu, yazar ajanı -- bunun bir *taslak hazırlama* isteği olduğu
+konusunda doğru şekilde hemfikir olur ve itaatkâr bir şekilde bir pazarlama
+metni üretir. Hiçbir niyet tablosu ayarı bunu düzeltemez, çünkü niyet hiç
+yanlış değildi.
 
-So scope is resolved separately, and it is resolved by *requiring positive
-evidence* rather than by blacklisting topics. A deny-list of out-of-domain
-subjects ("çiğköfte", "hava durumu", "futbol") is unbounded by construction
-and fails on the first topic nobody thought of. The rule here is the
-inverse:
+Bu yüzden kapsam ayrı olarak çözülür ve konuları kara listeye almak yerine
+*olumlu kanıt gerektirerek* çözülür. Alan dışı konuların ("çiğköfte", "hava
+durumu", "futbol") bir izin verilmeyenler listesi, yapısı gereği sınırsızdır
+ve kimsenin düşünmediği ilk konuda başarısız olur. Buradaki kural bunun
+tersidir:
 
-* Small talk, courtesy, meta questions about the assistant, and questions
-  about this conversation are **always** in scope -- they are how a user
-  talks to any assistant, and refusing them is the failure the greeting
-  rules in :mod:`app.ai.workflows.intent_rules` already exist to prevent.
-* A request that *acts on* something -- drafting, analysing, revising --
-  is in scope only when it is anchored: to the attached document, to the
-  open draft, or to the official-correspondence/legislation domain
-  vocabulary. An unanchored production request is out of scope no matter
-  how confidently it reads as ``draft``.
+* Küçük sohbet, nezaket, asistan hakkında meta sorular ve bu konuşma
+  hakkındaki sorular **her zaman** kapsam içindedir -- bir kullanıcının
+  herhangi bir asistanla konuşma şekli budur ve bunları reddetmek,
+  :mod:`app.ai.workflows.intent_rules` içindeki selamlama kurallarının
+  zaten önlemek için var olduğu başarısızlıktır.
+* Bir şey *üzerinde eyleme geçen* bir istek -- taslak hazırlama, analiz
+  etme, revize etme -- yalnızca bir yere bağlıysa kapsam içindedir: ekli
+  belgeye, açık taslağa veya resmî yazışma/mevzuat alanı kelime dağarcığına.
+  Bağlantısız bir üretim isteği, ne kadar güvenle ``draft`` gibi okunsa da
+  kapsam dışıdır.
 
-``assess_scope_deterministic`` is free and reproducible and settles the
-overwhelming majority of turns. Only genuinely unanchored production
-requests -- the exact case worth spending a call on -- reach
-``classify_scope_with_model``, which is the same fast tier the router's own
-tie-breaker uses, and which degrades to the deterministic verdict on any
-failure rather than blocking a legitimate request behind a provider outage.
+``assess_scope_deterministic`` ücretsizdir, yeniden üretilebilirdir ve
+turların büyük çoğunluğunu çözer. Yalnızca gerçekten bağlantısız üretim
+istekleri -- bir çağrı harcamaya değecek asıl durum --
+``classify_scope_with_model``'e ulaşır; bu da router'ın kendi çekişme
+bozucusunun kullandığı aynı hızlı katmandır ve herhangi bir hatada, meşru
+bir isteği bir sağlayıcı kesintisinin arkasında engellemek yerine
+deterministik karara geri düşer.
 """
 
 import logging
@@ -55,9 +59,9 @@ __all__ = [
     "resolve_scope",
 ]
 
-#: Why a message was admitted or refused. Recorded on every decision so a
-#: production refusal can be traced to the rule that produced it, the same
-#: way ``PlanDecision.evidence`` traces an intent.
+#: Bir mesajın neden kabul edildiği veya reddedildiği. Bir üretim reddinin,
+#: ``PlanDecision.evidence``'ın bir niyeti izlediği gibi, onu üreten kurala
+#: kadar izlenebilmesi için her kararda kaydedilir.
 ScopeReason = Literal[
     "conversational",
     "system_question",
@@ -71,20 +75,21 @@ ScopeReason = Literal[
     "degraded",
 ]
 
-#: Intents that *produce* something on the user's behalf. Only these are
-#: subject to the anchoring requirement -- ``assist`` answers questions, and
-#: an unanchored question is a normal thing to ask an assistant.
+#: Kullanıcı adına bir şey *üreten* niyetler. Yalnızca bunlar bağlanma
+#: gerekliliğine tabidir -- ``assist`` sorulara cevap verir ve bağlantısız
+#: bir soru bir asistana sorulacak normal bir şeydir.
 PRODUCTION_INTENTS = frozenset({"draft", "analyze", "revise"})
 
-#: Vocabulary of official correspondence and public administration. A
-#: production request carrying any of these is talking about this system's
-#: subject matter even with nothing attached ("resmi yazı şablonu nasıl
-#: olur"), so it is admitted without a model call.
+#: Resmî yazışma ve kamu idaresi kelime dağarcığı. Bunlardan herhangi birini
+#: taşıyan bir üretim isteği, hiçbir şey ekli olmasa bile ("resmi yazı
+#: şablonu nasıl olur") bu sistemin konusundan bahsediyordur, bu yüzden
+#: model çağrısı olmadan kabul edilir.
 #:
-#: Deliberately *not* a topic classifier: it does not try to recognise every
-#: in-domain subject, only the register. A request that is genuinely in
-#: domain but phrased without any of these still gets its model call rather
-#: than being refused on a lexicon miss.
+#: Kasıtlı olarak bir konu sınıflandırıcısı *değildir*: alan içindeki her
+#: konuyu değil, yalnızca üslubu tanımaya çalışır. Gerçekten alan içinde
+#: olan ama bunlardan hiçbiri kullanılmadan ifade edilen bir istek, bir
+#: sözlük kaçırması yüzünden reddedilmek yerine yine de model çağrısını
+#: alır.
 DOMAIN_SURFACES: tuple[str, ...] = (
     "resmi yazi", "resmi yazisma", "ust yazi", "alt yazi", "evrak", "belge",
     "dilekce", "genelge", "tebligat", "teblig", "muzekkere", "tezkere",
@@ -100,10 +105,10 @@ DOMAIN_SURFACES: tuple[str, ...] = (
     "personel", "memur", "izin", "atama", "gorevlendirme", "yazisma",
 )
 
-#: Phrases that make a message about *this system* or *this conversation*
-#: rather than about a topic at all. Always admitted -- these are exactly
-#: what the assistant is for, and the pre-existing ``assist.*`` evidence
-#: rules already treat them as first-class.
+#: Bir mesajı herhangi bir konu hakkında değil, *bu sistem* veya *bu
+#: konuşma* hakkında yapan ifadeler. Her zaman kabul edilir -- bunlar
+#: tam olarak asistanın ne için var olduğudur ve zaten mevcut ``assist.*``
+#: kanıt kuralları bunları birinci sınıf olarak ele alır.
 SYSTEM_SURFACES: tuple[str, ...] = (
     "ne yapabilirsin", "neler yapabilirsin", "yeteneklerin", "yetenekleri",
     "ne ise yararsin", "ne ise yarar", "nasil calisirsin", "nasil calisiyorsun",
@@ -115,9 +120,9 @@ SYSTEM_SURFACES: tuple[str, ...] = (
     "az once", "daha once", "onceki mesaj", "hatirliyor musun",
 )
 
-#: Bare social exchange. Length-gated by the caller, not by content: "selam"
-#: is small talk, "Selam, çiğköfte kampanyası için metin yazar mısın?" is a
-#: production request that happens to open politely.
+#: Salt sosyal alışveriş. İçeriğe göre değil, çağıran tarafından uzunluğa
+#: göre kapılanır: "selam" küçük sohbettir, "Selam, çiğköfte kampanyası
+#: için metin yazar mısın?" ise nezaketle başlayan bir üretim isteğidir.
 CONVERSATIONAL_SURFACES: tuple[str, ...] = (
     "merhaba", "selam", "gunaydin", "iyi gunler", "iyi aksamlar",
     "iyi calismalar", "kolay gelsin", "nasilsin", "tesekkur", "tesekkurler",
@@ -125,11 +130,11 @@ CONVERSATIONAL_SURFACES: tuple[str, ...] = (
     "gorusmek uzere", "peki", "tamam", "anladim", "evet", "hayir",
 )
 
-#: The bounded list of what this system does, in the user's own terms. Kept
-#: here rather than only in ``prompts/templates/assistant.md`` because the
-#: refusal path renders it deterministically -- a refusal must never be a
-#: generation, or the model gets one more chance to do the thing it was just
-#: told not to do.
+#: Bu sistemin ne yaptığının, kullanıcının kendi terimleriyle sınırlı
+#: listesi. Yalnızca ``prompts/templates/assistant.md`` yerine burada
+#: tutulur, çünkü reddetme yolu bunu deterministik olarak oluşturur -- bir
+#: reddetme asla bir üretim olmamalıdır, yoksa model az önce yapmaması
+#: söylenen şeyi yapmak için bir şans daha elde eder.
 CAPABILITY_MANIFEST: tuple[str, ...] = (
     "Yüklediğiniz evrakın türünü tespit edip üst verilerini (tarih, sayı, konu, "
     "muhatap) çıkarabilir ve resmî yazışma kurallarına uygunluğunu denetleyebilirim.",
@@ -142,26 +147,25 @@ CAPABILITY_MANIFEST: tuple[str, ...] = (
     "yanıtlayabilirim.",
 )
 
-#: Longest message still treated as pure social exchange on the strength of a
-#: conversational surface alone. "Selam" and "iyi çalışmalar" are inside it;
-#: a greeting with a real request bolted onto it is not, and falls through to
-#: the anchoring test like any other request.
+#: Yalnızca sohbet yüzeyinin gücüyle hâlâ saf sosyal alışveriş sayılan en
+#: uzun mesaj. "Selam" ve "iyi çalışmalar" bunun içindedir; üzerine gerçek
+#: bir istek eklenmiş bir selamlama içinde değildir ve diğer her istek gibi
+#: bağlanma testine düşer.
 _CONVERSATIONAL_WORD_LIMIT = 6
 
 
 @dataclass(frozen=True)
 class ScopeVerdict:
-    """Whether a message is this system's business, and why.
+    """Bir mesajın bu sistemi ilgilendirip ilgilendirmediği ve nedeni.
 
     Attributes:
-        in_scope: False only when the request should not run at all. A
-            refusal is a real outcome, not an error -- see
-            ``build_refusal_reply``.
-        reason: Which rule settled it (see ``ScopeReason``).
-        source: ``"deterministic"`` or ``"model"``, mirroring the split every
-            other decision layer in this package reports.
-        detail: Short Turkish note for the audit trail. Never shown verbatim
-            to the user; the refusal text is composed separately.
+        in_scope: Yalnızca istek hiç çalıştırılmamalıysa False. Bir reddetme
+            gerçek bir sonuçtur, bir hata değil -- bkz. ``build_refusal_reply``.
+        reason: Hangi kuralın buna karar verdiği (bkz. ``ScopeReason``).
+        source: ``"deterministic"`` veya ``"model"``; bu paketteki diğer her
+            karar katmanının rapor ettiği ayrımı yansıtır.
+        detail: Denetim izi için kısa Türkçe not. Kullanıcıya asla olduğu
+            gibi gösterilmez; reddetme metni ayrıca oluşturulur.
     """
 
     in_scope: bool
@@ -171,7 +175,7 @@ class ScopeVerdict:
 
 
 class ScopeOutput(BaseModel):
-    """The fast-tier model's verdict on an unanchored production request."""
+    """Hızlı katman modelinin bağlantısız bir üretim isteği hakkındaki kararı."""
 
     in_scope: bool = Field(
         description=(
@@ -184,7 +188,7 @@ class ScopeOutput(BaseModel):
 
 
 def _contains(normalized: str, surfaces: tuple[str, ...]) -> bool:
-    """Whether any surface appears in the already-normalised message."""
+    """Zaten normalleştirilmiş mesajda herhangi bir yüzeyin görünüp görünmediği."""
     padded = f" {normalized} "
     return any(f" {surface}" in padded for surface in surfaces)
 
@@ -196,20 +200,21 @@ def assess_scope_deterministic(
     has_document: bool,
     has_active_draft: bool,
 ) -> ScopeVerdict:
-    """Settle scope from the message alone, where that is possible.
+    """Mümkün olduğunda kapsamı yalnızca mesajdan karara bağlar.
 
     Args:
-        message: The user's raw message.
-        intent: The intent the router resolved for it. Only
-            ``PRODUCTION_INTENTS`` are subject to the anchoring requirement.
-        has_document: Whether a document is attached this turn.
-        has_active_draft: Whether ``SessionFocus.active_draft`` is set.
+        message: Kullanıcının ham mesajı.
+        intent: Router'ın onun için çözdüğü niyet. Yalnızca
+            ``PRODUCTION_INTENTS`` bağlanma gerekliliğine tabidir.
+        has_document: Bu turda bir belge ekli olup olmadığı.
+        has_active_draft: ``SessionFocus.active_draft``'ın ayarlı olup
+            olmadığı.
 
     Returns:
-        A verdict. ``in_scope=False`` with reason ``"unanchored_request"`` is
-        the one outcome the caller may want to escalate to a model rather
-        than act on directly (see ``resolve_scope``); every other outcome is
-        final.
+        Bir karar. Nedeni ``"unanchored_request"`` olan ``in_scope=False``,
+        çağıranın doğrudan üzerine hareket etmek yerine bir modele
+        yükseltmek isteyebileceği tek sonuçtur (bkz. ``resolve_scope``);
+        diğer her sonuç kesindir.
     """
     normalized = normalize(message)
 
@@ -222,31 +227,31 @@ def assess_scope_deterministic(
         )
 
     if intent not in PRODUCTION_INTENTS:
-        # An `assist` turn is a question, and a question is admitted on its
-        # face. The assistant's own prompt is what declines to *answer* an
-        # off-topic one; refusing it here as well would mean a user could
-        # not even ask what the system covers.
+        # Bir `assist` turu bir sorudur ve bir soru görünüşte kabul edilir.
+        # Alan dışı bir soruyu *yanıtlamayı* reddeden şey asistanın kendi
+        # promptudur; burada da reddetmek, bir kullanıcının sistemin neyi
+        # kapsadığını bile soramaması anlamına gelirdi.
         if len(normalized.split()) <= _CONVERSATIONAL_WORD_LIMIT and _contains(
             normalized, CONVERSATIONAL_SURFACES
         ):
             return ScopeVerdict(True, "conversational", detail="Selamlama/nezaket.")
         return ScopeVerdict(True, "conversational", detail="Soru/sohbet turu.")
 
-    # From here on the message asked the system to *produce* something, so
-    # it needs an anchor.
+    # Buradan itibaren mesaj sistemden bir şey *üretmesini* istedi, bu yüzden
+    # bir bağlantıya ihtiyacı var.
     if intent == "revise" and has_active_draft:
         return ScopeVerdict(
             True, "anchored_draft", detail="Açık taslak üzerinde revizyon."
         )
 
-    # A message that is *nothing but* the drafting/revision command itself
-    # ("Cevap yaz.") carries no evidence of being about anything other than
-    # this system's own subject matter -- there is no extra noun phrase left
-    # to be off-topic *about*. This is what keeps the gate from refusing the
-    # bare imperative the router's own module docstring uses as its worked
-    # example of an unambiguous draft request; only a command with something
-    # else attached to it ("Cevap yaz, çiğköfte kampanyası için") reaches the
-    # anchoring checks below at all.
+    # Taslak hazırlama/revizyon komutunun kendisinden *başka hiçbir şey
+    # olmayan* bir mesaj ("Cevap yaz.") bu sistemin kendi konusundan başka
+    # bir şey hakkında olduğuna dair hiçbir kanıt taşımaz -- alan dışı
+    # *olacak* fazladan bir isim öbeği kalmamıştır. Bu, router'ın kendi modül
+    # docstring'inin belirsiz olmayan bir taslak isteği örneği olarak
+    # kullandığı salt emir kipini kapının reddetmesini önleyen şeydir; yalnızca
+    # üzerine başka bir şey eklenmiş bir komut ("Cevap yaz, çiğköfte
+    # kampanyası için") aşağıdaki bağlanma kontrollerine ulaşır.
     if not content_words(message):
         return ScopeVerdict(
             True, "bare_command", detail="Salt üretim komutu; ek bir konu içermiyor."
@@ -258,12 +263,12 @@ def assess_scope_deterministic(
         )
 
     if has_document:
-        # A document is an anchor, but a weak one on its own: it makes the
-        # request *plausibly* about the document without establishing that
-        # it is. `app.ai.workflows.relevance` is the check that actually
-        # compares the request against the document's contents, and it runs
-        # once classification has produced a summary to compare against --
-        # which is strictly later than here.
+        # Bir belge bir bağlantıdır, ama tek başına zayıf bir bağlantı:
+        # isteği, belge hakkında olduğunu kanıtlamadan *makul biçimde* belge
+        # hakkında yapar. İsteği belgenin içeriğiyle gerçekten karşılaştıran
+        # kontrol `app.ai.workflows.relevance`'dır ve sınıflandırma
+        # karşılaştırılacak bir özet ürettikten sonra çalışır -- bu da
+        # kesinlikle buradan sonradır.
         return ScopeVerdict(
             True, "anchored_document", detail="Yüklü belge bağlamında üretim isteği."
         )
@@ -281,18 +286,18 @@ def assess_scope_deterministic(
 async def classify_scope_with_model(
     llm_client: BaseLLMClient, message: str
 ) -> Optional[bool]:
-    """Ask the fast tier whether an unanchored request is in domain.
+    """Bağlantısız bir isteğin alan içinde olup olmadığını hızlı katmana sorar.
 
     Args:
-        llm_client: Fast-tier client, the same one the router's tie-breaker
-            uses.
-        message: The user's message.
+        llm_client: Router'ın çekişme bozucusunun kullandığı aynı hızlı
+            katman istemcisi.
+        message: Kullanıcının mesajı.
 
     Returns:
-        The model's verdict, or ``None`` when the call itself failed --
-        distinct from ``False`` on purpose, exactly like
-        ``classify_intent_with_model``'s ``"model_failed"``: a provider
-        outage must not read as a refusal.
+        Modelin kararı, veya çağrının kendisi başarısız olduğunda ``None``
+        -- tam olarak ``classify_intent_with_model``'in ``"model_failed"``'i
+        gibi, kasıtlı olarak ``False``'tan ayrı: bir sağlayıcı kesintisi bir
+        reddetme olarak okunmamalıdır.
     """
     from app.ai.agents.base import BaseAgent
 
@@ -335,20 +340,20 @@ async def resolve_scope(
     has_active_draft: bool,
     llm_client: Optional[BaseLLMClient] = None,
 ) -> ScopeVerdict:
-    """Resolve scope, escalating only the case a model call can improve.
+    """Kapsamı çözer, yalnızca bir model çağrısının iyileştirebileceği durumu yükseltir.
 
     Args:
-        message: The user's message.
-        intent: The router's resolved intent.
-        has_document: Whether a document is attached this turn.
-        has_active_draft: Whether a draft is open.
-        llm_client: Fast-tier client. Omitted means the deterministic verdict
-            stands on its own -- which is a *stricter* system, not a broken
-            one: an unanchored production request is refused without the
-            model getting a chance to admit it.
+        message: Kullanıcının mesajı.
+        intent: Router'ın çözdüğü niyet.
+        has_document: Bu turda bir belge ekli olup olmadığı.
+        has_active_draft: Bir taslağın açık olup olmadığı.
+        llm_client: Hızlı katman istemcisi. Verilmemesi, deterministik
+            kararın tek başına geçerli olduğu anlamına gelir -- bu *bozuk*
+            değil, *daha katı* bir sistemdir: bağlantısız bir üretim isteği,
+            modele kabul etme şansı verilmeden reddedilir.
 
     Returns:
-        The final verdict.
+        Nihai karar.
     """
     verdict = assess_scope_deterministic(
         message, intent, has_document=has_document, has_active_draft=has_active_draft
@@ -358,10 +363,11 @@ async def resolve_scope(
 
     admitted = await classify_scope_with_model(llm_client, message)
     if admitted is None:
-        # The call broke, not the request. Keeping the deterministic refusal
-        # would turn an Ollama outage into "the system refuses to draft
-        # anything", so this admits instead and lets the ordinary pipeline
-        # (and the writer's own grounding requirements) handle it.
+        # Bozulan çağrıydı, istek değil. Deterministik reddi korumak bir
+        # Ollama kesintisini "sistem hiçbir şey taslak yazmayı reddediyor"a
+        # dönüştürürdü, bu yüzden bunun yerine kabul edilir ve sıradan boru
+        # hattının (ve yazarın kendi zemin gereksinimlerinin) bunu ele
+        # almasına izin verilir.
         return ScopeVerdict(
             True,
             "degraded",
@@ -378,21 +384,21 @@ async def resolve_scope(
 
 
 def build_refusal_reply(document_summary: str = "") -> str:
-    """Compose the out-of-scope reply. Deterministic, never generated.
+    """Kapsam dışı yanıtı oluşturur. Deterministiktir, asla üretilmez.
 
-    A refusal produced by the same model that was just asked to write the
-    off-topic text is a refusal with an escape hatch. This renders from
-    ``CAPABILITY_MANIFEST`` instead, so what the system claims it can do is
-    the same string every time and cannot drift from what it actually does.
+    Az önce alan dışı metni yazması istenen aynı model tarafından üretilen
+    bir reddetme, bir kaçış kapısı olan bir reddetmedir. Bunun yerine bu,
+    ``CAPABILITY_MANIFEST``'ten oluşturulur; böylece sistemin ne
+    yapabileceğini iddia ettiği şey her seferinde aynı dizedir ve gerçekte
+    yaptığından sapamaz.
 
     Args:
-        document_summary: The attached document's summary, when one is
-            attached. Included so a user who uploaded a document and then
-            asked something unrelated is not left wondering whether the
-            upload registered.
+        document_summary: Bir belge ekliyse, o belgenin özeti. Bir belge
+            yükleyip sonra alakasız bir şey soran kullanıcının yüklemenin
+            kaydedilip kaydedilmediğini merak etmemesi için eklenmiştir.
 
     Returns:
-        The Turkish reply.
+        Türkçe yanıt.
     """
     lines = [
         "Bu istek benim görev alanımın dışında kalıyor. Ben bir **Evrak Karar "

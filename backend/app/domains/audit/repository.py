@@ -1,6 +1,6 @@
-"""Repository for `audit_log`'s hash chain -- see `AuditLogModel`'s docstring
-for the shape and why `company_id` is the one nullable tenant column in this
-codebase.
+"""`audit_log`'un hash zinciri için repository -- şeklini ve `company_id`'nin
+bu kod tabanındaki nullable olan tek kiracı sütunu olmasının nedenini
+`AuditLogModel`'in docstring'inde bulabilirsiniz.
 """
 
 import hashlib
@@ -13,41 +13,43 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.domains.audit.model.audit_log_model import AuditLogModel
 
-#: The fixed prev_hash for the first row of any chain (per-company, or the
-#: `company_id IS NULL` system-wide chain). Not a real hash of anything --
-#: just a stable, recognizable anchor so `_compute_hash` never has to special-
-#: case "there is no previous row" inside the hash formula itself.
+#: Herhangi bir zincirin ilk satırı için sabit prev_hash (şirket başına,
+#: veya `company_id IS NULL` sistem geneli zincir). Gerçekten bir şeyin
+#: hash'i değil -- sadece kararlı, tanınabilir bir çapa, böylece
+#: `_compute_hash` hash formülünün içinde "önceki satır yok" durumunu
+#: özel olarak ele almak zorunda kalmaz.
 GENESIS_HASH = "0" * 64
 
 
 def _canonical_json(payload: dict) -> str:
-    """Deterministic JSON encoding -- same key order, no incidental whitespace
-    differences -- so the same logical row always hashes to the same value
-    regardless of dict insertion order."""
+    """Deterministik JSON kodlaması -- aynı anahtar sırası, tesadüfi boşluk
+    farkı yok -- böylece aynı mantıksal satır, dict ekleme sırasından
+    bağımsız olarak her zaman aynı değere hash'lenir."""
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
 
 
 def compute_hash(prev_hash: str, row: dict) -> str:
     """`sha256(prev_hash || canonical_json(row))`.
 
-    A free function (not a method) so `AuditLogRepository.verify_chain` and
-    a future standalone verification script can both recompute a row's
-    expected hash from nothing but its own persisted fields, without needing
-    a live repository/session.
+    Bir metot değil, bağımsız (free) bir fonksiyon; böylece
+    `AuditLogRepository.verify_chain` ve gelecekteki bağımsız bir doğrulama
+    betiği, canlı bir repository/session'a ihtiyaç duymadan bir satırın
+    beklenen hash'ini sadece kendi kalıcı hale getirilmiş alanlarından
+    yeniden hesaplayabilir.
     """
     payload = _canonical_json(row)
     return hashlib.sha256(f"{prev_hash}|{payload}".encode("utf-8")).hexdigest()
 
 
 def hashable_fields(entry: AuditLogModel) -> dict:
-    """The subset of a row's fields the hash actually covers.
+    """Bir satırın alanlarından hash'in gerçekte kapsadığı alt küme.
 
-    Deliberately excludes `id` (a random uuid, not a fact about the action)
-    and `prev_hash`/`hash` themselves (the hash cannot cover its own value,
-    and `prev_hash` is already folded in as the separate chain-linking
-    input to `compute_hash`, not part of the JSON payload) -- covering both
-    would make every hash trivially self-referential rather than actually
-    binding to what happened.
+    Bilinçli olarak `id`'yi (rastgele bir uuid, eylem hakkında bir gerçek
+    değil) ve `prev_hash`/`hash`'in kendisini (hash kendi değerini
+    kapsayamaz, ve `prev_hash` zaten `compute_hash`'e ayrı bir zincir-bağlama
+    girdisi olarak katılıyor, JSON payload'ının bir parçası değil) dışarıda
+    bırakır -- ikisini de kapsamak, her hash'i gerçekte olanı bağlamak
+    yerine önemsiz biçimde kendine referans veren bir şey yapardı.
     """
     return {
         "company_id": entry.company_id,
@@ -68,21 +70,22 @@ def hashable_fields(entry: AuditLogModel) -> dict:
 
 
 class AuditLogRepository:
-    """Append-only store for `audit_log`. There is deliberately no update or
-    delete method -- a hash chain that can be edited after the fact is not
-    tamper-evident."""
+    """`audit_log` için sadece-ekleme (append-only) veri deposu. Bilinçli
+    olarak update veya delete metodu yok -- sonradan düzenlenebilen bir hash
+    zinciri kurcalamaya karşı kanıt sağlamaz (tamper-evident değildir)."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
     async def _next_seq_and_prev_hash(self, company_id: Optional[str]) -> Tuple[int, str]:
-        """The next `seq` and the current chain tip's `hash` for `company_id`'s
-        chain (the `company_id IS NULL` system-wide chain included).
+        """`company_id`'nin zinciri için bir sonraki `seq` ve mevcut zincir
+        ucunun `hash`'i (`company_id IS NULL` sistem geneli zincir dahil).
 
-        `IS NOT DISTINCT FROM` rather than `==`, so the system-wide chain's
-        own `NULL = NULL` comparison behaves as "equal" instead of SQL's
-        default "unknown" -- the same fix `DraftRepository.list_drafts`
-        needed for the same reason (see that module's docstring).
+        `==` yerine `IS NOT DISTINCT FROM`, böylece sistem geneli zincirin
+        kendi `NULL = NULL` karşılaştırması SQL'in varsayılan "bilinmiyor"u
+        yerine "eşit" olarak davranır -- `DraftRepository.list_drafts`'ın
+        aynı nedenle ihtiyaç duyduğu düzeltmenin aynısı (bkz. o modülün
+        docstring'i).
         """
         result = await self.db.execute(
             select(AuditLogModel)
@@ -112,9 +115,9 @@ class AuditLogRepository:
         correlation_id: Optional[str] = None,
         acting_as_company_id: Optional[str] = None,
     ) -> AuditLogModel:
-        """Append one row to `company_id`'s chain, computing `seq`/`prev_hash`/
-        `hash` in the same call so no caller can construct an inconsistent
-        chain link."""
+        """`company_id`'nin zincirine bir satır ekle, `seq`/`prev_hash`/`hash`'i
+        aynı çağrıda hesaplayarak hiçbir çağıranın tutarsız bir zincir
+        bağlantısı oluşturamamasını sağla."""
         seq, prev_hash = await self._next_seq_and_prev_hash(company_id)
         entry = AuditLogModel(
             id=uuid4().hex,
@@ -140,7 +143,7 @@ class AuditLogRepository:
         return entry
 
     async def list_chain(self, company_id: Optional[str]) -> List[AuditLogModel]:
-        """Every row of one chain, in `seq` order -- what `verify_chain` walks."""
+        """Bir zincirin `seq` sırasındaki tüm satırları -- `verify_chain`'in gezdiği veri."""
         result = await self.db.execute(
             select(AuditLogModel)
             .where(AuditLogModel.company_id.is_not_distinct_from(company_id))
@@ -157,10 +160,11 @@ class AuditLogRepository:
         skip: int = 0,
         limit: int = 100,
     ) -> List[AuditLogModel]:
-        """Newest first -- for `GET /audit`. `company_id=None` (root, no
-        company filter) lists every row system-wide, not just the `NULL`
-        chain -- unlike `list_chain`/`_next_seq_and_prev_hash`, this is a
-        read-side listing filter, not a chain-membership test."""
+        """En yeni önce -- `GET /audit` için. `company_id=None` (root, şirket
+        filtresi yok) sadece `NULL` zincirini değil, sistem genelindeki her
+        satırı listeler -- `list_chain`/`_next_seq_and_prev_hash`'in aksine,
+        bu bir okuma-tarafı listeleme filtresidir, zincir-üyeliği testi
+        değil."""
         query = select(AuditLogModel)
         if company_id is not None:
             query = query.where(AuditLogModel.company_id == company_id)

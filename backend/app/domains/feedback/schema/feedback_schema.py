@@ -3,21 +3,22 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
-#: Input-side closed set (garbage prevention on the one write path this
-#: schema guards) -- the DB column itself stays a loose string, matching
-#: `NotificationModel.type`'s convention, so a new rateable surface only
-#: ever needs this one file updated, not a migration.
+#: Girdi tarafında kapalı küme (bu şemanın koruduğu tek yazma yolunda
+#: çöp verinin önlenmesi) -- DB sütununun kendisi, `NotificationModel.type`
+#: kuralına uygun şekilde gevşek bir string olarak kalır, böylece
+#: oylanabilir yeni bir yüzey yalnızca bu tek dosyanın güncellenmesini
+#: gerektirir, bir migration değil.
 TargetKind = Literal["draft", "revision", "assist_reply", "routing"]
 Signal = Literal["like", "dislike"]
 
 
 class FeedbackVoteRequest(BaseModel):
-    """Pydantic schema for casting (or re-casting) a vote.
+    """Bir oy vermek (veya tekrar vermek) için Pydantic şeması.
 
-    `content` is the exact rated text -- hashed server-side into
-    `content_hash` and never itself persisted (see `FeedbackModel`'s
-    docstring). The frontend already has this text in hand (it is what is
-    on screen), so no extra fetch is needed to vote.
+    `content`, oylanan tam metindir -- sunucu tarafında `content_hash`'e
+    hash'lenir ve kendisi asla kalıcı hale getirilmez (bkz. `FeedbackModel`'ın
+    docstring'i). Frontend bu metne zaten sahiptir (ekranda görünen odur),
+    bu yüzden oy vermek için ekstra bir fetch gerekmez.
     """
 
     target_kind: TargetKind
@@ -36,7 +37,7 @@ class FeedbackVoteRequest(BaseModel):
 
 
 class FeedbackResponse(BaseModel):
-    """Pydantic schema for one feedback row."""
+    """Tek bir geri bildirim satırı için Pydantic şeması."""
 
     model_config = {"from_attributes": True}
 
@@ -55,7 +56,7 @@ class FeedbackResponse(BaseModel):
 
 
 class FeedbackStatsResponse(BaseModel):
-    """Pydantic schema for `GET /companies/{id}/feedback/stats`."""
+    """`GET /companies/{id}/feedback/stats` için Pydantic şeması."""
 
     total: int
     likes: int

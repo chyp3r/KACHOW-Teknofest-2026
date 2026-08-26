@@ -4,11 +4,11 @@ from app.api.exceptions.base import BaseAppException
 
 
 class ConflictException(BaseAppException):
-    """Exception raised when a resource conflict occurs."""
+    """Bir kaynak çakışması oluştuğunda fırlatılan istisna."""
 
     def __init__(
         self,
-        message: str = "A conflict occurred.",
+        message: str = "Bir çakışma oluştu.",
         error_code: str = "RESOURCE_CONFLICT",
         details: Optional[Dict[str, Any]] = None,
     ):

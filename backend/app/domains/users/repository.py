@@ -9,22 +9,23 @@ from app.domains.users.model.invited_email import InvitedEmailModel
 from app.domains.users.model.user_favorite_model import UserFavoriteModel
 
 class UserRepository:
-    """SOTA Repository for SQLAlchemy database transactions regarding Users and Invites."""
+    """Kullanıcılar ve Davetler ile ilgili SQLAlchemy veritabanı işlemleri için SOTA Repository."""
 
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ---------- User Methods ----------
+    # ---------- Kullanıcı Metotları ----------
     async def get_by_id(self, user_id: str) -> Optional[UserModel]:
-        """Fetch active user by primary key ID.
+        """Birincil anahtar ID'sine göre aktif kullanıcı getirir.
 
-        Deliberately not company-scoped: the JWT `sub` already identifies a
-        specific row, so this is the low-level lookup used by
-        `get_current_user` (before any company context is even resolved)
-        and internally by service methods that apply their own company
-        check afterwards (see `get_by_id_in_company`). Callers exposing a
-        user by id to an admin/manager over the API must use
-        `get_by_id_in_company` instead.
+        Kasıtlı olarak şirket kapsamlı değildir: JWT'nin `sub`'ı zaten
+        belirli bir satırı tanımlar, bu yüzden bu, `get_current_user`
+        tarafından (herhangi bir şirket bağlamı çözülmeden önce) ve
+        sonradan kendi şirket kontrolünü uygulayan servis metotları
+        tarafından dahili olarak kullanılan düşük seviye arama işlemidir
+        (bkz. `get_by_id_in_company`). Bir kullanıcıyı API üzerinden
+        admin/yöneticiye id ile açığa çıkaran çağıranlar bunun yerine
+        `get_by_id_in_company` kullanmalıdır.
         """
         result = await self.db.execute(
             select(UserModel).where(UserModel.id == user_id, UserModel.is_deleted == False)
@@ -32,11 +33,12 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get_by_id_in_company(self, user_id: str, company_id: str) -> Optional[UserModel]:
-        """Fetch active user by ID, scoped to `company_id`.
+        """`company_id` kapsamında, ID'ye göre aktif kullanıcı getirir.
 
-        The tenant-safe variant of `get_by_id` -- an ADMIN/MANAGER managing
-        users through the API must never be able to read or modify another
-        company's user by simply guessing/enumerating an id.
+        `get_by_id`'nin kiracı-güvenli varyantı -- API üzerinden kullanıcı
+        yöneten bir ADMIN/MANAGER, sadece bir id tahmin ederek/numaralandırarak
+        başka bir şirketin kullanıcısını asla okuyabilmemeli veya
+        değiştirebilmemelidir.
         """
         result = await self.db.execute(
             select(UserModel).where(
@@ -48,14 +50,14 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def get_by_email(self, email: str) -> Optional[UserModel]:
-        """Fetch active user by unique email."""
+        """Benzersiz e-postaya göre aktif kullanıcı getirir."""
         result = await self.db.execute(
             select(UserModel).where(UserModel.email == email, UserModel.is_deleted == False)
         )
         return result.scalar_one_or_none()
 
     async def get_by_username(self, username: str) -> Optional[UserModel]:
-        """Fetch active user by unique username."""
+        """Benzersiz kullanıcı adına göre aktif kullanıcı getirir."""
         result = await self.db.execute(
             select(UserModel).where(UserModel.username == username, UserModel.is_deleted == False)
         )
@@ -68,7 +70,7 @@ class UserRepository:
         limit: int = 100,
         role: Optional[str] = None,
     ) -> List[UserModel]:
-        """Fetch multiple users of `company_id` with pagination, filtering out soft-deleted ones."""
+        """`company_id`'nin birden fazla kullanıcısını sayfalama ile getirir, soft-delete olanları filtreler."""
         query = select(UserModel).where(
             UserModel.company_id == company_id, UserModel.is_deleted == False
         )
@@ -97,13 +99,13 @@ class UserRepository:
         return dict(result.all())
 
     async def create(self, user: UserModel) -> UserModel:
-        """Persist a new user record in the database."""
+        """Yeni bir kullanıcı kaydını veritabanına kalıcı olarak yazar."""
         self.db.add(user)
         await self.db.flush()
         return user
 
     async def update(self, user: UserModel, update_data: dict) -> UserModel:
-        """Update attributes of a user model and commit/flush."""
+        """Bir kullanıcı modelinin özniteliklerini günceller ve commit/flush eder."""
         for field, value in update_data.items():
             if hasattr(user, field) and value is not None:
                 setattr(user, field, value)
@@ -111,7 +113,7 @@ class UserRepository:
         return user
 
     async def soft_delete(self, user_id: str, company_id: str) -> Optional[UserModel]:
-        """Mark a user as deleted and deactivate their account, scoped to `company_id`."""
+        """`company_id` kapsamında bir kullanıcıyı silinmiş olarak işaretler ve hesabını pasifleştirir."""
         user = await self.get_by_id_in_company(user_id, company_id)
         if user:
             user.is_deleted = True
@@ -120,16 +122,16 @@ class UserRepository:
         return user
 
     async def hard_delete(self, user_id: str, company_id: str) -> bool:
-        """Permanently purge a user record from the database, scoped to `company_id`."""
+        """`company_id` kapsamında bir kullanıcı kaydını veritabanından kalıcı olarak siler."""
         result = await self.db.execute(
             delete(UserModel).where(UserModel.id == user_id, UserModel.company_id == company_id)
         )
         await self.db.flush()
         return result.rowcount > 0
 
-    # ---------- Invite Methods ----------
+    # ---------- Davet Metotları ----------
     async def get_invite_by_email(self, email: str) -> Optional[InvitedEmailModel]:
-        """Fetch active, unused invite by email."""
+        """E-postaya göre aktif, kullanılmamış daveti getirir."""
         result = await self.db.execute(
             select(InvitedEmailModel).where(
                 InvitedEmailModel.email == email,
@@ -139,13 +141,13 @@ class UserRepository:
         return result.scalar_one_or_none()
 
     async def create_invite(self, invite: InvitedEmailModel) -> InvitedEmailModel:
-        """Persist a new email invitation whitelist record."""
+        """Yeni bir e-posta davet beyaz liste kaydını kalıcı olarak yazar."""
         self.db.add(invite)
         await self.db.flush()
         return invite
 
     async def mark_invite_used(self, email: str) -> bool:
-        """Mark email invitation as used."""
+        """E-posta davetini kullanıldı olarak işaretler."""
         invite = await self.get_invite_by_email(email)
         if invite:
             invite.is_used = True
@@ -153,7 +155,7 @@ class UserRepository:
             return True
         return False
 
-    # ---------- Search ----------
+    # ---------- Arama ----------
 
     def _search_query(
         self,
@@ -162,13 +164,14 @@ class UserRepository:
         unit_id: Optional[str],
         role: Optional[str],
     ):
-        """Shared filtered query for `search`/`count_search`.
+        """`search`/`count_search` için ortak filtrelenmiş sorgu.
 
-        `q` matches `username`/`email` (case-insensitive substring) --
-        `UserModel` has no separate display-name column today, so "isim"
-        search is a username/email match, same as every other user-facing
-        list in this codebase. `unit_id` matches *any* of a user's unit
-        memberships (not only the primary one `search` also returns).
+        `q`, `username`/`email` ile eşleşir (büyük/küçük harf duyarsız alt
+        dize) -- `UserModel`'in bugün ayrı bir görünen-ad kolonu yok, bu
+        yüzden "isim" araması, bu kod tabanındaki diğer her kullanıcıya
+        dönük liste gibi bir username/email eşleşmesidir. `unit_id`,
+        bir kullanıcının birim üyeliklerinden *herhangi biriyle* eşleşir
+        (sadece `search`'ün de döndürdüğü birincil olanla değil).
         """
         query = select(UserModel).where(
             UserModel.company_id == company_id, UserModel.is_deleted.is_(False)
@@ -197,9 +200,9 @@ class UserRepository:
         skip: int = 0,
         limit: int = 50,
     ) -> List[Tuple[UserModel, Optional[str]]]:
-        """Search company users, each paired with its primary unit's name
-        (`None` if the user has no primary unit membership) -- see
-        `_search_query` for the filter semantics.
+        """Şirket kullanıcılarını arar, her birini birincil biriminin adıyla
+        eşleştirir (kullanıcının birincil birim üyeliği yoksa `None`) --
+        filtre semantiği için `_search_query`'ye bakınız.
         """
         primary_unit_name = (
             select(UnitModel.name)
@@ -237,10 +240,11 @@ class UserRepository:
 
 
 class UserFavoriteRepository:
-    """Repository for `user_favorites` (see `UserFavoriteModel`).
+    """`user_favorites` için repository (bkz. `UserFavoriteModel`).
 
-    Every method is scoped to `owner_user_id` -- a favorite is a one-
-    directional, per-user list, never a company-wide or shared resource.
+    Her metot `owner_user_id` kapsamındadır -- bir favori, tek yönlü,
+    kullanıcı başına bir listedir, asla şirket genelinde veya paylaşılan
+    bir kaynak değildir.
     """
 
     def __init__(self, db: AsyncSession):
@@ -277,8 +281,8 @@ class UserFavoriteRepository:
     async def list_for_owner(
         self, owner_user_id: str, company_id: str
     ) -> List[Tuple[UserFavoriteModel, UserModel]]:
-        """`owner_user_id`'s favorites, joined with the favorited user's
-        identity, newest-favorited first."""
+        """`owner_user_id`'nin, favorilenen kullanıcının kimliğiyle
+        birleştirilmiş favorileri, en yeni favorilenen önce."""
         result = await self.db.execute(
             select(UserFavoriteModel, UserModel)
             .join(UserModel, UserModel.id == UserFavoriteModel.favorite_user_id)

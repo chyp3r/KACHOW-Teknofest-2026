@@ -7,31 +7,33 @@ from app.domains.transfers.service import MAX_GROUP_TRANSFER_RECIPIENTS
 
 
 class TransferSendRequest(BaseModel):
-    """`POST /transfers/send` body -- the manual chat-initiated send.
+    """`POST /transfers/send` gövdesi -- manuel, sohbetten başlatılan gönderim.
 
-    Recipient is always an explicit id here: this channel is fed by
-    `UserSearchDrawer`/`PersonPickerBody` (Faz 2), which already resolves a
-    name to a user before the request is ever made. Name-based resolution
-    (`RecipientResolutionService`) exists for the Faz 4 AI channel, not
-    this one.
+    Alıcı burada her zaman açık bir id'dir: bu kanal, istek yapılmadan
+    önce zaten bir ismi bir kullanıcıya çözümleyen
+    `UserSearchDrawer`/`PersonPickerBody` (Faz 2) tarafından beslenir.
+    İsim tabanlı çözümleme (`RecipientResolutionService`) bu kanal için
+    değil, Faz 4 AI kanalı için mevcuttur.
     """
 
     recipient_id: str = Field(description="Alıcı kullanıcı ID'si")
     artifact_kind: Literal["draft", "document"]
     source_artifact_id: str = Field(description="drafts.id veya evrak storage_path'i")
-    #: Pinned at send time for a draft (see `ArtifactTransferModel.
-    #: source_version`'s own docstring); ignored for a document.
+    #: Bir taslak için gönderim anında sabitlenir (bkz.
+    #: `ArtifactTransferModel.source_version`'un kendi docstring'i); bir
+    #: evrak için yok sayılır.
     source_version: Optional[int] = None
-    #: Optional caller-supplied idempotency token -- a retried request with
-    #: the same key returns the original transfer instead of re-executing.
+    #: İsteğe bağlı, çağıranın sağladığı idempotency belirteci -- aynı
+    #: anahtarla tekrarlanan bir istek, yeniden çalıştırmak yerine
+    #: özgün transferi döndürür.
     idempotency_key: Optional[str] = Field(default=None, max_length=200)
 
 
 class GroupTransferSendRequest(BaseModel):
-    """`POST /transfers/send-group` body -- chat/REST-only fan-out to
-    several recipients at once (Faz 5, #205). There is no AI-channel
-    equivalent of this request; see `ArtifactTransferService.execute_group`'s
-    own docstring.
+    """`POST /transfers/send-group` gövdesi -- yalnızca sohbet/REST üzerinden
+    birden fazla alıcıya aynı anda dağıtım (Faz 5, #205). Bu isteğin
+    AI kanalı karşılığı yoktur; bkz.
+    `ArtifactTransferService.execute_group`'un kendi docstring'i.
     """
 
     recipient_ids: List[str] = Field(
@@ -42,8 +44,9 @@ class GroupTransferSendRequest(BaseModel):
     artifact_kind: Literal["draft", "document"]
     source_artifact_id: str = Field(description="drafts.id veya evrak storage_path'i")
     source_version: Optional[int] = None
-    #: Combined with each recipient id to derive that recipient's own
-    #: idempotency key -- see `GroupTransferCommand.idempotency_key_prefix`.
+    #: O alıcının kendi idempotency anahtarını türetmek için her alıcı
+    #: id'siyle birleştirilir -- bkz.
+    #: `GroupTransferCommand.idempotency_key_prefix`.
     idempotency_key_prefix: Optional[str] = Field(default=None, max_length=200)
 
 

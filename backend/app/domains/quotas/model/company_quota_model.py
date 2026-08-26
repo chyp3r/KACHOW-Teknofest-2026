@@ -8,14 +8,14 @@ from app.infrastructure.database.models import TimestampMixin
 
 
 class CompanyQuotaModel(Base, TimestampMixin):
-    """A company's monthly resource ceilings. One row per company, created
-    lazily on first quota check (see `QuotaService.get_or_default`) rather
-    than seeded for every company up front -- absence means "unlimited," the
-    same convention `NULL` limits below carry.
+    """Bir şirketin aylık kaynak tavanları. Şirket başına bir satır; her
+    şirket için önceden tohumlanmak yerine ilk kota kontrolünde tembelce
+    oluşturulur (bkz. `QuotaService.get_or_default`) -- yokluk "sınırsız"
+    anlamına gelir, aşağıdaki `NULL` limitlerin taşıdığı aynı kural.
 
-    `NULL` on either limit means unlimited for that resource -- a company
-    with no row at all (the common case, since this is opt-in) is simply
-    unlimited on both.
+    Herhangi bir limitte `NULL`, o kaynak için sınırsız anlamına gelir --
+    hiç satırı olmayan bir şirket (bu opt-in olduğundan yaygın durum) her
+    ikisinde de basitçe sınırsızdır.
     """
 
     __tablename__ = "company_quotas"
@@ -26,6 +26,6 @@ class CompanyQuotaModel(Base, TimestampMixin):
     )
     max_documents_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     max_drafts_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    #: Faz C3 (#187) -- caps `POST /companies/{id}/training-runs`, counted
-    #: via the same `usage_counters` mechanism as the other two limits.
+    #: Faz C3 (#187) -- `POST /companies/{id}/training-runs`'ı sınırlar,
+    #: diğer iki limitle aynı `usage_counters` mekanizması üzerinden sayılır.
     max_training_runs_per_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)

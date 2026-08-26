@@ -3,10 +3,11 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-#: Mirrors the frontend `ChatComposer`'s own cap on a single AI message
-#: (8000 chars) loosely, but a human-to-human message is expected to be
-#: shorter in practice -- 4000 leaves ample room without inviting a
-#: conversation thread to be used as a document-paste target.
+#: Frontend `ChatComposer`'ın tek bir AI mesajı üzerindeki kendi sınırını
+#: (8000 karakter) gevşek biçimde yansıtır, ama insan-insana bir mesajın
+#: pratikte daha kısa olması beklenir -- 4000, bir konuşma thread'inin
+#: bir belge-yapıştırma hedefi olarak kullanılmasına davetiye çıkarmadan
+#: bol yer bırakır.
 MESSAGE_BODY_MAX_LENGTH = 4000
 
 
@@ -28,6 +29,7 @@ class MessageResponse(BaseModel):
 
 
 class MarkReadRequest(BaseModel):
-    #: The message to advance the read pointer to. Omit to mark the whole
-    #: conversation read (advances to the newest message at call time).
+    #: Okuma işaretçisinin ilerletileceği mesaj. Tüm konuşmayı okundu
+    #: olarak işaretlemek için boş bırakın (çağrı anındaki en yeni
+    #: mesaja ilerler).
     message_id: Optional[str] = None

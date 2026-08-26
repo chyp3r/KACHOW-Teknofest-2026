@@ -2,9 +2,9 @@ from app.api.exceptions.base import BaseAppException
 
 
 class RateLimitException(BaseAppException):
-    """Exception raised when a client exceeds the allowed rate limit."""
+    """Bir istemci izin verilen istek sınırını aştığında fırlatılan istisna."""
 
-    def __init__(self, message: str = "Too many requests. Please wait a moment and try again."):
+    def __init__(self, message: str = "Çok fazla istek gönderildi. Lütfen bir süre bekleyip tekrar deneyin."):
         super().__init__(
             message=message,
             error_code="RATE_LIMIT_EXCEEDED",

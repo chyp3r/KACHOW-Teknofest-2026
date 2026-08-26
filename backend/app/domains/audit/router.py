@@ -21,17 +21,18 @@ def _audit_service(db: AsyncSession) -> AuditService:
 
 
 def _scoped_company_id(current_user: UserModel, requested_company_id: Optional[str]) -> Optional[str]:
-    """Resolve the `company_id` a listing/verify call actually runs against.
+    """Bir listeleme/doğrulama çağrısının fiilen hangi `company_id` üzerinde çalışacağını belirler.
 
-    ROOT may pass any `company_id`, or omit it to mean "no company filter" --
-    what that omission actually does differs by caller, since
-    `AuditLogRepository.list_filtered` (a read-side listing filter) and
-    `list_chain`/`verify_chain` (chain-membership, used for hash-chain
-    verification) treat a `None` `company_id` differently on purpose; each
-    router function below documents its own meaning. ADMIN is always forced
-    to its own company here regardless of what it asks for -- this is the
-    one place a query parameter could otherwise be used to read another
-    company's audit trail, so it is never trusted from ADMIN.
+    ROOT herhangi bir `company_id` gönderebilir veya "şirket filtresi yok"
+    anlamına gelecek şekilde boş bırakabilir -- bu boş bırakmanın ne yaptığı
+    çağırana göre değişir, çünkü `AuditLogRepository.list_filtered` (okuma
+    tarafı listeleme filtresi) ile `list_chain`/`verify_chain` (hash-zinciri
+    doğrulamasında kullanılan zincir üyeliği) `None` bir `company_id`'yi
+    kasıtlı olarak farklı yorumlar; aşağıdaki her router fonksiyonu kendi
+    anlamını belgeler. ADMIN burada ne isterse istesin her zaman kendi
+    şirketine zorlanır -- bu, bir sorgu parametresinin aksi halde başka bir
+    şirketin denetim kaydını okumak için kullanılabileceği tek yerdir, bu
+    yüzden ADMIN'den asla güvenilmez.
     """
     if current_user.role == UserRole.ROOT.value:
         return requested_company_id
@@ -48,11 +49,12 @@ async def list_audit_log(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """List audit trail entries, newest first.
+    """Denetim izi kayıtlarını en yeniden en eskiye listeler.
 
-    Root: pass `company_id` for one company, or omit it to list every row
-    system-wide (every company's rows plus root's own system-wide actions).
-    Admin: always its own company, regardless of `company_id`.
+    Root: tek bir şirket için `company_id` gönderin, ya da sistem genelinde
+    tüm satırları listelemek için boş bırakın (tüm şirketlerin satırları
+    artı root'un kendi sistem geneli işlemleri). Admin: `company_id`'den
+    bağımsız olarak her zaman kendi şirketi.
     """
     scoped = _scoped_company_id(current_user, company_id)
     service = _audit_service(db)
@@ -75,15 +77,15 @@ async def verify_audit_chain(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Walk one hash chain and report the first tampered/missing link, or
-    confirm it's intact.
+    """Tek bir hash zincirini dolaşır ve ilk bozulmuş/eksik halkayı bildirir
+    ya da zincirin sağlam olduğunu doğrular.
 
-    Root: pass `company_id` for that company's own chain, or omit it to
-    verify root's own system-wide (`company_id IS NULL`) chain specifically
-    -- unlike `GET /audit`'s omitted-`company_id` meaning "every row," a
-    chain to verify has to be one specific chain, since `seq`/`prev_hash`
-    continuity is only ever defined within a single chain. Admin: always
-    its own company's chain.
+    Root: o şirketin kendi zinciri için `company_id` gönderin, ya da özellikle
+    root'un kendi sistem geneli (`company_id IS NULL`) zincirini doğrulamak
+    için boş bırakın -- `GET /audit`'te boş `company_id`'nin "tüm satırlar"
+    anlamına gelmesinin aksine, doğrulanacak bir zincir tek bir belirli zincir
+    olmak zorundadır, çünkü `seq`/`prev_hash` sürekliliği yalnızca tek bir
+    zincir içinde tanımlıdır. Admin: her zaman kendi şirketinin zinciri.
     """
     scoped = _scoped_company_id(current_user, company_id)
     service = _audit_service(db)

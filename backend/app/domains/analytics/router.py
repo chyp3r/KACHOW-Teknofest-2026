@@ -24,12 +24,12 @@ router = APIRouter(prefix="/companies", tags=["analytics"])
 
 
 def _require_company_access(current_user: UserModel, company_id: str) -> None:
-    """Root reaches any company; Admin/Manager only their own.
+    """Root herhangi bir şirkete erişebilir; Admin/Manager yalnızca kendi şirketine.
 
-    Same rule `app.domains.companies.router._require_company_access`
-    enforces for company records themselves -- duplicated rather than
-    imported since that helper is private to its own module and this is a
-    one-line check, not worth a shared-utility module for.
+    `app.domains.companies.router._require_company_access`'in şirket
+    kayıtlarının kendisi için uyguladığı kuralla aynıdır -- içe aktarmak
+    yerine tekrarlanmıştır, çünkü o yardımcı fonksiyon kendi modülüne özeldir
+    ve bu tek satırlık bir kontroldür, paylaşılan bir yardımcı modüle değmez.
     """
     if current_user.role == UserRole.ROOT.value:
         return
@@ -52,7 +52,7 @@ async def analytics_summary(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Document/draft/run/guardrail volume + quota usage for one company."""
+    """Bir şirket için evrak/taslak/çalıştırma/güvenlik önlemi hacmi + kota kullanımı."""
     _require_company_access(current_user, company_id)
     service = _analytics_service(db)
     summary = await service.summary(company_id)
@@ -69,7 +69,7 @@ async def analytics_timeseries(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """One metric's volume over time, bucketed by day or week."""
+    """Tek bir metriğin zaman içindeki hacmi, gün veya hafta bazında gruplanmış."""
     _require_company_access(current_user, company_id)
     service = _analytics_service(db)
     try:
@@ -85,7 +85,7 @@ async def analytics_units(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Draft volume per routed unit (`drafts.destination`)."""
+    """Yönlendirilen birim başına taslak hacmi (`drafts.destination`)."""
     _require_company_access(current_user, company_id)
     service = _analytics_service(db)
     return SuccessResponse(data=await service.units(company_id))
@@ -97,7 +97,7 @@ async def analytics_guardrails(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN, UserRole.MANAGER)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Guardrail decision breakdown by stage/kind/decision."""
+    """Aşama/tür/karar bazında güvenlik önlemi kararı dağılımı."""
     _require_company_access(current_user, company_id)
     service = _analytics_service(db)
     return SuccessResponse(data=await service.guardrails(company_id))
@@ -109,10 +109,11 @@ async def analytics_links(
     current_user: UserModel = Depends(require_roles(UserRole.ROOT, UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Grafana/Langfuse deep links, pre-filtered to this company where the
-    target tool supports it (Grafana's `company` template variable --
-    Langfuse's own tagging is honest-but-unverified, see
-    `app.observability.tracer.build_trace_config`'s docstring)."""
+    """Hedef aracın desteklediği durumlarda bu şirkete önceden filtrelenmiş
+    Grafana/Langfuse derin bağlantıları (Grafana'nın `company` şablon
+    değişkeni -- Langfuse'un kendi etiketlemesi doğru kabul edilir ancak
+    doğrulanmamıştır, bkz. `app.observability.tracer.build_trace_config`'in
+    docstring'i)."""
     _require_company_access(current_user, company_id)
     company = await CompanyRepository(db).get_by_id(company_id)
     if company is None:

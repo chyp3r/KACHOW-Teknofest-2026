@@ -1,12 +1,13 @@
-"""Declarative step dependencies and readiness computation for the executor.
+"""Executor için deklaratif adım bağımlılıkları ve hazırlık (readiness) hesaplaması.
 
-Generalises the old `_STEP_DEPENDENCIES` (a 2-entry dict covering only
-`draft`/`routing`, consulted only to decide skip-vs-run) into a catalog
-spanning every dispatchable step name, and replaces `current_step_idx`-based
-array indexing with a readiness computation over `state`. This is the
-foundation a dynamic executor needs -- even though every plan
-`PLAN_BY_INTENT` produces today is a strict linear chain and never actually
-exercises the difference between "next by position" and "next by readiness".
+Eski `_STEP_DEPENDENCIES`'i (yalnızca `draft`/`routing`'i kapsayan, sadece
+skip-vs-run kararı için başvurulan 2 girişli bir dict) genelleştirerek,
+gönderilebilir (dispatchable) her adım adını kapsayan bir kataloğa dönüştürür
+ve `current_step_idx` tabanlı dizi indekslemesini `state` üzerinde bir
+hazırlık hesaplamasıyla değiştirir. Bu, dinamik bir executor'ın ihtiyaç
+duyduğu temeldir -- gerçi bugün `PLAN_BY_INTENT`'in ürettiği her plan katı bir
+doğrusal zincirdir ve "konuma göre sıradaki" ile "hazırlığa göre sıradaki"
+arasındaki farkı hiçbir zaman gerçekten devreye sokmaz.
 """
 
 from dataclasses import dataclass
@@ -15,19 +16,21 @@ from typing import Any, Mapping
 
 @dataclass(frozen=True)
 class StepSpec:
-    """One dispatchable step's scheduling metadata.
+    """Gönderilebilir tek bir adımın zamanlama (scheduling) meta verisi.
 
     Attributes:
-        name: The step name, matching a `STEP_RUNNERS` key in
-            `planning_graph.py`.
-        depends_on: Other step names that must have run -- with any outcome,
-            success, failure, or skip -- before this one is eligible. Only
-            dependencies that are *also* part of the current turn's plan
-            apply: `assist`'s plan never includes `classification`, so
-            `rag`'s declared dependency on it is a no-op there.
-        parallel_safe: Whether this step may run concurrently with another
-            `parallel_safe` step that is also ready in the same turn. No
-            step is `True` today -- see `ready_steps`'s docstring for why.
+        name: Adım adı; `planning_graph.py` içindeki bir `STEP_RUNNERS`
+            anahtarıyla eşleşir.
+        depends_on: Bu adımın uygun sayılabilmesi için -- sonucu ne olursa
+            olsun: başarı, hata veya atlama -- önce çalışmış olması gereken
+            diğer adım adları. Yalnızca mevcut turun planının da *parçası*
+            olan bağımlılıklar geçerlidir: `assist`'in planı asla
+            `classification` içermez, dolayısıyla `rag`'in ona bildirilen
+            bağımlılığı orada bir hiçtir (no-op).
+        parallel_safe: Bu adımın, aynı turda hazır olan başka bir
+            `parallel_safe` adımla eşzamanlı çalışabilip çalışamayacağı.
+            Bugün hiçbir adım `True` değil -- neden olduğu için
+            `ready_steps`'in docstring'ine bakın.
     """
 
     name: str
@@ -35,54 +38,58 @@ class StepSpec:
     parallel_safe: bool = False
 
 
-#: One entry per name `STEP_RUNNERS` can dispatch, and per name any
-#: `PLAN_BY_INTENT` combination can actually produce. A standalone `rag` step
-#: used to be declared here too, but no plan ever included it -- the
-#: classification sub-graph already retrieves legislation for the document,
-#: and the `assist` step's `search_legislation` tool covers the rest -- so it
-#: was dead weight kept "for consistency" that never dispatched. Removed
-#: rather than left in: an unreachable `STEP_SPECS` entry is exactly the kind
-#: of state that silently drifts from what `PLAN_BY_INTENT` can produce.
+#: `STEP_RUNNERS`'ın gönderebileceği her ad için bir giriş, ve `PLAN_BY_INTENT`
+#: kombinasyonlarının gerçekten üretebileceği her ad için bir giriş. Burada
+#: eskiden bağımsız bir `rag` adımı da tanımlıydı, ama hiçbir plan onu
+#: içermedi -- classification alt-grafiği doküman için mevzuatı zaten
+#: getiriyor ve `assist` adımının `search_legislation` aracı gerisini
+#: karşılıyor -- yani hiç gönderilmeyen, "tutarlılık için" tutulan ölü
+#: ağırlıktı. Bırakılmak yerine kaldırıldı: erişilemez bir `STEP_SPECS`
+#: girişi, tam olarak `PLAN_BY_INTENT`'in üretebileceklerinden sessizce
+#: sapan türden bir durumdur.
 STEP_SPECS: dict[str, StepSpec] = {
     "classification": StepSpec(name="classification"),
-    #: Deterministic, LLM-free -- see app.ai.workflows.writing_brief. Runs
-    #: after classification so a document-reply turn's role-inversion rule
-    #: has fields.gonderen_kurum/muhatap to resolve against.
+    #: Deterministik, LLM kullanmıyor -- bkz. app.ai.workflows.writing_brief.
+    #: Classification'dan sonra çalışır, böylece bir doküman-yanıt turunun
+    #: rol-tersine çevirme (role-inversion) kuralı, karşılaştıracağı
+    #: fields.gonderen_kurum/muhatap değerlerine sahip olur.
     "brief": StepSpec(name="brief", depends_on=("classification",)),
     "draft": StepSpec(name="draft", depends_on=("classification", "brief")),
     "routing": StepSpec(name="routing", depends_on=("draft",)),
     "assist": StepSpec(name="assist"),
-    #: No dependency on "classification": revise operates on
-    #: SessionFocus.active_draft, never re-classifies. See app.ai.workflows.revise.
+    #: "classification"'a bağımlılık yok: revise, SessionFocus.active_draft
+    #: üzerinde çalışır, asla yeniden sınıflandırma yapmaz. Bkz.
+    #: app.ai.workflows.revise.
     "revise": StepSpec(name="revise"),
-    #: Deterministic, LLM-free -- see planner._build_clarify_decision.
+    #: Deterministik, LLM kullanmıyor -- bkz. planner._build_clarify_decision.
     "clarify": StepSpec(name="clarify"),
-    #: Also deterministic and LLM-free: it renders
-    #: `app.ai.workflows.scope.CAPABILITY_MANIFEST` and ends the turn. It is
-    #: always the only step in its plan, so it has nothing to depend on.
+    #: Bu da deterministik ve LLM kullanmıyor: `app.ai.workflows.scope.
+    #: CAPABILITY_MANIFEST`'i render eder ve turu sonlandırır. Her zaman
+    #: kendi planındaki tek adımdır, dolayısıyla bağımlı olacağı bir şey yok.
     "refuse": StepSpec(name="refuse"),
-    #: Not produced by the planner at all -- appended to `plan_steps`
-    #: dynamically by `planning_graph._step_assist` when the assist step's
-    #: own `propose_transfer` tool call (see `app.ai.tools.transfer_tools`)
-    #: produces a pending proposal, and only once `transfer_gate_node` has
-    #: moved the intent to `CONFIRMED`. No dependency to declare here: by
-    #: construction it is only ever added to `plan_steps` alongside a
-    #: `transfer_resolve_result` that already resolved a recipient/artifact
-    #: (deterministically, inside the tool -- never via `interrupt()`, see
-    #: `planning_graph.transfer_gate_node`'s docstring for why that pause
-    #: lives in its own graph node instead).
+    #: Planner tarafından hiç üretilmiyor -- assist adımının kendi
+    #: `propose_transfer` araç çağrısı (bkz. `app.ai.tools.transfer_tools`)
+    #: bekleyen bir teklif ürettiğinde ve yalnızca `transfer_gate_node`
+    #: intent'i `CONFIRMED`'e taşıdıktan sonra, `planning_graph._step_assist`
+    #: tarafından `plan_steps`'e dinamik olarak eklenir. Burada tanımlanacak
+    #: bir bağımlılık yok: yapısı gereği yalnızca (araç içinde deterministik
+    #: olarak, asla `interrupt()` yoluyla değil -- bu duraklamanın neden
+    #: kendi grafik node'unda yaşadığı için bkz.
+    #: `planning_graph.transfer_gate_node`'ın docstring'i) zaten bir
+    #: alıcı/artifact çözümlemiş bir `transfer_resolve_result` ile birlikte
+    #: `plan_steps`'e eklenir.
     "transfer_execute": StepSpec(name="transfer_execute"),
 }
 
 
 def _has_run(state: Mapping[str, Any], name: str) -> bool:
-    """Whether `name`'s result is non-empty in `state`.
+    """`state` içinde `name`'in sonucunun boş olmayıp olmadığı.
 
-    `planning_node` resets every `<step>_result` field to `{}` at the start
-    of a turn rather than deleting the key, so key presence alone can't tell
-    a step that hasn't run yet from one that has this turn -- truthiness
-    can, and is the same check `_dependency_failed`'s callers already rely
-    on for the same reason.
+    `planning_node`, bir turun başında her `<step>_result` alanını anahtarı
+    silmek yerine `{}`'e sıfırlar; bu yüzden sadece anahtarın varlığı, henüz
+    çalışmamış bir adımı bu tur çalışmış olandan ayırt edemez -- truthiness
+    (doğruluk değeri) edebilir, ve `_dependency_failed`'in çağıranlarının da
+    aynı nedenle zaten dayandığı kontrol budur.
     """
     return bool(state.get(f"{name}_result"))
 
@@ -92,36 +99,38 @@ def ready_steps(
     state: Mapping[str, Any],
     specs: Mapping[str, StepSpec] = STEP_SPECS,
 ) -> list[str]:
-    """Steps in `plan_steps` that have not run yet and are eligible to.
+    """`plan_steps` içinde henüz çalışmamış ve çalışmaya uygun olan adımlar.
 
-    Eligibility only means "this step's in-plan dependencies have run, with
-    *any* outcome" -- it deliberately does not check whether a dependency
-    *succeeded*. Whether a dependency's failure should skip its dependent is
-    `_dependency_failed`'s job in `planning_graph.py`, evaluated separately
-    once a step is chosen from this list. Splitting the two concerns keeps
-    this function a pure scheduling question.
+    Uygunluk yalnızca "bu adımın plandaki bağımlılıkları, *herhangi bir*
+    sonuçla çalışmış" anlamına gelir -- kasıtlı olarak bir bağımlılığın
+    *başarılı olup olmadığını* kontrol etmez. Bir bağımlılığın hatasının,
+    ona bağımlı adımı atlaması gerekip gerekmediği, `planning_graph.py`
+    içindeki `_dependency_failed`'in işidir; bu liste üzerinden bir adım
+    seçildikten sonra ayrıca değerlendirilir. İki kaygıyı ayırmak, bu
+    fonksiyonu saf bir zamanlama sorusu olarak tutar.
 
-    No `StepSpec` is `parallel_safe=True` today, because every dispatchable
-    step touches an LLM call at some point (even `classification` runs a
-    tiered model call) -- running two of them concurrently on a single local
-    Ollama instance does not shorten wall-clock time, it splits the same
-    GPU/CPU between them. The flag and the multi-ready path built on top of
-    it exist for a future step that is genuinely I/O-only (a cache read, a
-    deterministic check), not for anything in `PLAN_BY_INTENT` as it stands.
+    Bugün hiçbir `StepSpec` `parallel_safe=True` değil, çünkü gönderilebilir
+    her adım bir noktada bir LLM çağrısına dokunuyor (hatta `classification`
+    bile katmanlı bir model çağrısı yapıyor) -- bunlardan ikisini tek bir
+    yerel Ollama örneğinde eşzamanlı çalıştırmak duvar-saati süresini
+    kısaltmaz, aynı GPU/CPU'yu ikisi arasında böler. Bu bayrak ve üzerine
+    kurulan çoklu-hazır yol, gelecekte gerçekten sadece I/O olan bir adım
+    (bir önbellek okuması, deterministik bir kontrol) için var, şu haliyle
+    `PLAN_BY_INTENT`'teki herhangi bir şey için değil.
 
     Args:
-        plan_steps: The turn's resolved plan, in the order `planner.py`
-            produced it.
-        state: The graph state as of the start of this superstep.
-        specs: The catalog to schedule against. Defaults to the real
-            `STEP_SPECS`; overridable so a test can exercise the
-            multi-`parallel_safe` branch without a real step type for it.
+        plan_steps: Turun çözümlenmiş planı, `planner.py`'ın ürettiği sırada.
+        state: Bu superstep'in başındaki haliyle grafik state'i.
+        specs: Zamanlamanın yapılacağı katalog. Varsayılan olarak gerçek
+            `STEP_SPECS`; bir testin, gerçek bir adım türü olmadan
+            çoklu-`parallel_safe` dalını çalıştırabilmesi için
+            değiştirilebilir.
 
     Returns:
-        Ready step names, in `plan_steps` order (stable). With no
-        `parallel_safe` step ready alongside another today, the executor
-        always takes just the first one, reproducing the old strictly
-        positional order exactly.
+        Hazır adım adları, `plan_steps` sırasında (stabil). Bugün başka bir
+        adımla birlikte hazır olan hiçbir `parallel_safe` adım olmadığından,
+        executor her zaman yalnızca ilkini alır ve eski katı konumsal sırayı
+        birebir yeniden üretir.
     """
     ready = []
     for name in plan_steps:
@@ -136,9 +145,9 @@ def ready_steps(
 
 
 def all_steps_settled(plan_steps: list[str], state: Mapping[str, Any]) -> bool:
-    """Whether every step in `plan_steps` has produced a result this turn.
+    """`plan_steps` içindeki her adımın bu turda bir sonuç üretip üretmediği.
 
-    Replaces the old `current_step_idx >= len(plan_steps)` termination check
-    now that stepping is readiness-driven rather than positional.
+    Artık adımlama konumsal değil hazırlık-güdümlü olduğundan, eski
+    `current_step_idx >= len(plan_steps)` sonlandırma kontrolünün yerini alır.
     """
     return all(_has_run(state, name) for name in plan_steps)

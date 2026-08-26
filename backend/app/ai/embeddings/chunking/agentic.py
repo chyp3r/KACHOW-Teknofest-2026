@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class SemanticSection(BaseModel):
-    """Pydantic model representing a single semantically coherent section."""
+    """Anlamsal olarak tutarlı tek bir bölümü temsil eden Pydantic modeli."""
 
     title: str = Field(
         description="A descriptive title highlighting the core topic of this section."
@@ -25,7 +25,7 @@ class SemanticSection(BaseModel):
 
 
 class AgenticChunksResponse(BaseModel):
-    """Pydantic model for structured agent response containing sections."""
+    """Bölümleri içeren yapılandırılmış agent yanıtı için Pydantic modeli."""
 
     sections: List[SemanticSection] = Field(
         description="List of semantically separated sections from the text."
@@ -33,21 +33,22 @@ class AgenticChunksResponse(BaseModel):
 
 
 class AgenticChunker(BaseChunker):
-    """SOTA Agentic Chunker that leverages an LLM/Agent to dynamically segment
+    """Metni bağlamsal olarak dinamik biçimde bölümlere ayırmak için bir
 
-    text contextually, creating rich metadata (title, summary) for each chunk.
+    LLM/Agent kullanan ve her parça için zengin metadata (başlık, özet)
+    üreten SOTA Agentic Chunker.
     """
 
     def __init__(self, agent: BaseAgent):
-        """Initialize Agentic Chunker.
+        """Agentic Chunker'ı başlatır.
 
         Args:
-            agent: An instance of BaseAgent to perform the semantic analysis and structuring.
+            agent: Anlamsal analiz ve yapılandırmayı gerçekleştirecek BaseAgent örneği.
         """
         self.agent = agent
 
     async def split_text(self, text: str, **kwargs) -> List[Document]:
-        """Split text using Agentic reasoning and structured extraction."""
+        """Metni Agentic akıl yürütme ve yapılandırılmış çıkarım kullanarak böler."""
         if not text.strip():
             return []
 
@@ -61,7 +62,7 @@ class AgenticChunker(BaseChunker):
         )
 
         try:
-            # Generate structured response using the agent's Pydantic verification loop
+            # Agent'ın Pydantic doğrulama döngüsünü kullanarak yapılandırılmış yanıt üret
             response: AgenticChunksResponse = await self.agent.run_structured(
                 messages=prompt, response_model=AgenticChunksResponse, **kwargs
             )
@@ -86,7 +87,7 @@ class AgenticChunker(BaseChunker):
                 f"AgenticChunker failed: {e}. Falling back to paragraph split.",
                 exc_info=True,
             )
-            # Safe Fallback: Split by double newlines (paragraphs)
+            # Güvenli Yedek Plan: Çift yeni satırlara göre böl (paragraflar)
             paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
             return [
                 Document(

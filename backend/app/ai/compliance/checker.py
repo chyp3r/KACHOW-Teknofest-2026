@@ -36,17 +36,18 @@ _TURKISH_FOLD = str.maketrans(
 
 
 def normalize_value(value: Any) -> str:
-    """Fold a value to lower-case ASCII for deterministic marker comparison.
+    """Belirteç karşılaştırmasını deterministik yapmak için değeri küçük harf ASCII'ye indirger.
 
-    Turkish characters are translated explicitly before Unicode normalisation
-    because `str.lower()` maps "I" to "i" but leaves "İ" as a two-codepoint
-    sequence, which would otherwise miss markers written with Turkish letters.
+    Türkçe karakterler, Unicode normalizasyonundan önce açıkça çevrilir çünkü
+    `str.lower()` "I" harfini "i"ye eşler ama "İ" harfini iki kod noktalı bir
+    dizi olarak bırakır; bu da Türkçe harflerle yazılmış belirteçlerin
+    kaçırılmasına yol açar.
 
     Args:
-        value: Any value; non-strings are stringified.
+        value: Herhangi bir değer; string olmayanlar stringe çevrilir.
 
     Returns:
-        The folded, whitespace-collapsed representation.
+        İndirgenmiş, boşlukları sadeleştirilmiş gösterim.
     """
     text = str(value).translate(_TURKISH_FOLD)
     decomposed = unicodedata.normalize("NFKD", text)
@@ -55,18 +56,19 @@ def normalize_value(value: Any) -> str:
 
 
 def is_blank(value: Any) -> bool:
-    """Report whether a extracted field value counts as absent.
+    """Çıkarılan bir alan değerinin boş sayılıp sayılmadığını bildirir.
 
-    Treats None, empty or whitespace-only strings, empty lists and the
-    placeholder phrases in `BLANK_VALUE_MARKER` as absent. A language model asked
-    for a missing field routinely answers "Belirtilmemiş" or "-" rather than null,
-    and taking those at face value would report every document as complete.
+    None, boş veya sadece boşluktan oluşan string'leri, boş listeleri ve
+    `BLANK_VALUE_MARKER` içindeki yer tutucu ifadeleri boş kabul eder. Eksik
+    bir alan sorulduğunda bir dil modeli genellikle null yerine "Belirtilmemiş"
+    veya "-" yanıtı verir; bunları olduğu gibi kabul etmek her belgeyi eksiksiz
+    olarak raporlamaya yol açar.
 
     Args:
-        value: The extracted field value.
+        value: Çıkarılan alan değeri.
 
     Returns:
-        True when the value carries no information.
+        Değer hiçbir bilgi taşımıyorsa True.
     """
     if value is None:
         return True
@@ -76,13 +78,13 @@ def is_blank(value: Any) -> bool:
 
 
 def _rules_for(document_type: DocumentType | str) -> tuple[FieldRule, ...]:
-    """Resolve the rule set for a document type, falling back to OTHER.
+    """Bir belge türü için kural setini çözer, bulunamazsa OTHER'a döner.
 
     Args:
-        document_type: The classified document type or its raw value.
+        document_type: Sınıflandırılmış belge türü veya ham değeri.
 
     Returns:
-        The applicable rules.
+        Uygulanacak kurallar.
     """
     try:
         resolved = DocumentType(document_type)
@@ -103,25 +105,27 @@ def check_required_fields(
     fields: EvrakField,
     is_signed: Optional[bool] = None,
 ) -> ComplianceReport:
-    """Determine which required fields are missing from an extracted document.
+    """Çıkarılan bir belgede hangi zorunlu alanların eksik olduğunu belirler.
 
-    Pure set subtraction over a rule table — no language model is involved, so the
-    result is byte-identical across runs and every citation is exact.
+    Bir kural tablosu üzerinde saf küme çıkarma işlemidir — hiçbir dil modeli
+    devreye girmez, bu yüzden sonuç her çalıştırmada bayt bayt aynıdır ve her
+    alıntı tam olarak doğrudur.
 
     Args:
-        document_type: The classified type of the incoming document.
-        fields: The fields extracted from the document.
-        is_signed: Whether a signature-shaped ink mark was detected on the
-            document (`app.infrastructure.extractors.marks.detect_marks`,
-            threaded through `DocumentAnalysisState.detected_marks`). `None`
-            when detection never ran (e.g. a born-digital PDF, which is
-            never rasterised) — treated as unknown, not unsigned, matching
-            this module's existing "never guess" posture (see `is_blank`'s
-            own docstring). See the "İmza görseli" check below for what this
-            actually gates.
+        document_type: Gelen belgenin sınıflandırılmış türü.
+        fields: Belgeden çıkarılan alanlar.
+        is_signed: Belgede imza şeklinde bir mürekkep izinin tespit edilip
+            edilmediği (`app.infrastructure.extractors.marks.detect_marks`,
+            `DocumentAnalysisState.detected_marks` üzerinden aktarılır).
+            Tespit hiç çalışmadıysa (ör. rasterize edilmeyen, doğuştan
+            dijital bir PDF) `None` olur — bu, bu modülün mevcut "asla tahmin
+            etme" duruşuna uygun şekilde imzasız değil, bilinmiyor olarak ele
+            alınır (bkz. `is_blank`'ın kendi docstring'i). Bunun aslında neyi
+            kapı gibi kontrol ettiğini görmek için aşağıdaki "İmza görseli"
+            kontrolüne bakın.
 
     Returns:
-        The missing fields with their legal basis and the overall status.
+        Yasal dayanaklarıyla birlikte eksik alanlar ve genel durum.
     """
     rules = _rules_for(document_type)
     missing: list[MissingField] = []
@@ -139,17 +143,17 @@ def check_required_fields(
                 )
             )
 
-    # Additive, and deliberately narrow: catches the gap the imza_sahibi rule
-    # above cannot see. A *typed* name satisfies that rule (fields.imza_sahibi
-    # non-blank) even when the page itself was never actually signed --
-    # exactly the case a scanned, genuinely unsigned printout produces. Only
-    # fires in that specific gap (name present, no detected mark); when
-    # imza_sahibi is already blank the rule above already reports it, and
-    # duplicating that here would be noise, not signal. Advisory, not
-    # required: a heuristic detector's false negative (see marks.py's own
-    # module docstring on why it is a review hint, not a legal determination)
-    # must not, by itself, be able to mark an otherwise-complete document
-    # "incomplete".
+    # Ek niteliğinde ve kasıtlı olarak dar kapsamlı: yukarıdaki imza_sahibi
+    # kuralının göremediği boşluğu yakalar. Sayfa aslında hiç imzalanmamış
+    # olsa bile *yazılmış* bir isim o kuralı sağlar (fields.imza_sahibi boş
+    # değildir) -- tam olarak taranmış, gerçekten imzasız bir çıktının
+    # ürettiği durum budur. Sadece bu özel boşlukta tetiklenir (isim var,
+    # tespit edilen iz yok); imza_sahibi zaten boşsa yukarıdaki kural bunu
+    # zaten raporlar ve burada tekrar etmek sinyal değil gürültü olurdu.
+    # Zorunlu değil, tavsiye niteliğindedir: sezgisel bir dedektörün yanlış
+    # negatifi (bunun neden yasal bir belirleme değil de bir inceleme ipucu
+    # olduğuna dair marks.py'nin kendi modül docstring'ine bakın) tek
+    # başına, aksi halde eksiksiz bir belgeyi "eksik" olarak işaretleyemez.
     if (
         is_signed is False
         and not is_blank(getattr(fields, "imza_sahibi", None))
