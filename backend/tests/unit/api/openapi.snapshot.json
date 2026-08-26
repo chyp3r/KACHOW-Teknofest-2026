@@ -5362,6 +5362,53 @@
         ]
       }
     },
+    "/api/v1/chat/sessions/{session_id}/cancel": {
+      "post": {
+        "description": "Stop the active turn and settle its persisted workflow checkpoint.",
+        "operationId": "cancel_chat_session_api_v1_chat_sessions__session_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Cancel Chat Session",
+        "tags": [
+          "chat",
+          "chat"
+        ]
+      }
+    },
     "/api/v1/chat/sessions/{session_id}/messages": {
       "get": {
         "description": "Bir oturumun mesajlarını konuşma sırasına göre listeler (en eskiden en yeniye).\n\nSahiplik, ``ChatService._verify_thread_ownership``'i yeniden kullanır --\n``/chat/resume``'un başka bir kullanıcının thread'ine dokunmasını zaten\nengelleyen aynı ``user_id:`` öneki kontrolü.\n\nRaises:\n    AuthorizationException: ``session_id``, ``current_user``'dan\n        farklı bir kullanıcıya aitse.",
@@ -6892,7 +6939,7 @@
     },
     "/api/v1/documents": {
       "get": {
-        "description": "Yüklenen evrakları özet meta verileriyle birlikte en yeniden en eskiye listeler.\n\nArgs:\n    pagination: Sayfa/boyut sorgu parametreleri.\n    document_repository: Sahiplik/listeleme kaydı.\n    current_user: Kimliği doğrulanmış çağıran -- liste, ADMIN/MANAGER/\n        ROOT (bkz. ``bypasses_ownership``) olmadığı sürece sahip olduğu\n        evraklarla sınırlıdır; bunlar şirket genelinde her evrakı görür.\n        Rolden bağımsız olarak asla şirketler arası değildir.\n\nReturns:\n    7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam\n    analiz için bkz. ``GET /documents/{storage_path}``).",
+        "description": "Yüklenen evrakları özet meta verileriyle birlikte en yeniden en eskiye listeler.\n\nArgs:\n    pagination: Sayfa/boyut sorgu parametreleri.\n    document_repository: Sahiplik/listeleme kaydı.\n    current_user: Kimliği doğrulanmış çağıran -- liste, ADMIN/MANAGER/\n        ROOT (bkz. ``bypasses_ownership``) olmadığı sürece sahip olduğu\n        evraklarla sınırlıdır; bunlar şirket genelinde her evrakı görür.\n        Rolden bağımsız olarak asla şirketler arası değildir.\n\nReturns:\n    7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam\n    analiz için bkz. ``GET /documents/{storage_path}``). Şirket geneli\n    görüntüleyiciler ayrıca yükleyenin kullanıcı adını da alır.",
         "operationId": "list_documents_api_v1_documents_get",
         "parameters": [
           {
@@ -8085,6 +8132,53 @@
           }
         ],
         "summary": "Update Draft Destination",
+        "tags": [
+          "drafts",
+          "drafts"
+        ]
+      }
+    },
+    "/api/v1/drafts/{draft_id}/review/approve": {
+      "post": {
+        "description": "Confirm that an authorized human reviewed this draft version.",
+        "operationId": "approve_draft_review_api_v1_drafts__draft_id__review_approve_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Approve Draft Review",
         "tags": [
           "drafts",
           "drafts"

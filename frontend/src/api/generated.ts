@@ -470,6 +470,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/sessions/{session_id}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel Chat Session
+         * @description Stop the active turn and settle its persisted workflow checkpoint.
+         */
+        post: operations["cancel_chat_session_api_v1_chat_sessions__session_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies": {
         parameters: {
             query?: never;
@@ -733,7 +753,8 @@ export interface paths {
          *
          *     Returns:
          *         7 alanlı kütüphane izdüşümü üzerinde sayfalanmış bir zarf (tam
-         *         analiz için bkz. ``GET /documents/{storage_path}``).
+         *         analiz için bkz. ``GET /documents/{storage_path}``). Şirket geneli
+         *         görüntüleyiciler ayrıca yükleyenin kullanıcı adını da alır.
          */
         get: operations["list_documents_api_v1_documents_get"];
         put?: never;
@@ -1266,6 +1287,26 @@ export interface paths {
          *     oluşturmaz.
          */
         patch: operations["update_draft_destination_api_v1_drafts__draft_id__destination_patch"];
+        trace?: never;
+    };
+    "/api/v1/drafts/{draft_id}/review/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Draft Review
+         * @description Confirm that an authorized human reviewed this draft version.
+         */
+        post: operations["approve_draft_review_api_v1_drafts__draft_id__review_approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/drafts/{draft_id}/versions": {
@@ -3755,13 +3796,13 @@ export interface components {
         CorrespondenceType: "cover_letter" | "response_letter" | "information_notice" | "other_official";
         /**
          * DocumentFieldsUpdateSchema
-         * @description Payload for manually correcting a document's extracted fields.
+         * @description Bir evrakın çıkarılan alanlarını elle düzeltmek için gövde.
          *
-         *     The full ``EvrakField`` set is replaced wholesale rather than patched
-         *     key-by-key -- the frontend form always round-trips every field it
-         *     rendered (including ones already correctly detected), so a partial
-         *     payload would have no way to distinguish "leave this alone" from "the
-         *     user cleared it".
+         *     Tam ``EvrakField`` kümesi anahtar anahtar yamalanmak yerine bütünüyle
+         *     değiştirilir -- ön yüz formu render ettiği her alanı (zaten doğru
+         *     tespit edilenler dahil) her zaman geri gönderir, bu yüzden kısmi bir
+         *     gövdenin "buna dokunma" ile "kullanıcı temizledi"yi ayırt etmesinin
+         *     hiçbir yolu olmazdı.
          */
         DocumentFieldsUpdateSchema: {
             /** @description Kullanıcı tarafından düzeltilmiş üstveri alanları. */
@@ -3769,7 +3810,7 @@ export interface components {
         };
         /**
          * DocumentPoolItemResponse
-         * @description Pydantic schema for one pool item, joined with its document's file name.
+         * @description Evrakının dosya adıyla birleştirilmiş bir havuz öğesi için Pydantic şeması.
          */
         DocumentPoolItemResponse: {
             /** Id */
@@ -3799,7 +3840,7 @@ export interface components {
         };
         /**
          * DocumentPoolResponse
-         * @description Pydantic schema for a pool's own metadata.
+         * @description Bir havuzun kendi üstverisi için Pydantic şeması.
          */
         DocumentPoolResponse: {
             /** Id */
@@ -3815,18 +3856,19 @@ export interface components {
         };
         /**
          * DocumentTextUpdateSchema
-         * @description Payload for saving hand-corrected OCR/extracted text.
+         * @description Elle düzeltilmiş OCR/çıkarılan metni kaydetmek için gövde.
          *
-         *     Carries ``pages`` only, never a joined ``extracted_text`` -- the server
-         *     always re-derives the join from the submitted pages (see
-         *     ``DocumentService.update_document_text``). There is no lossless inverse
-         *     of ``"\n\n".join(pages)`` (a double-spaced source page splits back
-         *     into far more fragments than it started with), so accepting a
-         *     client-submitted joined text would risk silently diverging from what
-         *     the pages actually say. The server separately rejects a page count that
-         *     doesn't match the cached document, since ``PageMap``,
-         *     ``get_document_outline``/``get_document_section`` and
-         *     ``signature.marks[].page`` all index by page number.
+         *     Yalnızca ``pages`` taşır, birleştirilmiş bir ``extracted_text`` asla
+         *     taşımaz -- sunucu birleşimi her zaman gönderilen sayfalardan yeniden
+         *     türetir (bkz. ``DocumentService.update_document_text``).
+         *     ``"\n\n".join(pages)``'in kayıpsız bir tersi yoktur (çift boşluklu bir
+         *     kaynak sayfa geri bölündüğünde başladığından çok daha fazla parçaya
+         *     ayrılır), bu yüzden istemcinin gönderdiği birleştirilmiş metni kabul
+         *     etmek, sayfaların fiilen söylediğinden sessizce sapma riski taşırdı.
+         *     Sunucu ayrıca önbellekteki evrakla eşleşmeyen bir sayfa sayısını
+         *     reddeder, çünkü ``PageMap``, ``get_document_outline``/
+         *     ``get_document_section`` ve ``signature.marks[].page`` hepsi sayfa
+         *     numarasına göre indekslenir.
          */
         DocumentTextUpdateSchema: {
             /**
@@ -3849,11 +3891,11 @@ export interface components {
         DocumentType: "official_letter" | "petition" | "information_request" | "complaint" | "circular" | "directive" | "report" | "minutes" | "leave_request" | "other";
         /**
          * DraftClassificationSchema
-         * @description The narrow slice of Görev 1's output the draft flow actually consumes.
+         * @description Görev 1'in çıktısının taslak akışının fiilen tükettiği dar dilimi.
          *
-         *     Replaces ``DraftRequestSchema.classification: dict`` (was a free-form,
-         *     unvalidated dict fed straight into prompts -- a correctness hole and an
-         *     injection surface at once).
+         *     ``DraftRequestSchema.classification: dict``'in yerini alır (doğrudan
+         *     prompt'lara beslenen serbest biçimli, doğrulanmamış bir dict idi --
+         *     aynı anda hem bir doğruluk açığı hem bir enjeksiyon yüzeyi).
          */
         DraftClassificationSchema: {
             /** @description Gelen evrakın türü. */
@@ -3890,7 +3932,7 @@ export interface components {
         };
         /**
          * DraftRequestSchema
-         * @description Payload for initiating a drafting and routing workflow.
+         * @description Taslak oluşturma ve yönlendirme iş akışını başlatmak için gövde.
          */
         DraftRequestSchema: {
             /**
@@ -4146,10 +4188,10 @@ export interface components {
         };
         /**
          * GroupTransferSendRequest
-         * @description `POST /transfers/send-group` body -- chat/REST-only fan-out to
-         *     several recipients at once (Faz 5, #205). There is no AI-channel
-         *     equivalent of this request; see `ArtifactTransferService.execute_group`'s
-         *     own docstring.
+         * @description `POST /transfers/send-group` gövdesi -- yalnızca sohbet/REST üzerinden
+         *     birden fazla alıcıya aynı anda dağıtım (Faz 5, #205). Bu isteğin
+         *     AI kanalı karşılığı yoktur; bkz.
+         *     `ArtifactTransferService.execute_group`'un kendi docstring'i.
          */
         GroupTransferSendRequest: {
             /**
@@ -4179,47 +4221,47 @@ export interface components {
         };
         /**
          * InvitedEmailCreate
-         * @description Pydantic schema to whitelist/invite an email.
+         * @description Bir e-postayı beyaz listeye alma/davet etme için Pydantic şeması.
          */
         InvitedEmailCreate: {
             /**
              * Email
              * Format: email
-             * @description Invited email address
+             * @description Davet edilen e-posta adresi
              */
             email: string;
             /**
-             * @description Pre-assigned role for the invitee
+             * @description Davet edilen kişiye önceden atanmış rol
              * @default employee
              */
             role: components["schemas"]["UserRole"];
         };
         /**
          * InvitedEmailResponse
-         * @description Pydantic schema returning whitelisted/invited email details.
+         * @description Beyaz listeye alınmış/davet edilmiş e-posta detaylarını döndüren Pydantic şeması.
          */
         InvitedEmailResponse: {
             /**
              * Id
-             * @description Unique invitation ID
+             * @description Benzersiz davet ID'si
              */
             id: string;
             /**
              * Email
              * Format: email
-             * @description Invited email address
+             * @description Davet edilen e-posta adresi
              */
             email: string;
-            /** @description Pre-assigned role */
+            /** @description Önceden atanmış rol */
             role: components["schemas"]["UserRole"];
             /**
              * Company Id
-             * @description Company the invitee will join upon registration
+             * @description Davet edilen kişinin kayıt sonrası katılacağı şirket
              */
             company_id: string;
             /**
              * Is Used
-             * @description Invitation utilization status
+             * @description Davetin kullanım durumu
              */
             is_used: boolean;
         };
@@ -4251,7 +4293,7 @@ export interface components {
         };
         /**
          * MevzuatReferenceSchema
-         * @description A legislation reference suggested for the document.
+         * @description Evrak için önerilen bir mevzuat atfı.
          */
         MevzuatReferenceSchema: {
             /**
@@ -4474,17 +4516,17 @@ export interface components {
         };
         /**
          * PasswordChangeRequest
-         * @description Pydantic schema for updating current user's password securely.
+         * @description Mevcut kullanıcının parolasını güvenli şekilde güncellemek için Pydantic şeması.
          */
         PasswordChangeRequest: {
             /**
              * Current Password
-             * @description The user's current password
+             * @description Kullanıcının mevcut parolası
              */
             current_password: string;
             /**
              * New Password
-             * @description The user's new secure password
+             * @description Kullanıcının yeni güvenli parolası
              */
             new_password: string;
         };
@@ -4579,7 +4621,7 @@ export interface components {
         };
         /**
          * PoolItemCreate
-         * @description Pydantic schema for pushing one document into a specific pool.
+         * @description Bir evrakı belirli bir havuza itmek için Pydantic şeması.
          */
         PoolItemCreate: {
             /**
@@ -4592,7 +4634,7 @@ export interface components {
         };
         /**
          * PoolPushRequest
-         * @description Pydantic schema for a bulk push: one document, several recipients or a whole unit.
+         * @description Toplu itme için Pydantic şeması: bir evrak, birden çok alıcı veya tüm bir birim.
          */
         PoolPushRequest: {
             /**
@@ -4615,7 +4657,7 @@ export interface components {
         };
         /**
          * PoolPushResultItem
-         * @description Pydantic schema for one recipient's outcome within a bulk push.
+         * @description Toplu itme içinde bir alıcının sonucu için Pydantic şeması.
          */
         PoolPushResultItem: {
             /** User Id */
@@ -4647,7 +4689,8 @@ export interface components {
         };
         /**
          * RoutingSuggestionRequest
-         * @description Request a unit-routing decision for a draft, independent of drafting it.
+         * @description Bir taslağı oluşturmaktan bağımsız olarak, onun için bir birim
+         *     yönlendirme kararı iste.
          */
         RoutingSuggestionRequest: {
             /**
@@ -4708,7 +4751,7 @@ export interface components {
         };
         /**
          * TrainingRunResponse
-         * @description Pydantic schema for one training run.
+         * @description Bir eğitim çalıştırması için Pydantic şeması.
          */
         TrainingRunResponse: {
             /** Id */
@@ -4739,7 +4782,7 @@ export interface components {
         };
         /**
          * TrainingSampleResponse
-         * @description Pydantic schema for one compiled preference-pair sample.
+         * @description Derlenmiş bir tercih-çifti örneği için Pydantic şeması.
          */
         TrainingSampleResponse: {
             /** Id */
@@ -4773,7 +4816,7 @@ export interface components {
         };
         /**
          * TrainingSampleStatsResponse
-         * @description Pydantic schema for `GET /companies/{id}/training-samples/stats`.
+         * @description `GET /companies/{id}/training-samples/stats` için Pydantic şeması.
          */
         TrainingSampleStatsResponse: {
             /** Total */
@@ -4789,13 +4832,13 @@ export interface components {
         };
         /**
          * TransferSendRequest
-         * @description `POST /transfers/send` body -- the manual chat-initiated send.
+         * @description `POST /transfers/send` gövdesi -- manuel, sohbetten başlatılan gönderim.
          *
-         *     Recipient is always an explicit id here: this channel is fed by
-         *     `UserSearchDrawer`/`PersonPickerBody` (Faz 2), which already resolves a
-         *     name to a user before the request is ever made. Name-based resolution
-         *     (`RecipientResolutionService`) exists for the Faz 4 AI channel, not
-         *     this one.
+         *     Alıcı burada her zaman açık bir id'dir: bu kanal, istek yapılmadan
+         *     önce zaten bir ismi bir kullanıcıya çözümleyen
+         *     `UserSearchDrawer`/`PersonPickerBody` (Faz 2) tarafından beslenir.
+         *     İsim tabanlı çözümleme (`RecipientResolutionService`) bu kanal için
+         *     değil, Faz 4 AI kanalı için mevcuttur.
          */
         TransferSendRequest: {
             /**
@@ -4820,7 +4863,7 @@ export interface components {
         };
         /**
          * UnitCreate
-         * @description Pydantic schema for creating a new routable unit.
+         * @description Yeni bir yönlendirilebilir birim oluşturmak için Pydantic şeması.
          */
         UnitCreate: {
             /**
@@ -4836,7 +4879,7 @@ export interface components {
         };
         /**
          * UnitMemberCreate
-         * @description Pydantic schema for adding a user to a unit.
+         * @description Bir kullanıcıyı bir birime eklemek için Pydantic şeması.
          */
         UnitMemberCreate: {
             /**
@@ -4858,7 +4901,7 @@ export interface components {
         };
         /**
          * UnitMemberResponse
-         * @description Pydantic schema for a unit membership, joined with the member's basic identity.
+         * @description Üyenin temel kimliğiyle birleştirilmiş bir birim üyeliği için Pydantic şeması.
          */
         UnitMemberResponse: {
             /**
@@ -4889,7 +4932,7 @@ export interface components {
         };
         /**
          * UnitResponse
-         * @description Pydantic schema for unit details output.
+         * @description Birim detayları çıktısı için Pydantic şeması.
          */
         UnitResponse: {
             /**
@@ -4915,7 +4958,7 @@ export interface components {
         };
         /**
          * UnitUpdate
-         * @description Pydantic schema for updating an existing unit. All fields optional.
+         * @description Var olan bir birimi güncellemek için Pydantic şeması. Tüm alanlar isteğe bağlı.
          */
         UnitUpdate: {
             /** Name */
@@ -4939,76 +4982,76 @@ export interface components {
         };
         /**
          * UserCreate
-         * @description Pydantic schema for creating a new user account.
+         * @description Yeni bir kullanıcı hesabı oluşturmak için Pydantic şeması.
          *
-         *     Deliberately has no ``clearance_level`` field: registration is
-         *     self-service (gated only by the invite whitelist, no auth required), so
-         *     letting a registrant set their own confidentiality ceiling would be a
-         *     self-escalation hole. Every new account starts at
-         *     ``UserModel.clearance_level``'s column default and can only be raised
-         *     afterwards by an admin via ``PUT /users/{id}``.
+         *     Kasıtlı olarak ``clearance_level`` alanı yoktur: kayıt self-servistir
+         *     (sadece davet beyaz listesi ile kısıtlanır, kimlik doğrulama gerekmez),
+         *     bu yüzden kayıt olan kişinin kendi gizlilik tavanını belirlemesine izin
+         *     vermek, kendi kendine yetki yükseltme açığı olurdu. Her yeni hesap
+         *     ``UserModel.clearance_level``'ın kolon varsayılanıyla başlar ve sonradan
+         *     sadece bir admin tarafından ``PUT /users/{id}`` ile yükseltilebilir.
          */
         UserCreate: {
             /**
              * Username
-             * @description Unique username
+             * @description Benzersiz kullanıcı adı
              */
             username: string;
             /**
              * Email
              * Format: email
-             * @description Unique email address
+             * @description Benzersiz e-posta adresi
              */
             email: string;
             /**
              * Password
-             * @description Plain text password
+             * @description Düz metin parola
              */
             password: string;
             /**
-             * @description Assigned role for authorization
+             * @description Yetkilendirme için atanan rol
              * @default employee
              */
             role: components["schemas"]["UserRole"];
         };
         /**
          * UserResponse
-         * @description Pydantic schema for user account details output.
+         * @description Kullanıcı hesabı detayları çıktısı için Pydantic şeması.
          */
         UserResponse: {
             /**
              * Id
-             * @description Unique user ID
+             * @description Benzersiz kullanıcı ID'si
              */
             id: string;
             /**
              * Company Id
-             * @description Owning company (NULL for root)
+             * @description Sahip şirket (root için NULL)
              */
             company_id?: string | null;
             /**
              * Username
-             * @description Unique username
+             * @description Benzersiz kullanıcı adı
              */
             username: string;
             /**
              * Email
              * Format: email
-             * @description Unique email address
+             * @description Benzersiz e-posta adresi
              */
             email: string;
-            /** @description Assigned authorization role */
+            /** @description Atanan yetkilendirme rolü */
             role: components["schemas"]["UserRole"];
-            /** @description Confidentiality ceiling (EMPLOYEE role only). */
+            /** @description Gizlilik tavanı (sadece EMPLOYEE rolü için). */
             clearance_level: components["schemas"]["SensitivityLevel"];
             /**
              * Is Active
-             * @description Status of user account
+             * @description Kullanıcı hesabının durumu
              */
             is_active: boolean;
             /**
              * Is Deleted
-             * @description Soft deletion flag status
+             * @description Soft delete bayrağının durumu
              */
             is_deleted: boolean;
         };
@@ -5040,22 +5083,22 @@ export interface components {
         UserRole: "root" | "admin" | "manager" | "employee";
         /**
          * UserUpdate
-         * @description Pydantic schema for updating a user account.
+         * @description Bir kullanıcı hesabını güncellemek için Pydantic şeması.
          */
         UserUpdate: {
             /**
              * Email
-             * @description Optional updated email address
+             * @description İsteğe bağlı güncellenmiş e-posta adresi
              */
             email?: string | null;
-            /** @description Optional updated authorization role */
+            /** @description İsteğe bağlı güncellenmiş yetkilendirme rolü */
             role?: components["schemas"]["UserRole"] | null;
             /**
              * Is Active
-             * @description Optional updated status of user account
+             * @description İsteğe bağlı güncellenmiş kullanıcı hesabı durumu
              */
             is_active?: boolean | null;
-            /** @description Optional updated confidentiality ceiling (EMPLOYEE role only -- ADMIN/MANAGER clear everything regardless of this value). Admin-only, same as role/is_active. */
+            /** @description İsteğe bağlı güncellenmiş gizlilik tavanı (sadece EMPLOYEE rolü için -- ADMIN/MANAGER bu değerden bağımsız olarak her şeyi geçer). role/is_active gibi sadece admin için. */
             clearance_level?: components["schemas"]["SensitivityLevel"] | null;
         };
         /** ValidationError */
@@ -5658,6 +5701,37 @@ export interface operations {
         };
     };
     get_session_state_api_v1_chat_sessions__session_id__state_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    cancel_chat_session_api_v1_chat_sessions__session_id__cancel_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -6653,6 +6727,37 @@ export interface operations {
                 "application/json": components["schemas"]["DraftDestinationUpdateRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_draft_review_api_v1_drafts__draft_id__review_approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
