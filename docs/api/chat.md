@@ -171,3 +171,40 @@ Oturumun (session) güncel durumunu (boşta, çalışıyor, kesintide) raporlar.
   }
 }
 ```
+
+---
+
+## `POST /api/v1/chat/sessions/{session_id}/compact`
+
+Sohbeti sıkıştırır: birebir tutulan son geçmiş turları yuvarlanan özete katlar
+(son `COMPACT_KEEP_TURNS` turu birebir bırakır). Bağlam göstergesindeki "Bağlamı
+sıkıştır" düğmesi çağırır ve sırasında sohbet kilitlenir. Aktif bir tur veya
+bekleyen bir HITL varsa `status: "busy"` döner.
+
+### Yanıtlar (Responses)
+
+#### 200 OK
+
+```json
+{
+  "success": true,
+  "data": {
+    "status": "compacted",
+    "folded_turns": 8,
+    "context_usage": {
+      "total": 8192,
+      "used": 1450,
+      "free": 6742,
+      "segments": [
+        { "key": "system", "label": "Sistem yönergesi", "tokens": 900 },
+        { "key": "history_summary", "label": "Geçmiş özeti", "tokens": 180 },
+        { "key": "history", "label": "Sohbet geçmişi", "tokens": 90 },
+        { "key": "reserved", "label": "Yanıt için ayrılan", "tokens": 1024 }
+      ]
+    }
+  }
+}
+```
+
+`status` değerleri: `compacted` (sıkıştırıldı) · `noop` (birebir pencere zaten
+küçük) · `busy` (aktif tur/HITL) · `unavailable` (checkpointer okunamadı).

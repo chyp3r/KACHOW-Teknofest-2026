@@ -21,7 +21,15 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - **Sohbette bağlam penceresi kullanım halkası.** Yanıtın `details.context_usage`
   alanı asistan turunun bağlam penceresini nasıl kullandığını (sistem yönergesi,
   belge bağlamı, geçmiş özeti, sohbet geçmişi, güncel mesaj, ayrılan pay) gerçek
-  token sayılarıyla döker; sohbet alanında dairesel bir gösterge bunu okur.
+  token sayılarıyla döker; sohbette çalışma modunun altında yalnızca bir halka
+  duruyor, tıklanınca kırılımı taşıyan dar bir popup açılıyor. Değer değişince
+  halka ve yüzde animasyonlu yükselip iniyor.
+- **Sohbeti sıkıştırma (compact).** `POST /api/v1/chat/sessions/{id}/compact`
+  birebir tutulan geçmiş penceresini yuvarlanan özete katlar (son 2 turu birebir
+  bırakır), bağlam penceresinde yer açar. Popup'taki "Bağlamı sıkıştır" düğmesi
+  çağırır; sırasında sohbet kilitlenir ve mesaj alanında "Sohbet sıkıştırılıyor…"
+  görünür. Kullanıcı sıkıştırdıktan sonra o turlar asist adımına yalnızca özet
+  olarak gider.
 
 ### Değiştirildi
 - **Bağlam penceresi artık aktif sağlayıcıya göre boyutlanıyor.** Sabit
