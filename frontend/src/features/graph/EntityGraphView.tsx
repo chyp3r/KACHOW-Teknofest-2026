@@ -5,8 +5,8 @@ import { useGraphViewport, type Point } from "../../components/graphViewportCont
 import { Card, Spinner } from "../../components/Surface";
 import { EmptyState } from "../../components/EmptyState";
 import type { GraphEdge, GraphNode, KnowledgeGraph } from "../../types/documents";
+import { graphCanvasSize } from "./canvasSize";
 import { COMPLIANCE_ONLY_EDGE_TYPES, COMPLIANCE_ONLY_NODE_TYPES, filterGraph, filterToComplianceOnly } from "./filters";
-import { DEFAULT_HEIGHT, DEFAULT_WIDTH } from "./forceLayout";
 import { GraphFilters } from "./GraphFilters";
 import { KnowledgeGraphView } from "./KnowledgeGraphView";
 import { NodeInspector } from "./NodeInspector";
@@ -33,6 +33,7 @@ const DEFAULT_EDGE_TYPES = new Set<GraphEdge["edge_type"]>([
 // distinction between "click fixes/unfixes" and "drag and drop", adapted
 // to this app's choice of click-opens-attributes instead.
 const CLICK_MOVE_THRESHOLD_PX = 3;
+
 
 function isIncident(nodeId: string, hoveredId: string | null, edges: GraphEdge[]): boolean {
   if (!hoveredId) return true;
@@ -147,6 +148,97 @@ function EntityGraphNode({
   );
 }
 
+/** The force simulation + interactive viewport + node inspector for the
+ * unified graph. Split out of `EntityGraphView` so it can be remounted (via
+ * `key`) when `graphCanvasSize` returns a different canvas: `useForceSimulation`
+ * reads its `width`/`height` once, at creation, so a resize only takes effect
+ * on a fresh mount. Selection/hover live in the parent and survive the
+ * remount; only the transient pin positions reset, which a node-count change
+ * (always a filter toggle) reheats anyway. */
+function EntityGraphCanvas({
+  filtered,
+  width,
+  height,
+  hoveredId,
+  onHoverNode,
+  onSelectNode,
+  selectedNode,
+  onCloseInspector,
+  onSelectDocument,
+}: {
+  filtered: KnowledgeGraph;
+  width: number;
+  height: number;
+  hoveredId: string | null;
+  onHoverNode: (id: string | null) => void;
+  onSelectNode: (id: string | null) => void;
+  selectedNode: GraphNode | null;
+  onCloseInspector: () => void;
+  onSelectDocument?: (storagePath: string) => void;
+}) {
+  const { positions, pin, unpin, isPinned } = useForceSimulation(filtered, {
+    width,
+    height,
+  });
+
+  return (
+    <>
+      <InteractiveGraphViewport
+        ariaLabel="Etkileşimli uyum ve varlık haritası"
+        baseWidth={width}
+        baseHeight={height}
+      >
+        {filtered.edges.map((edge, index) => {
+          const from = positions[edge.source];
+          const to = positions[edge.target];
+          if (!from || !to) return null;
+          const incident =
+            !hoveredId || edge.source === hoveredId || edge.target === hoveredId;
+          const kind = edge.source_kind === "rule" ? "edge-rule" : "edge-llm";
+          return (
+            <line
+              key={`${edge.source}->${edge.target}#${index}`}
+              className={`entity-graph-edge ${kind} ${incident ? "" : "is-dimmed"}`.trim()}
+              data-edge-type={edge.edge_type}
+              x1={from.x}
+              y1={from.y}
+              x2={to.x}
+              y2={to.y}
+            />
+          );
+        })}
+
+        {filtered.nodes.map((node) => {
+          const position = positions[node.id];
+          if (!position) return null;
+          return (
+            <EntityGraphNode
+              key={node.id}
+              node={node}
+              position={position}
+              incident={isIncident(node.id, hoveredId, filtered.edges)}
+              pinned={isPinned(node.id)}
+              onHover={() => onHoverNode(node.id)}
+              onUnhover={() => onHoverNode(null)}
+              onSelect={() => onSelectNode(node.id)}
+              onPin={(x, y) => pin(node.id, x, y)}
+              onUnpin={() => unpin(node.id)}
+            />
+          );
+        })}
+      </InteractiveGraphViewport>
+
+      <NodeInspector
+        node={selectedNode}
+        onClose={onCloseInspector}
+        onOpenDocument={onSelectDocument}
+        pinned={selectedNode ? isPinned(selectedNode.id) : false}
+        onUnpin={selectedNode ? () => unpin(selectedNode.id) : undefined}
+      />
+    </>
+  );
+}
+
 /** The unified graph: every node type in one live, draggable force
  * simulation (`useForceSimulation` -- csacademy-style: nodes settle, then
  * sleep; dragging wakes and pins), with a click-to-inspect floating panel
@@ -175,10 +267,11 @@ export function EntityGraphView({
     () => (graph ? filterGraph(graph, { nodeTypes, edgeTypes }) : null),
     [graph, nodeTypes, edgeTypes],
   );
-  const { positions, pin, unpin, isPinned } = useForceSimulation(filtered, {
-    width: DEFAULT_WIDTH,
-    height: DEFAULT_HEIGHT,
-  });
+  // Canvas grows with the number of nodes actually on screen (post-filter).
+  const canvas = useMemo(
+    () => graphCanvasSize(filtered?.nodes.length ?? 0),
+    [filtered?.nodes.length],
+  );
 
   const toggleSet = <T,>(set: Set<T>, value: T): Set<T> => {
     const next = new Set(set);
@@ -246,59 +339,19 @@ export function EntityGraphView({
       {filterPanel}
       <div className="entity-graph-canvas-row">
         {filtered && (
-          <InteractiveGraphViewport
-            ariaLabel="Etkileşimli uyum ve varlık haritası"
-            baseWidth={DEFAULT_WIDTH}
-            baseHeight={DEFAULT_HEIGHT}
-          >
-            {filtered.edges.map((edge, index) => {
-              const from = positions[edge.source];
-              const to = positions[edge.target];
-              if (!from || !to) return null;
-              const incident =
-                !hoveredId || edge.source === hoveredId || edge.target === hoveredId;
-              const kind = edge.source_kind === "rule" ? "edge-rule" : "edge-llm";
-              return (
-                <line
-                  key={`${edge.source}->${edge.target}#${index}`}
-                  className={`entity-graph-edge ${kind} ${incident ? "" : "is-dimmed"}`.trim()}
-                  data-edge-type={edge.edge_type}
-                  x1={from.x}
-                  y1={from.y}
-                  x2={to.x}
-                  y2={to.y}
-                />
-              );
-            })}
-
-            {filtered.nodes.map((node) => {
-              const position = positions[node.id];
-              if (!position) return null;
-              return (
-                <EntityGraphNode
-                  key={node.id}
-                  node={node}
-                  position={position}
-                  incident={isIncident(node.id, hoveredId, filtered.edges)}
-                  pinned={isPinned(node.id)}
-                  onHover={() => setHoveredId(node.id)}
-                  onUnhover={() => setHoveredId(null)}
-                  onSelect={() => setSelectedNodeId(node.id)}
-                  onPin={(x, y) => pin(node.id, x, y)}
-                  onUnpin={() => unpin(node.id)}
-                />
-              );
-            })}
-          </InteractiveGraphViewport>
+          <EntityGraphCanvas
+            key={`${canvas.width}x${canvas.height}`}
+            filtered={filtered}
+            width={canvas.width}
+            height={canvas.height}
+            hoveredId={hoveredId}
+            onHoverNode={setHoveredId}
+            onSelectNode={setSelectedNodeId}
+            selectedNode={selectedNode}
+            onCloseInspector={() => setSelectedNodeId(null)}
+            onSelectDocument={onSelectDocument}
+          />
         )}
-
-        <NodeInspector
-          node={selectedNode}
-          onClose={() => setSelectedNodeId(null)}
-          onOpenDocument={onSelectDocument}
-          pinned={selectedNode ? isPinned(selectedNode.id) : false}
-          onUnpin={selectedNode ? () => unpin(selectedNode.id) : undefined}
-        />
       </div>
     </div>
   );
