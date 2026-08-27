@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, InterruptState } from "../../types/chat";
 import { MessageList } from "./MessageList";
 
@@ -21,6 +21,10 @@ function renderWithQueryClient(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("MessageList", () => {
   it("offers general conversation starters when no document or draft is selected", () => {
@@ -221,6 +225,33 @@ describe("MessageList", () => {
     );
 
     expect(screen.queryByRole("button", { name: "Beğendim" })).not.toBeInTheDocument();
+  });
+
+  it("shows draft confidence only after the live message animation completes", () => {
+    vi.useFakeTimers();
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={[{
+          sender: "assistant",
+          text: "Hazırlanan resmî yazı taslağı burada gösterilir.",
+          animate: true,
+          details: {
+            draft: {
+              draft: "Hazırlanan resmî yazı taslağı burada gösterilir.",
+              status: "COMPLETED",
+              combined_score: 92,
+            },
+          },
+        }]}
+      />,
+    );
+
+    expect(screen.queryByText("Güven skoru: 92/100")).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(10_000));
+
+    expect(screen.getByText("Güven skoru: 92/100")).toBeInTheDocument();
   });
 
   it("shows document analysis as a compact message in the conversation", () => {

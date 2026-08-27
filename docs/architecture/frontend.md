@@ -73,7 +73,13 @@ Backend `token` parçalarını yapay bekleme olmadan taşıyabilir; bunlar UI ya
 hızının kaynağı değildir. Frontend doğrulanmış `final_result` cevabını konuşma
 state'ine bir kez ekler ve yalnız canlı gelen bu mesajı `AnimatedMessageText`
 ile görsel olarak açar. Kalıcı geçmiş mesajları anında gösterilir; işletim
-sisteminde azaltılmış hareket tercihi açıksa animasyon uygulanmaz.
+sisteminde azaltılmış hareket tercihi açıksa animasyon uygulanmaz. Taslak ve
+revizyon yanıtlarının güven skoru gibi yapılandırılmış kontrol özeti, canlı
+mesajın yazma animasyonu tamamlandıktan sonra metnin altında gösterilir.
+Kontrol özeti kapalı durumda yalnız güven skoru, indirme eylemi ve sonuç
+durumunu taşır; genişletildiğinde skor dökümü, kontrol notları ve yönlendirme
+ayrıntılarını açar. İndirme eylemi Word/PDF biçimini kullanıcıdan seçmesini
+ister.
 
 ## Performans ve Optimizasyon
 

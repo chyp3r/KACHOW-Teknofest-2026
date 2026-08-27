@@ -9,14 +9,17 @@ export function AnimatedMessageText({
   text,
   animate = false,
   onProgress,
+  onComplete,
   onCitationClick,
 }: {
   text: string;
   animate?: boolean;
   onProgress?: () => void;
+  onComplete?: () => void;
   onCitationClick?: (target: CitationTarget) => void;
 }) {
   const animationTarget = useRef<string | null>(animate ? text : null);
+  const completedTarget = useRef<string | null>(null);
   const [visibleLength, setVisibleLength] = useState(animate ? Math.min(1, text.length) : text.length);
 
   useEffect(() => {
@@ -51,6 +54,12 @@ export function AnimatedMessageText({
 
     return () => window.clearInterval(timer);
   }, [animate, onProgress, text]);
+
+  useEffect(() => {
+    if (!animate || visibleLength < text.length || completedTarget.current === text) return;
+    completedTarget.current = text;
+    onComplete?.();
+  }, [animate, onComplete, text, visibleLength]);
 
   const isAnimating = visibleLength < text.length;
   if (!isAnimating) {

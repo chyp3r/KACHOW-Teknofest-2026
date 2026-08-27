@@ -29,6 +29,16 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   düşürmek için değil, yalnızca şema sadeleştirmek isteniyorsa değerli olabilir.
 
 ### Düzeltildi
+- **Sohbette taslak/revizyon güven skorunun erken görünmesi.** Canlı yanıtın
+  metni yazma animasyonuyla açılırken yapılandırılmış taslak kontrol özeti artık
+  önceden render edilmiyor; mesaj tamamlandıktan sonra metnin altında beliriyor.
+  Final sonuçtan hemen sonra yapılan sunucu geçmişi yenilemesi aynı mesajdaki
+  canlı animasyon bayrağını artık düşürmüyor. Kalıcı geçmiş mesajları ve
+  azaltılmış hareket tercihi gecikmeden gösterilmeye devam ediyor.
+- **Taslak güven özeti kompakt ve genişletilebilir hale getirildi.** Kapalı
+  görünümde güven skoru, “İndir” eylemi ve durum rozeti kalıyor. “İndir” Word
+  veya PDF biçimini soran bir menü açıyor; genişletilen gövdede skor dökümü,
+  kontrol notları ve mevcut yönlendirme kontrolleri gösteriliyor.
 - **`scripts/evaluate_extraction.py`'nin bozuk import'u.** Silinmiş
   `app.ai.agents.metadata.MetadataAgent`'ı import ettiği için
   `ModuleNotFoundError` ile çöküyordu (commit `11823e8b` sonrası
