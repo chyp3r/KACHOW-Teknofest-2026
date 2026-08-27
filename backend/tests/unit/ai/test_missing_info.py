@@ -49,11 +49,16 @@ def test_matches_compliance_missing_field_for_its_legal_justification():
     assert questions[0].why == "RYUEHY m.14 -- Muhatap belirtilmelidir."
 
 
-def test_unmatched_placeholder_gets_an_empty_justification():
+def test_unmatched_placeholder_still_gets_a_generic_help_string():
+    """Bir compliance kuralına eşleşmeyen bir yer tutucu bile bağlamsız
+    kalmamalı: ``why`` daima dolu (genel açıklama), ``example`` ise bilinen
+    bir alan şekli değilse ``None``."""
     draft = "[RASTGELE BİLGİ] eksik."
     questions = build_missing_info_request(draft, REPORT, {"missing_fields": []})
 
-    assert questions[0].why == ""
+    assert questions[0].why != ""
+    assert "RASTGELE BİLGİ" in questions[0].why
+    assert questions[0].example is None
 
 
 def test_apply_answers_substitutes_and_reports_no_residual_when_complete():
