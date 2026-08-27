@@ -207,9 +207,31 @@ async def test_every_decision_carries_its_confidence_and_evidence():
 # ===========================================================================
 @pytest.mark.asyncio
 async def test_resolve_plan_skips_the_model_when_fusion_already_commits(fake_fast_llm):
-    decision = await resolve_plan("taslak hazırla", "uploads/doc.pdf", fake_fast_llm)
+    """LOCAL_MODE=True (the default) pinned explicitly -- under LOCAL_MODE=
+    False the model is now always consulted even for a decisive fused
+    result (see test_resolve_plan_forces_model_confirmation_under_cloud_mode
+    below), so this must not silently depend on the ambient config."""
+    with patch.multiple("app.core.config.settings", LOCAL_MODE=True):
+        decision = await resolve_plan("taslak hazırla", "uploads/doc.pdf", fake_fast_llm)
     assert decision.intent == "draft"
     assert fake_fast_llm.generate_structured_calls == []
+
+
+@pytest.mark.asyncio
+async def test_resolve_plan_forces_model_confirmation_under_cloud_mode(fake_fast_llm):
+    """LOCAL_MODE=false: the semantic rung is already dead in this mode (its
+    committed vectors are stamped for Ollama's embedding model, never
+    Evren's), so the model becomes the only remaining check on a confident
+    but potentially wrong lexical/fusion read -- it must be consulted even
+    when fusion alone already looks decisive, and its answer wins."""
+    from app.ai.workflows.planner import IntentOutput
+
+    fake_fast_llm.generate_structured_return = IntentOutput(intent="assist")
+    with patch.multiple("app.core.config.settings", LOCAL_MODE=False):
+        decision = await resolve_plan("taslak hazırla", "uploads/doc.pdf", fake_fast_llm)
+    assert fake_fast_llm.generate_structured_calls  # consulted despite decisive fusion
+    assert decision.intent == "assist"               # and overrode the confident lexical read
+    assert decision.source == "model"
 
 
 @pytest.mark.asyncio

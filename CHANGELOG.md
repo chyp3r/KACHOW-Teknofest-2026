@@ -9,6 +9,18 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
 - Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
 
+### Değiştirildi
+- `LOCAL_MODE=false` (Evren/bulut) iken niyet (intent) yönlendirmesinde LLM
+  tie-break'i artık yalnızca belirsizken değil, füzyon zaten kararlı bir
+  sonuca varmış olsa bile her zaman çalışıp sonucu doğruluyor/geçersiz
+  kılıyor (`planner.py::_resolve_intent`). Semantik prototip katmanı
+  `LOCAL_MODE=false`'ta zaten devre dışı (aktif embedding modeli committed
+  vektörlerin damgasıyla -- Ollama'nın `nomic-embed-text`'i -- uyuşmuyor),
+  bu yüzden kendinden emin ama yanlış bir sözcüksel okumayı düzeltecek
+  hiçbir mekanizma kalmıyordu; LLM artık o "ikinci görüş" rolünü üstleniyor
+  (#293). Bulut modunda her sohbet turuna bir sınıflandırma çağrısı
+  ekliyor, bilinçli bir maliyet.
+
 ## [3.56]
 ### Düzeltildi
 - **DB bağlantı havuzu tükenmesi kaynaklı çökme (#288).** Belirli bir yükten
