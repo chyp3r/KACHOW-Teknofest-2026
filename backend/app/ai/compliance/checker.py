@@ -7,8 +7,6 @@ from app.ai.compliance.evrak_field import ComplianceReport, EvrakField, MissingF
 from app.ai.compliance.field_rule import (
     BLANK_VALUE_MARKER,
     REQUIRED_FIELD_RULES,
-    RYUEHY,
-    SEVERITY_ADVISORY,
     SEVERITY_REQUIRED,
     FieldRule,
 )
@@ -117,12 +115,10 @@ def check_required_fields(
         is_signed: Belgede imza şeklinde bir mürekkep izinin tespit edilip
             edilmediği (`app.infrastructure.extractors.marks.detect_marks`,
             `DocumentAnalysisState.detected_marks` üzerinden aktarılır).
-            Tespit hiç çalışmadıysa (ör. rasterize edilmeyen, doğuştan
-            dijital bir PDF) `None` olur — bu, bu modülün mevcut "asla tahmin
-            etme" duruşuna uygun şekilde imzasız değil, bilinmiyor olarak ele
-            alınır (bkz. `is_blank`'ın kendi docstring'i). Bunun aslında neyi
-            kapı gibi kontrol ettiğini görmek için aşağıdaki "İmza görseli"
-            kontrolüne bakın.
+            İmza artık bir uyum gerekliliği değil (varsayılan yükleme yolu
+            görsel imza tespiti hiç çalıştırmıyor, bkz. `get_document_extractor`),
+            bu yüzden bu parametre uyum sonucunu ETKİLEMİYOR -- çağıranların
+            imzasını değiştirmemek için korunuyor, gövde onu kullanmıyor.
 
     Returns:
         Yasal dayanaklarıyla birlikte eksik alanlar ve genel durum.
@@ -142,36 +138,6 @@ def check_required_fields(
                     reason=rule.reason,
                 )
             )
-
-    # Ek niteliğinde ve kasıtlı olarak dar kapsamlı: yukarıdaki imza_sahibi
-    # kuralının göremediği boşluğu yakalar. Sayfa aslında hiç imzalanmamış
-    # olsa bile *yazılmış* bir isim o kuralı sağlar (fields.imza_sahibi boş
-    # değildir) -- tam olarak taranmış, gerçekten imzasız bir çıktının
-    # ürettiği durum budur. Sadece bu özel boşlukta tetiklenir (isim var,
-    # tespit edilen iz yok); imza_sahibi zaten boşsa yukarıdaki kural bunu
-    # zaten raporlar ve burada tekrar etmek sinyal değil gürültü olurdu.
-    # Zorunlu değil, tavsiye niteliğindedir: sezgisel bir dedektörün yanlış
-    # negatifi (bunun neden yasal bir belirleme değil de bir inceleme ipucu
-    # olduğuna dair marks.py'nin kendi modül docstring'ine bakın) tek
-    # başına, aksi halde eksiksiz bir belgeyi "eksik" olarak işaretleyemez.
-    if (
-        is_signed is False
-        and not is_blank(getattr(fields, "imza_sahibi", None))
-        and any(rule.key == "imza_sahibi" for rule in rules)
-    ):
-        missing.append(
-            MissingField(
-                key="imza_gorseli",
-                label="İmza görseli",
-                severity=SEVERITY_ADVISORY,
-                mevzuat=f"{RYUEHY} m.17",
-                reason=(
-                    "Belgede imza sahibinin adı yer alıyor ancak sayfada bir "
-                    "imza taranmadı; belgenin gerçekten imzalanmış bir "
-                    "nüshasının yüklendiğini doğrulayın."
-                ),
-            )
-        )
 
     if not missing:
         status = ComplianceStatus.COMPLIANT

@@ -1,6 +1,6 @@
 {
   "id": "evrak_05",
-  "note": "Dilekçe; adres ve imza eksik (3071 s.K. m.4 zorunlu unsurları).",
+  "note": "Dilekçe; adres eksik (3071 s.K. m.4 zorunlu unsurları). İmza artık zorunlu bir alan değil.",
   "document_type": "petition",
   "scanned": false,
   "expected_fields": {
@@ -10,7 +10,6 @@
     "basvuran_adi": "Ali Vural"
   },
   "expected_missing_fields": [
-    "adres",
-    "imza_sahibi"
+    "adres"
   ]
 }
