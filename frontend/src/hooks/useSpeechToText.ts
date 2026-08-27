@@ -75,16 +75,23 @@ export function useSpeechToText({
     recognition.continuous = true;
     recognition.interimResults = true;
     recognition.onresult = (event) => {
-      let finalText = "";
+      // Rebuild the whole utterance from every result each time -- never from
+      // `resultIndex` with an accumulating buffer. On `stop()` (and in some
+      // browsers on the terminal event) `resultIndex` can regress and
+      // re-deliver already-final segments; a delta-append consumer then
+      // writes them twice. Emitting the full transcript on every event makes
+      // the consumer's job a pure replace.
+      const finalParts: string[] = [];
       let interimText = "";
-      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+      for (let i = 0; i < event.results.length; i += 1) {
         const result = event.results[i];
-        const transcript = result[0]?.transcript ?? "";
-        if (result.isFinal) finalText += transcript;
-        else interimText += transcript;
+        const transcript = (result[0]?.transcript ?? "").trim();
+        if (!transcript) continue;
+        if (result.isFinal) finalParts.push(transcript);
+        else interimText = transcript;
       }
-      if (finalText) onTranscriptRef.current(finalText, true);
-      if (interimText) onTranscriptRef.current(interimText, false);
+      const full = [...finalParts, interimText].filter(Boolean).join(" ");
+      onTranscriptRef.current(full, interimText.length === 0);
     };
     recognition.onerror = (event) => {
       setError(event.error);

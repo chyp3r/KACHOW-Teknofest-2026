@@ -10,6 +10,8 @@ import { InteractiveGraphViewport } from "../../components/InteractiveGraphViewp
 import { Button, IconButton } from "../../components/Button";
 import { StatusBadge, type StatusTone } from "../../components/StatusBadge";
 import { Alert } from "../../components/Surface";
+import { guardrailDecisionLabel } from "./guardrailLabels";
+import { toolLabel } from "./toolLabels";
 import { WorkflowStepper, type WorkflowStageItem } from "./WorkflowStepper";
 
 interface GraphNode {
@@ -223,7 +225,7 @@ export function deriveWorkflowStages(
         })),
       ...Array.from(toolsByOwner.get(stageId)?.entries() ?? []).map(([tool, count]) => ({
         id: `tool:${tool}`,
-        label: count > 1 ? `${tool} ×${count}` : tool,
+        label: count > 1 ? `${toolLabel(tool)} ×${count}` : toolLabel(tool),
       })),
     ];
     return {
@@ -430,7 +432,7 @@ export function DecisionFlow({
                 <GitBranch size={16} />
                 <div>
                   <strong>{toolCalls.length} araç çağrısı</strong>
-                  <span>{toolCalls.map((call) => call.tool).join(" · ")}</span>
+                  <span>{toolCalls.map((call) => toolLabel(call.tool)).join(" · ")}</span>
                 </div>
               </div>
             )}
@@ -440,7 +442,9 @@ export function DecisionFlow({
                 <div>
                   <strong>Güvenlik kararı</strong>
                   <span>
-                    {guardrailEvents.map((event) => event.decision).join(" · ")}
+                    {guardrailEvents
+                      .map((event) => guardrailDecisionLabel(event.decision))
+                      .join(" · ")}
                   </span>
                 </div>
               </div>

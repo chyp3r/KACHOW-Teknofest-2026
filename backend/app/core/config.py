@@ -420,6 +420,13 @@ class Settings(BaseSettings):
     #: değiştiği için burada gömülü değil, analitik servisi tarafından eklenir.
     GRAFANA_URL: str = "http://localhost:3001"
 
+    #: `GET /root/users/insights`'in global token-kullanım panelini beslediği
+    #: Prometheus HTTP API taban adresi. Varsayılan host-facing'dir; Docker
+    #: altında `compose.yml` bunu `http://prometheus:9090` ile geçersiz kılar
+    #: (QDRANT_URL/REDIS_URL ile aynı desen). Ulaşılamazsa panel sessizce boş
+    #: döner -- bkz. `app.observability.prometheus_query`.
+    PROMETHEUS_URL: str = "http://localhost:9090"
+
     #: Altyapı düzeyi izleme için OTLP/gRPC toplayıcı uç noktası (örn.
     #: `http://jaeger:4317`) -- bkz. `app/observability/otel.py`. `None`
     #: (varsayılan) OpenTelemetry'yi tamamen devre dışı bırakır: SDK

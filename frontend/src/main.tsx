@@ -13,6 +13,7 @@ import './styles/typography.css';
 import './styles/design-system.css';
 import './styles/messaging.css';
 import './styles/reference-ui.css';
+import './styles/platform-insights.css';
 
 const queryClient = new QueryClient({
   defaultOptions: {

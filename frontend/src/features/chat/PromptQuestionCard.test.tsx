@@ -136,6 +136,45 @@ describe("PromptQuestionCard", () => {
     expect(onSubmit).toHaveBeenCalledWith({ muhatap: "Hacettepe Üniversitesi Rektörlüğü" });
   });
 
+  const exampleQuestion: PromptQuestion[] = [
+    {
+      key: "belge_sayisi",
+      question: "'Belge Sayısı' alanı için ne yazılmalı?",
+      header: "Belge Sayısı",
+      example: "E-12345678-100-4567",
+      options: [],
+      multi_select: false,
+      allow_free_text: true,
+      required: true,
+    },
+  ];
+
+  it("accepts question.example by pressing Tab on the empty input", () => {
+    const onSubmit = vi.fn();
+    render(<PromptQuestionCard questions={exampleQuestion} loading={false} onSubmit={onSubmit} />);
+
+    const input = screen.getByLabelText("Belge Sayısı");
+    const submit = screen.getByRole("button", { name: "Devam et" });
+    expect(submit).toBeDisabled();
+
+    fireEvent.keyDown(input, { key: "Tab" });
+    expect((input as HTMLInputElement).value).toBe("E-12345678-100-4567");
+    expect(submit).toBeEnabled();
+
+    fireEvent.click(submit);
+    expect(onSubmit).toHaveBeenCalledWith({ belge_sayisi: "E-12345678-100-4567" });
+  });
+
+  it("accepts question.example by clicking the suggestion chip, which then hides", () => {
+    render(<PromptQuestionCard questions={exampleQuestion} loading={false} onSubmit={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Öneri:/ }));
+    expect((screen.getByLabelText("Belge Sayısı") as HTMLInputElement).value).toBe(
+      "E-12345678-100-4567",
+    );
+    expect(screen.queryByRole("button", { name: /Öneri:/ })).not.toBeInTheDocument();
+  });
+
   it("renders the resolved slots as a read-only strip", () => {
     const questions: PromptQuestion[] = [
       {

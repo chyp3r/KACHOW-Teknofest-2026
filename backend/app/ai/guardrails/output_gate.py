@@ -56,8 +56,9 @@ FALLBACK_REPLY = (
 )
 
 #: `check_groundedness`'in bu turun kaynaklarına dayandıramadığı bir iddia
-#: yerine geçen Türkçe yer tutucu.
-_UNGROUNDED_MARKER = "[doğrulanamayan ifade kaldırıldı]"
+#: yerine geçen Türkçe yer tutucu. Kullanıcıya gösterilen cevabın içine
+#: gömülür, dolayısıyla bir cümle gibi büyük harfle başlar.
+_UNGROUNDED_MARKER = "[Doğrulanamayan ifade kaldırıldı]"
 
 GateAction = Literal["pass", "redact", "block"]
 
@@ -215,7 +216,7 @@ def evaluate_response(
                 # sessizce silmek yerine aynı çıktıda buluşur.
                 redacted, _findings = redact_pii(redacted, confidence_floor=active_policy.pii_confidence_floor)
                 kinds = sorted({finding.kind for finding in pii_findings})
-                reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi ({', '.join(kinds)})")
+                reasons.append(f"{len(pii_findings)} PII bulgusu maskelendi ({', '.join(kinds)})")
             elif semantic_leak:
                 # Maskelenecek belirli bir metin parçası yok -- hakem,
                 # konumlandırılabilir bir string değil, yanıtın anlamını
@@ -256,7 +257,10 @@ def classify_reason_kind(reasons: list[str]) -> str:
         ``"injection"`` değerlerinden biri, veya daha özgül bir şey
         eşleşmediyse genel ``"output_gate"``.
     """
-    joined = " ".join(reasons)
+    # Küçük harfe katlanır: reason dizeleri kullanıcıya gösterilen metinlerdir
+    # ("PII", "Doğrulanamayan ...") ve büyük/küçük harf değişebilir; sınıflama
+    # anahtar kelimeleri buna karşı dayanıklı kalmalı.
+    joined = " ".join(reasons).lower()
     if "yetkisiz" in joined:
         return "leakage"
     if "pii" in joined:
