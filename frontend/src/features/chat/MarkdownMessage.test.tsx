@@ -66,14 +66,18 @@ describe("MarkdownMessage", () => {
     expect(container.textContent).not.toContain("[s. 3]");
   });
 
-  it("does not read a legacy page anchor as the number marker too", () => {
+  it("drops a stray page anchor when the reply uses numbered citations", () => {
     const { container } = render(
-      <MarkdownMessage text={"Eski [s. 3] biçim.\n\nKAYNAKLAR:\n[3] (s. 9) Alakasız."} />,
+      <MarkdownMessage text={"Bilgi [s. 3] burada [1].\n\nKAYNAKLAR:\n[1] (s. 3) Kaynak."} />,
     );
 
-    // The legacy anchor is `[s. 3]`, not `[3]`, so citation 3 is never read
-    // as a marker in the prose -- it only appears in the sources list.
-    expect(proseBadges(container)).toEqual(["Sayfa 3"]);
+    // Mixing a "Sayfa 3" badge into a numbered reply is what looked
+    // inconsistent; the page still reaches the reader via the block.
+    expect(proseBadges(container)).toEqual(["1"]);
+    expect(container.textContent).not.toContain("Sayfa 3");
+    expect(container.textContent).not.toContain("[s. 3]");
+    // No gap left where the anchor was.
+    expect(container.textContent).toContain("Bilgi burada");
   });
 
   it("stays a plain label when no click handler is given", () => {
@@ -231,5 +235,26 @@ describe("MarkdownMessage during the typewriter reveal", () => {
     const { container } = render(<MarkdownMessage text={FULL} />);
 
     expect(proseBadges(container)).toEqual(["1", "2"]);
+  });
+});
+
+describe("MarkdownMessage reveal ordering", () => {
+  const FULL = "Cevap metni.\n\nKAYNAKLAR:\n[1] (s. 1) Kaynak cümlesi.";
+
+  it("withholds trailing sources while the text is still revealing", () => {
+    const { container } = render(
+      <MarkdownMessage text="Cevap" citationSource={FULL} />,
+    );
+
+    // Arriving before the answer is exactly the out-of-order flash reported.
+    expect(container.querySelector(".citation-trailing")).toBeNull();
+  });
+
+  it("shows them once the reveal has caught up", () => {
+    const { container } = render(
+      <MarkdownMessage text={FULL} citationSource={FULL} />,
+    );
+
+    expect(container.querySelector(".citation-trailing")).not.toBeNull();
   });
 });

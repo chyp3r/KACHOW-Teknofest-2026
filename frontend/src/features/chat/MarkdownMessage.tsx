@@ -40,15 +40,36 @@ function withCitationBadges(
   let cursor = 0;
   let matched = 0;
 
+  // A reply carrying a sources block is using the numbered form, so a page
+  // anchor in its prose is a slip -- the model copying `[s. 3]` out of a tool
+  // result. Rendering it as a "Sayfa 3" badge next to plain `1` `2` badges is
+  // what made the citations look inconsistent, so it is dropped instead (the
+  // page still reaches the reader through the block). A reply with no block is
+  // an older one where the anchor is the only citation there is: kept.
+  const dropPageAnchors = citations.size > 0;
+
   // Page anchors are matched first and consume their span, so the `[s. 3]` in
   // a legacy reply is never also read as the number-marker `[3]`.
   const spans = [
-    ...[...text.matchAll(PAGE_ANCHOR_PATTERN)].map((match) => ({
-      start: match.index ?? 0,
-      length: match[0].length,
-      label: `Sayfa ${match[1]}`,
-      target: { page: Number(match[1]), quote: "" } satisfies CitationTarget,
-    })),
+    ...[...text.matchAll(PAGE_ANCHOR_PATTERN)].map((match) => {
+      const start = match.index ?? 0;
+      // Swallow one leading space with the anchor, or dropping it leaves the
+      // sentence with a gap before its full stop.
+      const spacedStart = start > 0 && text[start - 1] === " " ? start - 1 : start;
+      return dropPageAnchors
+        ? {
+            start: spacedStart,
+            length: start + match[0].length - spacedStart,
+            label: null,
+            target: null,
+          }
+        : {
+            start,
+            length: match[0].length,
+            label: `Sayfa ${match[1]}`,
+            target: { page: Number(match[1]), quote: "" } satisfies CitationTarget,
+          };
+    }),
     ...[...text.matchAll(MARKER_PATTERN)].flatMap((match) => {
       const citation = citations.get(Number(match[1]));
       if (!citation) return [];
@@ -71,6 +92,14 @@ function withCitationBadges(
 
   for (const span of spans) {
     if (span.start > cursor) parts.push(text.slice(cursor, span.start));
+
+    // A span with no label is consumed and rendered as nothing -- a stray page
+    // anchor in a numbered reply.
+    if (span.label === null || span.target === null) {
+      cursor = span.start + span.length;
+      matched += 1;
+      continue;
+    }
 
     const key = `${keyPrefix}-${matched}`;
     const title = span.target.quote
@@ -197,17 +226,25 @@ export function MarkdownMessage({
   // never referenced: dropping it would make the citation vanish outright --
   // the exact failure that made this feature look broken -- so those trail the
   // answer as a single row of badges. Not a bibliography, just the leftovers.
+  // Still revealing: `text` is a prefix of the reply rather than all of it.
+  const revealing = source !== text;
+
   // Measured against the finished answer, not the revealed slice: otherwise a
   // marker the typewriter has not reached yet counts as unreferenced, and its
   // badge appears at the bottom only to vanish once the text catches up.
+  //
+  // Withheld entirely until the reveal finishes, so the leftovers cannot show
+  // up under a half-written answer -- they belong after the text, and arriving
+  // first is exactly the out-of-order flash this is meant to avoid.
   const orphans = useMemo(() => {
+    if (revealing) return [];
     const referenced = new Set(
       [...fullBody.matchAll(MARKER_PATTERN)].map((match) => Number(match[1])),
     );
     return [...citations.values()]
       .filter((citation) => !referenced.has(citation.index))
       .sort((left, right) => left.index - right.index);
-  }, [fullBody, citations]);
+  }, [revealing, fullBody, citations]);
 
   return (
     <>
