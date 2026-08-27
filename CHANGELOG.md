@@ -4,6 +4,11 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Eklendi
+- (#284) `scripts/evaluate_yazisma_vaka_seti.py`: gelen evrak-karar-cevap
+  kayıtlarını şema, karar/itiraz kotası, PII, mevzuat doğrulama izi, olgu
+  korunumu, provenance ve tam/yakın tekrar açısından deterministik olarak
+  denetleyen Aşama 4 kalite kapısı eklendi. Kapı canlı LLM/MCP çağrısı yapmaz;
+  makine-okunur istatistik ile Markdown kalite raporunu aynı girdiden üretir.
 - (#284) `scripts/mevzuat_dogrulama.py`: üretilen vakalardaki mevzuat
   atıflarını mevzuat.gov.tr'ye karşı **tür-farkındalıklı** doğrulayan modül
   (Aşama 3.2). Her atıf koşulsuz `mevzuat_tur="KANUN"` ile aranmaz; kanun,
@@ -75,6 +80,15 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   "Ham kaynaklar" bölümü.
 
 ### Düzeltildi
+- (#284) 240 vaka üretiminde `--max-cases` artık karar türlerini round-robin
+  dolaşıyor; önceki karar-dışı döngü 16 kayıtlık doğrulama partisinin tamamını
+  `tam_kabul` üretiyor ve dengeli kalite kapısını boşa düşürüyordu. `--resume`
+  ayrıca önceki partilerin kurum sayaçlarını geri yükleyerek 19/240 kurum
+  tavanını batch sınırları arasında koruyor. LLM'den gelen bütün serbest metin
+  metadata alanları aynı semantik anonimleştirme/PII denetiminden geçiriliyor;
+  few-shot provenance artık kart kimliği, yol, SHA-256 ve `source_group`
+  taşıyor, `required_facts`/`missing_information` yapısal şemaya alındı ve
+  itiraz kotası `incoming_type` üzerinden fail-closed doğrulanıyor.
 - (#284) Gelen evrak-karar-cevap şeması düzeltildi: `itiraz`, pilot vaka
   üretiminde yanlışlıkla ayrı bir `decision` değeri gibi kullanılmıştı;
   itiraz aslında bir gelen evrak türüdür (`incoming_type`), sonucu yine

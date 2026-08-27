@@ -46,6 +46,25 @@ def test_target_decisions_quota_sums_to_240():
     assert pilot.TOTAL_TARGET_CASES == 240
 
 
+def test_case_targets_are_round_robin_for_a_balanced_validation_batch():
+    first_sixteen = list(pilot._iter_case_targets())[:16]
+    decisions = [decision for decision, _spec, _index in first_sixteen]
+
+    assert set(decisions[:8]) == pilot.ALLOWED_DECISIONS
+    assert set(decisions[8:16]) == pilot.ALLOWED_DECISIONS
+    assert {decision: decisions.count(decision) for decision in decisions} == {
+        decision: 2 for decision in pilot.ALLOWED_DECISIONS
+    }
+
+
+def test_case_targets_preserve_all_240_quotas():
+    targets = list(pilot._iter_case_targets())
+
+    assert len(targets) == 240
+    for decision, spec in pilot.TARGET_DECISIONS.items():
+        assert sum(target_decision == decision for target_decision, _, _ in targets) == spec["adet"]
+
+
 def test_itiraz_quota_meets_minimum_and_overall_share_target():
     """Every decision type must carry at least ITIRAZ_MIN_PER_DECISION
     itiraz cases, and the total itiraz share across all 240 must land in
@@ -102,6 +121,20 @@ def test_load_existing_case_ids_reads_case_ids_for_resume(tmp_path):
 
 def test_load_existing_case_ids_is_empty_for_a_missing_file(tmp_path):
     assert pilot._load_existing_case_ids(tmp_path / "yok.jsonl") == set()
+
+
+def test_institution_counts_restore_previous_batches_for_resume():
+    cases = [
+        {"provenance": {"kurum_tahmini": "T.C. İzmir Valiliği"}},
+        {"provenance": {"kurum_tahmini": "T.C. İzmir Valiliği"}},
+        {"provenance": {"kurum_tahmini": "T.C. Ankara Valiliği"}},
+        {"provenance": {"kurum_tahmini": None}},
+    ]
+
+    assert pilot._institution_counts(cases) == {
+        "T.C. İzmir Valiliği": 2,
+        "T.C. Ankara Valiliği": 1,
+    }
 
 
 def test_append_jsonl_is_additive_and_creates_parent_dirs(tmp_path):
@@ -210,7 +243,13 @@ def _sahte_llm(monkeypatch, legal_basis):
         requested_action="Belge örneği talebi",
         decision_reason="Talep mevzuata uygundur.",
         outgoing_correspondence_type="cevap_yazisi",
-        required_facts=["Başvuru tarihi"],
+        required_facts=[
+            pilot._RequiredFact(
+                alan="başvuru tarihi",
+                deger="12.03.2026",
+                kaynak_satir="Başvuru 12.03.2026 tarihinde yapılmıştır.",
+            )
+        ],
         gold_draft="T.C.\nİZMİR VALİLİĞİ\n\nTalebiniz uygun görülmüştür.",
         must_include=["uygun görülmüştür"],
         must_not_invent=["gerçekte belirtilmeyen bir evrak sayısı"],
@@ -291,6 +330,56 @@ async def test_generate_one_accepts_a_case_with_no_citation_at_all(monkeypatch):
     assert reason == ""
     assert case["legal_basis"] == []
     assert dogrulayici.sorulan == []
+
+
+@pytest.mark.asyncio
+async def test_generate_one_masks_pii_in_all_free_text_metadata(monkeypatch):
+    _sahte_llm(monkeypatch, [])
+    original_factory = pilot.get_llm_client
+    client = original_factory(provider="evren", model="ignored", temperature=0.8)
+    generated = await client.generate_structured()
+    generated.used_person_names = ["Mehmet Demir"]
+    generated.requested_action = "Mehmet Demir adına belge örneği talebi"
+    generated.required_facts[0].deger = "Mehmet Demir"
+
+    class _Client:
+        async def generate_structured(self, **_kwargs):
+            return generated
+
+    monkeypatch.setattr(pilot, "get_llm_client", lambda **_kwargs: _Client())
+
+    case, reason, _ = await pilot._generate_one(
+        "tam_kabul", pilot.TARGET_DECISIONS["tam_kabul"], 8,
+        dogrulayici=_SahteDogrulayici(set()),
+    )
+
+    assert reason == ""
+    assert "Mehmet Demir" not in pilot.json.dumps(case, ensure_ascii=False)
+    assert case["requested_action"].startswith("[KİŞİ ADI]")
+
+
+@pytest.mark.asyncio
+async def test_generate_one_rejects_wrong_incoming_type_for_itiraz_quota(monkeypatch):
+    _sahte_llm(monkeypatch, [])
+
+    case, reason, _ = await pilot._generate_one(
+        "tam_kabul", pilot.TARGET_DECISIONS["tam_kabul"], 1,
+        dogrulayici=_SahteDogrulayici(set()), force_itiraz=True,
+    )
+
+    assert case is None
+    assert reason == "incoming_type_itiraz_bekleniyor"
+
+
+def test_few_shots_carry_traceable_provenance():
+    examples = pilot._load_few_shots(
+        pilot.TARGET_DECISIONS["tam_kabul"]["few_shot_glob"], 1
+    )
+
+    assert examples[0].card_id
+    assert examples[0].source_path.endswith(".md")
+    assert len(examples[0].card_sha256) == 64
+    assert len(examples[0].source_group) == 16
 
 
 def test_rejected_refs_are_fed_back_into_the_retry_prompt():

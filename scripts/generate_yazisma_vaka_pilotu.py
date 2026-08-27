@@ -34,7 +34,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 sys.path.append(os.path.dirname(__file__))
@@ -244,22 +244,45 @@ class _LegalReference(BaseModel):
     article: str = Field(default="", description="Madde numarası; emin değilsen boş bırak")
 
 
+class _RequiredFact(BaseModel):
+    """Gelen evraktan cevap taslağına taşınması gereken izlenebilir olgu."""
+
+    alan: str
+    deger: str
+    kaynak_satir: str = Field(description="Olgunun incoming_document içindeki kaynak cümlesi")
+
+
+class _MissingInformation(BaseModel):
+    """Başvurunun sonuçlandırılması için eksik olan bilgi veya belge."""
+
+    alan: str
+    neden: str
+
+
 class _GeneratedCase(BaseModel):
     """Evren'in doldurduğu alanlar -- ``case_id``/``provenance``/``split``
     gibi üretim-sonrası alanlar betik tarafından ayrıca eklenir, LLM'e
     bırakılmaz (deterministik ve izlenebilir kalsın diye)."""
 
     incoming_document: str = Field(description="Anonim, tam gelen evrak metni")
-    incoming_type: str
+    incoming_type: Literal[
+        "dilekce",
+        "bilgi_edinme_basvurusu",
+        "ust_yazi",
+        "sikayet",
+        "itiraz",
+        "kurum_talebi",
+        "soru_onergesi",
+    ]
     requested_action: str
     decision_reason: str = Field(description="Kararın gerekçesi, tek paragraf")
-    outgoing_correspondence_type: str = Field(
-        description="ust_yazi | cevap_yazisi | bilgilendirme_metni | diger_resmi_yazisma"
+    outgoing_correspondence_type: Literal[
+        "ust_yazi", "cevap_yazisi", "bilgilendirme_metni", "diger_resmi_yazisma"
+    ]
+    required_facts: list[_RequiredFact] = Field(
+        description="Gelen evraktan taslağa taşınması gereken izlenebilir olgular"
     )
-    required_facts: list[str] = Field(
-        description="Gelen evraktan taslağa taşınması gereken olgular"
-    )
-    missing_information: list[str] = Field(default_factory=list)
+    missing_information: list[_MissingInformation] = Field(default_factory=list)
     expected_questions: list[str] = Field(default_factory=list)
     gold_draft: str = Field(description="Referans cevap taslağının tam metni")
     must_include: list[str] = Field(description="Taslakta mutlaka geçmesi gereken ifadeler")
@@ -291,6 +314,10 @@ class FewShotExample:
     baslik: str
     kategori: str
     body_excerpt: str
+    card_id: str = ""
+    source_path: str = ""
+    card_sha256: str = ""
+    source_group: str = ""
 
 
 def _load_few_shots(
@@ -313,16 +340,30 @@ def _load_few_shots(
     random.Random(_FEW_SHOT_SEED).shuffle(candidates)  # deterministik ama çeşitli seçim
     examples: list[FewShotExample] = []
     for path in candidates:
-        meta, body = split_front_matter(read_text(path))
+        card_text = read_text(path)
+        meta, body = split_front_matter(card_text)
         if meta.get("rag_status") != "candidate":
             continue
         if niyet_filter is not None and meta.get("niyet") != niyet_filter:
             continue
+        source_path = path.relative_to(REPO_ROOT).as_posix()
+        source_identity = (
+            meta.get("kaynak_sha256")
+            or meta.get("kaynak_url")
+            or meta.get("kaynak")
+            or source_path
+        )
         examples.append(
             FewShotExample(
                 baslik=meta.get("baslik", path.stem),
                 kategori=meta.get("kategori", ""),
                 body_excerpt=body[:MAX_EXAMPLE_CHARS],
+                card_id=meta.get("id", path.stem),
+                source_path=source_path,
+                card_sha256=hashlib.sha256(card_text.encode("utf-8")).hexdigest(),
+                source_group=hashlib.sha256(str(source_identity).encode("utf-8")).hexdigest()[
+                    :16
+                ],
             )
         )
         if len(examples) >= count:
@@ -471,8 +512,45 @@ def _anonymization_findings(text: str) -> list[dict]:
     return [f for f in findings if f["otomatik_duzeltilebilir"]]
 
 
+def _sanitize_generated_value(value: Any, names: list[str]) -> Any:
+    """LLM'den gelen tüm serbest metin alanlarını aynı PII hattından geçir."""
+    if isinstance(value, str):
+        return _scrub_reported_names(semantic_anonymize(value), names)
+    if isinstance(value, list):
+        return [_sanitize_generated_value(item, names) for item in value]
+    if isinstance(value, dict):
+        return {key: _sanitize_generated_value(item, names) for key, item in value.items()}
+    return value
+
+
+def _case_template_group(incoming_document: str, gold_draft: str) -> str:
+    """Kurum+konu/şablon ailesini vaka kimliğinden bağımsız parmakizle."""
+    text = f"{incoming_document}\n{gold_draft}".casefold()
+    text = re.sub(r"\[[^\]]+\]", "[alan]", text)
+    text = re.sub(r"\b\d+(?:[./:-]\d+)*\b", "[sayi]", text)
+    text = re.sub(r"[^a-zçğıöşü\[\] ]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return f"tpl-{hashlib.sha256(text.encode('utf-8')).hexdigest()[:16]}"
+
+
 def _case_id(decision: str, index: int) -> str:
     return f"GKC-{decision.upper()}-{index:03d}"
+
+
+def _iter_case_targets():
+    """Karar türlerini round-robin sırada üret.
+
+    ``--max-cases`` küçük doğrulama partileri için kullanılıyor. Karar
+    türlerini dış döngüye koymak ilk 16 vakanın tamamını ``tam_kabul``
+    yapıyordu; bu da Aşama 4'te istenen dengeli kalite kapısını anlamsız
+    kılıyordu. İndeksi dış döngüye almak ilk 8 hedefi sekiz farklı karar
+    türüne dağıtırken 240'lık nihai kotaları değiştirmez.
+    """
+    max_quota = max(spec["adet"] for spec in TARGET_DECISIONS.values())
+    for index in range(1, max_quota + 1):
+        for decision, spec in TARGET_DECISIONS.items():
+            if index <= spec["adet"]:
+                yield decision, spec, index
 
 
 def _itiraz_count_for(adet: int) -> int:
@@ -527,16 +605,38 @@ async def _generate_one(
     except Exception as exc:  # keep the batch auditable, not fatal
         return None, f"llm_hatasi:{type(exc).__name__}", []
 
+    if force_itiraz and result.incoming_type != INCOMING_TYPE_ITIRAZ:
+        return None, "incoming_type_itiraz_bekleniyor", []
+    if not force_itiraz and result.incoming_type == INCOMING_TYPE_ITIRAZ:
+        return None, "incoming_type_itiraz_kota_disi", []
+
     anonymized_incoming = _scrub_reported_names(
         semantic_anonymize(result.incoming_document), result.used_person_names
     )
     anonymized_draft = _scrub_reported_names(
         semantic_anonymize(result.gold_draft), result.used_person_names
     )
+    sanitized_fields = _sanitize_generated_value(
+        {
+            "requested_action": result.requested_action,
+            "decision_reason": result.decision_reason,
+            "required_facts": [fact.model_dump() for fact in result.required_facts],
+            "missing_information": [item.model_dump() for item in result.missing_information],
+            "expected_questions": result.expected_questions,
+            "must_include": result.must_include,
+            "must_not_invent": result.must_not_invent,
+        },
+        result.used_person_names,
+    )
     bad_incoming = _anonymization_findings(anonymized_incoming)
     bad_draft = _anonymization_findings(anonymized_draft)
-    if bad_incoming or bad_draft:
-        kinds = sorted({f["bulgu_turu"] for f in [*bad_incoming, *bad_draft]})
+    bad_metadata = _anonymization_findings(
+        json.dumps(sanitized_fields, ensure_ascii=False, sort_keys=True)
+    )
+    if bad_incoming or bad_draft or bad_metadata:
+        kinds = sorted(
+            {f["bulgu_turu"] for f in [*bad_incoming, *bad_draft, *bad_metadata]}
+        )
         return None, f"anonimlestirme:{','.join(kinds)}", []
 
     # Aşama 3.2: mevzuat atıfları mevzuat.gov.tr'ye karşı doğrulanır.
@@ -561,24 +661,43 @@ async def _generate_one(
         return None, f"mevzuat_dogrulanamadi:{','.join(sorted(set(gerekceler)))}", reddedilenler
 
     case_id = _case_id(decision, index)
-    source_group = hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:16]
+    source_group = _case_template_group(anonymized_incoming, anonymized_draft)
     institution = _extract_institution(anonymized_incoming) or _extract_institution(
         anonymized_draft
     )
+    combined_text = json.dumps(
+        {
+            "incoming_document": anonymized_incoming,
+            "gold_draft": anonymized_draft,
+            **sanitized_fields,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+    placeholders = sorted(set(re.findall(r"\[[^\]\n]{2,80}\]", combined_text)))
+    references = [
+        {
+            "kaynak_kart_id": ex.card_id,
+            "kaynak_yolu": ex.source_path,
+            "kaynak_sha256": ex.card_sha256,
+            "source_group": ex.source_group,
+        }
+        for ex in examples
+    ]
     case = {
         "case_id": case_id,
         "incoming_document": anonymized_incoming,
         "incoming_type": result.incoming_type,
-        "requested_action": result.requested_action,
+        "requested_action": sanitized_fields["requested_action"],
         "decision": decision,
-        "decision_reason": result.decision_reason,
+        "decision_reason": sanitized_fields["decision_reason"],
         "outgoing_correspondence_type": result.outgoing_correspondence_type,
-        "required_facts": result.required_facts,
-        "missing_information": result.missing_information,
-        "expected_questions": result.expected_questions,
+        "required_facts": sanitized_fields["required_facts"],
+        "missing_information": sanitized_fields["missing_information"],
+        "expected_questions": sanitized_fields["expected_questions"],
         "gold_draft": anonymized_draft,
-        "must_include": result.must_include,
-        "must_not_invent": result.must_not_invent,
+        "must_include": sanitized_fields["must_include"],
+        "must_not_invent": sanitized_fields["must_not_invent"],
         # Yapısal (Aşama 3.2) + türetilmiş okunabilir biçim. ``title``
         # LLM'in iddiası değil, MCP'den gelen RESMÎ addır.
         "legal_basis": dogrulanmis,
@@ -586,8 +705,16 @@ async def _generate_one(
         "source_origin": "sentetik_kurgu",
         "provenance": {
             "uretim_yontemi": "evren_llm_large_few_shot",
-            "uslup_referanslari": [ex.baslik for ex in examples],
+            "uslup_referanslari": references,
             "kurum_tahmini": institution,
+        },
+        "evidence": [
+            {"tur": "uslup_referansi", **reference} for reference in references
+        ],
+        "anonymization": {
+            "yontem": "semantic_anonymize+reported_name_scrub+privacy_audit",
+            "yer_tutucular": placeholders,
+            "denetim_durumu": "uygun",
         },
         "review_status": "taslak",
         "source_group": source_group,
@@ -596,18 +723,33 @@ async def _generate_one(
     return case, "", []
 
 
-def _load_existing_case_ids(path: Path) -> set[str]:
-    """--resume için: dosyada zaten yazılı case_id'leri oku."""
+def _load_existing_cases(path: Path) -> list[dict[str, Any]]:
+    """Checkpoint dosyasındaki doğrulanmış kayıtları yükle."""
     if not path.exists():
-        return set()
-    ids: set[str] = set()
+        return []
+    cases: list[dict[str, Any]] = []
     with path.open(encoding="utf-8") as handle:
         for line in handle:
             line = line.strip()
             if not line:
                 continue
-            ids.add(json.loads(line)["case_id"])
-    return ids
+            cases.append(json.loads(line))
+    return cases
+
+
+def _load_existing_case_ids(path: Path) -> set[str]:
+    """--resume için: dosyada zaten yazılı case_id'leri oku."""
+    return {case["case_id"] for case in _load_existing_cases(path)}
+
+
+def _institution_counts(cases: list[dict[str, Any]]) -> dict[str, int]:
+    """Resume sonrasında kurum kotasını önceki partilerle birlikte say."""
+    counts: dict[str, int] = {}
+    for case in cases:
+        institution = case.get("provenance", {}).get("kurum_tahmini")
+        if institution:
+            counts[institution] = counts.get(institution, 0) + 1
+    return counts
 
 
 def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
@@ -622,11 +764,12 @@ async def _run(
     *, apply: bool, resume: bool, max_cases: int | None, max_retries: int = 3
 ) -> list[dict[str, Any]]:
     total_quota = sum(spec["adet"] for spec in TARGET_DECISIONS.values())
-    already_done = _load_existing_case_ids(MAIN_OUTPUT) if (apply and resume) else set()
+    existing_cases = _load_existing_cases(MAIN_OUTPUT) if (apply and resume) else []
+    already_done = {case["case_id"] for case in existing_cases}
     if already_done:
         print(f"--resume: {len(already_done)} vaka zaten mevcut, atlanacak.")
 
-    institution_counts: dict[str, int] = {}
+    institution_counts = _institution_counts(existing_cases)
     total_generated_this_run = 0
     cases: list[dict[str, Any]] = []
     dogrulayici = MevzuatDogrulayici()
@@ -635,88 +778,89 @@ async def _run(
     for decision, spec in TARGET_DECISIONS.items():
         itiraz_quota = _itiraz_count_for(spec["adet"])
         print(f"Üretiliyor: {decision} ({spec['adet']} vaka, {itiraz_quota} itiraz)")
-        for index in range(1, spec["adet"] + 1):
-            if max_cases is not None and total_generated_this_run >= max_cases:
-                print(f"--max-cases={max_cases} sınırına ulaşıldı, durduruluyor.")
-                return cases
 
-            case_id = _case_id(decision, index)
-            if case_id in already_done:
+    for decision, spec, index in _iter_case_targets():
+        if max_cases is not None and total_generated_this_run >= max_cases:
+            print(f"--max-cases={max_cases} sınırına ulaşıldı, durduruluyor.")
+            return cases
+
+        case_id = _case_id(decision, index)
+        if case_id in already_done:
+            continue
+
+        total_completed = len(already_done) + total_generated_this_run
+        avoid = None
+        if total_completed >= INSTITUTION_WARMUP_CASES:
+            cap = round(INSTITUTION_MAX_SHARE * total_quota)
+            avoid = sorted(k for k, v in institution_counts.items() if v >= cap) or None
+
+        force_itiraz = index <= _itiraz_count_for(spec["adet"])
+
+        case: dict[str, Any] | None = None
+        reason = ""
+        rejected_refs: list[str] = []
+        for attempt in range(1, max_retries + 1):
+            try:
+                case, reason, rejected_refs = await _generate_one(
+                    decision,
+                    spec,
+                    index,
+                    dogrulayici=dogrulayici,
+                    avoid_institutions=avoid,
+                    force_itiraz=force_itiraz,
+                    rejected_refs=rejected_refs,
+                )
+            except MevzuatAltyapiHatasi as exc:
+                ardisik_altyapi_hatasi += 1
+                print(
+                    f"  [deneme {attempt}/{max_retries}] {case_id}: "
+                    f"mevzuat_altyapi_hatasi ({exc}) "
+                    f"[{ardisik_altyapi_hatasi}/{MEVZUAT_ALTYAPI_HATA_ESIGI}]"
+                )
+                if ardisik_altyapi_hatasi >= MEVZUAT_ALTYAPI_HATA_ESIGI:
+                    raise RuntimeError(
+                        "mevzuat-mcp sunucusuna üst üste "
+                        f"{ardisik_altyapi_hatasi} kez ulaşılamadı; üretim "
+                        "durduruldu. Sunucuyu düzeltip --resume ile devam "
+                        "edin -- yazılmış vakalar korunur."
+                    ) from exc
                 continue
-
-            total_this_run = sum(institution_counts.values())
-            avoid = None
-            if total_this_run + len(already_done) >= INSTITUTION_WARMUP_CASES:
-                cap = round(INSTITUTION_MAX_SHARE * total_quota)
-                avoid = sorted(k for k, v in institution_counts.items() if v >= cap) or None
-
-            force_itiraz = index <= itiraz_quota
-
-            case: dict[str, Any] | None = None
-            reason = ""
-            rejected_refs: list[str] = []
-            for attempt in range(1, max_retries + 1):
-                try:
-                    case, reason, rejected_refs = await _generate_one(
-                        decision,
-                        spec,
-                        index,
-                        dogrulayici=dogrulayici,
-                        avoid_institutions=avoid,
-                        force_itiraz=force_itiraz,
-                        rejected_refs=rejected_refs,
-                    )
-                except MevzuatAltyapiHatasi as exc:
-                    ardisik_altyapi_hatasi += 1
-                    print(
-                        f"  [deneme {attempt}/{max_retries}] {case_id}: "
-                        f"mevzuat_altyapi_hatasi ({exc}) "
-                        f"[{ardisik_altyapi_hatasi}/{MEVZUAT_ALTYAPI_HATA_ESIGI}]"
-                    )
-                    if ardisik_altyapi_hatasi >= MEVZUAT_ALTYAPI_HATA_ESIGI:
-                        raise RuntimeError(
-                            "mevzuat-mcp sunucusuna üst üste "
-                            f"{ardisik_altyapi_hatasi} kez ulaşılamadı; üretim "
-                            "durduruldu. Sunucuyu düzeltip --resume ile devam "
-                            "edin -- yazılmış vakalar korunur."
-                        ) from exc
-                    continue
-                ardisik_altyapi_hatasi = 0
-                if case:
-                    break
-                print(f"  [deneme {attempt}/{max_retries}] {case_id}: {reason}")
-                if apply:
-                    _append_jsonl(
-                        MAIN_ERRORS,
-                        {
-                            "case_id": case_id,
-                            "decision": decision,
-                            "index": index,
-                            "attempt": attempt,
-                            "basarisizlik_kategorisi": reason,
-                        },
-                    )
-
-            if not case:
-                print(f"  [BAŞARISIZ] {case_id}: {max_retries} denemede de üretilemedi ({reason})")
-                continue
-
-            cases.append(case)
-            total_generated_this_run += 1
-            institution = case["provenance"]["kurum_tahmini"]
-            if institution:
-                institution_counts[institution] = institution_counts.get(institution, 0) + 1
-            preview = case["incoming_document"][:140].replace("\n", " ")
-            itiraz_tag = " [itiraz]" if force_itiraz else ""
-            print(f"  [tamam] {case_id}{itiraz_tag}: {preview}...")
-
+            ardisik_altyapi_hatasi = 0
+            if case:
+                break
+            print(f"  [deneme {attempt}/{max_retries}] {case_id}: {reason}")
             if apply:
-                _append_jsonl(MAIN_OUTPUT, case)
+                _append_jsonl(
+                    MAIN_ERRORS,
+                    {
+                        "case_id": case_id,
+                        "decision": decision,
+                        "index": index,
+                        "attempt": attempt,
+                        "basarisizlik_kategorisi": reason,
+                    },
+                )
+
+        if not case:
+            print(f"  [BAŞARISIZ] {case_id}: {max_retries} denemede de üretilemedi ({reason})")
+            continue
+
+        cases.append(case)
+        total_generated_this_run += 1
+        institution = case["provenance"]["kurum_tahmini"]
+        if institution:
+            institution_counts[institution] = institution_counts.get(institution, 0) + 1
+        preview = case["incoming_document"][:140].replace("\n", " ")
+        itiraz_tag = " [itiraz]" if force_itiraz else ""
+        print(f"  [tamam] {case_id}{itiraz_tag}: {preview}...")
+
+        if apply:
+            _append_jsonl(MAIN_OUTPUT, case)
 
     grand_total = len(already_done) + total_generated_this_run
     print(f"\nBu çalıştırmada üretilen: {total_generated_this_run}")
     print(f"Toplam (resume dahil): {grand_total}/{total_quota}")
-    print(f"Kurum çeşitliliği (bu çalıştırma): {len(institution_counts)} farklı kurum")
+    print(f"Kurum çeşitliliği (toplam): {len(institution_counts)} farklı kurum")
     atifli = sum(1 for case in cases if case["legal_basis"])
     atif_sayisi = sum(len(case["legal_basis"]) for case in cases)
     print(f"Doğrulanmış mevzuat atfı: {atif_sayisi} adet, {atifli} vakada")
