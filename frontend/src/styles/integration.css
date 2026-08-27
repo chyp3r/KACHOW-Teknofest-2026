@@ -360,7 +360,37 @@
 }
 .chat-layout { display: block; min-height: 0; }
 .messages-area { width: 100%; padding: var(--space-3) var(--space-1) var(--space-6); }
-.chat-guardrail-stack { display: grid; gap: var(--space-2); flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
+.chat-guardrail-stack {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(45dvh, 360px);
+  overflow-y: auto;
+}
+/* Long, unbroken model text (a stray URL, a run-on token) must wrap instead
+   of stretching the alert and forcing the whole stack to scroll sideways. */
+.chat-guardrail-stack .alert-content { min-width: 0; overflow-wrap: anywhere; }
+.chat-guardrail-reasons { display: grid; gap: var(--space-2); }
+.chat-guardrail-reasons > p { margin: 0; }
+.chat-guardrail-removed {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid color-mix(in srgb, var(--status-failed) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-failed) 8%, transparent);
+}
+.chat-guardrail-removed-label {
+  font-size: var(--text-overline);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-secondary);
+}
+.chat-guardrail-removed ul { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+.chat-guardrail-removed li { font-style: italic; color: var(--text-secondary); }
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
 .chat-content .interrupt-panel .draft-preview { max-height: none; overflow: visible; }
 .chat-content > .alert,

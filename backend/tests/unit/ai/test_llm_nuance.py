@@ -6,9 +6,11 @@ import pytest
 
 from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
 from app.ai.guardrails.llm_nuance import (
+    GroundednessJudgeVerdict,
     GuardrailJudgeVerdict,
     judge_input_sensitivity,
     judge_output_leakage,
+    judge_reply_groundedness,
 )
 
 
@@ -176,4 +178,84 @@ async def test_judge_output_leakage_returns_the_verdict_on_success(fake_fast_llm
 async def test_judge_output_leakage_returns_none_for_empty_reply(fake_fast_llm):
     agent = GuardrailJudgeAgent(fake_fast_llm)
     result = await judge_output_leakage(agent, reply="", source_summary="özet")
+    assert result is None
+
+
+# ==========================================
+# judge_reply_groundedness()
+# ==========================================
+@pytest.mark.asyncio
+async def test_judge_reply_groundedness_returns_the_verdict_on_success(fake_fast_llm):
+    agent = GuardrailJudgeAgent(fake_fast_llm)
+    verdict = GroundednessJudgeVerdict(
+        grounded=False,
+        confidence=0.9,
+        ungrounded_sentences=["Talebe yerine Bilgi İşlem Müdürlüğü vekâlet edecektir."],
+        reason="Vekâlet eden birim ne özette ne de evrak metninde geçiyor.",
+    )
+
+    async def fake_run_structured(**kwargs):
+        return verdict
+
+    agent.run_structured = fake_run_structured
+
+    result = await judge_reply_groundedness(
+        agent,
+        reply="Talebe yerine Bilgi İşlem Müdürlüğü vekâlet edecektir.",
+        document_summary="Bir izin talebi.",
+        source_text="",
+    )
+
+    assert result is verdict
+
+
+@pytest.mark.asyncio
+async def test_judge_reply_groundedness_returns_none_for_empty_reply(fake_fast_llm):
+    agent = GuardrailJudgeAgent(fake_fast_llm)
+    result = await judge_reply_groundedness(
+        agent, reply="   ", document_summary="özet", source_text="metin"
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_judge_reply_groundedness_degrades_to_none_on_timeout(fake_fast_llm):
+    agent = GuardrailJudgeAgent(fake_fast_llm)
+
+    async def hangs(**kwargs):
+        await asyncio.sleep(10)
+
+    agent.run_structured = hangs
+
+    result = await judge_reply_groundedness(
+        agent,
+        reply="bir yanıt",
+        document_summary="özet",
+        source_text="kaynak",
+        timeout_s=0.01,
+    )
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_judge_reply_groundedness_rejects_a_verdict_that_echoes_the_source(fake_fast_llm):
+    """The anti-echo guard runs against the SOURCE text here -- a judge that
+    fills its reason with the document's own words is reflecting, not judging."""
+    agent = GuardrailJudgeAgent(fake_fast_llm)
+    source = (
+        "Başvuran memur, 12 Mart 2026 tarihli dilekçesinde yıllık izninin "
+        "on beş gün olarak kullandırılmasını talep etmiştir"
+    )
+    echoing = GroundednessJudgeVerdict(
+        grounded=False, confidence=0.9, ungrounded_sentences=[], reason=source
+    )
+
+    async def fake_run_structured(**kwargs):
+        return echoing
+
+    agent.run_structured = fake_run_structured
+
+    result = await judge_reply_groundedness(
+        agent, reply="kısa yanıt", document_summary="özet", source_text=source
+    )
     assert result is None

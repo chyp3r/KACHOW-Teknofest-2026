@@ -89,6 +89,15 @@ services:
       - MEVZUAT_MCP_COMMAND=${MEVZUAT_MCP_COMMAND:-/tmp/mcpvenv/bin/mevzuat-mcp}
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    # frontend bu servisin gerçekten HTTP'ye yanıt verdiğini bekleyebilsin
+    # diye (kısa /api/v1/health -- deep=false, yani yalnızca "süreç ayakta";
+    # Postgres/Redis/Ollama'yı yoklamaz. curl imajda yok, python:3.12-slim var).
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health', timeout=5)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
     depends_on:
       - db
       - redis
@@ -338,7 +347,8 @@ services:
       # REQUIRE_AUTH=false ile çalıştırırken aç.
       - VITE_DEV_AUTH_BYPASS=${VITE_DEV_AUTH_BYPASS:-false}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   postgres_data:

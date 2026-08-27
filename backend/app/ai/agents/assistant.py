@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any, AsyncIterator, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -9,16 +10,93 @@ from app.ai.identity.injection import format_agent_identity, format_user_address
 from app.ai.llms.base import BaseLLMClient
 from app.ai.prompts.manager import PromptManager, get_prompt_manager
 from app.ai.tools.registry import ToolSpec, to_langchain_tool
+from app.core.config import settings
 from app.observability.ai_metrics import LLM_TOKENS
 
 logger = logging.getLogger(__name__)
 
-#: İki araç turu, daha fazla değil. Her tur tam bir yerel üretimdir; iki tur
-#: sonunda hâlâ bir yanıta yakınsamamış bir istek, üçüncü bir veri noktasına
-#: ihtiyaç duyan bir modelden çok tekrar tekrar sorgulayan bir model olma
-#: ihtimali daha yüksektir ve üçüncü bir deneme, bundan nadiren fayda gören
-#: bir vaka için "assist" node'unun zaman bütçesini patlatır.
-MAX_TOOL_TURNS = 2
+#: Yerel (Ollama) modda iki araç turu, daha fazla değil. Her tur tam bir
+#: yerel üretimdir; iki tur sonunda hâlâ bir yanıta yakınsamamış bir istek,
+#: üçüncü bir veri noktasına ihtiyaç duyan bir modelden çok tekrar tekrar
+#: sorgulayan bir model olma ihtimali daha yüksektir ve üçüncü bir deneme,
+#: bundan nadiren fayda gören bir vaka için "assist" node'unun zaman
+#: bütçesini patlatır.
+MAX_TOOL_TURNS_LOCAL = 2
+
+#: Evren'e (çevrimiçi, TEKNOFEST barındırmalı API) bağlıyken daha yüksek bir
+#: tavan. Uzak çıkarım yerel bir turdan belirgin biçimde daha hızlıdır, bu
+#: yüzden "assist" node'unun zaman bütçesi birkaç araç turunu rahatça
+#: kaldırır; bu da modele, yanıt için gereken bilgiye ulaşana kadar farklı
+#: araçları (belge erişimi, mevzuat, birim yönlendirme, ...) sırayla deneme
+#: alanı verir.
+MAX_TOOL_TURNS_EVREN = 5
+
+
+def _max_tool_turns() -> int:
+    """Aktif sağlayıcıya göre araç turu tavanı.
+
+    ``settings.LOCAL_MODE`` yerel Ollama ile Evren arasında seçim yapan aynı
+    anahtardır (bkz. ``app.ai.llms._default_provider``); burada onu doğrudan
+    okumak, tavanı ``run_stream``'in çağrı imzasını değiştirmeden sağlayıcıya
+    bağlar.
+    """
+    return MAX_TOOL_TURNS_LOCAL if settings.LOCAL_MODE else MAX_TOOL_TURNS_EVREN
+
+
+#: Bir belge ekliyken, model araç çağırmayı bırakıp bu kalıplardan birini
+#: içeren bir "bulamadım / bilmiyorum" yanıtıyla turu bitirmeye çalışıyorsa ve
+#: henüz erişim (retrieval) bütçesini tüketmemişse, yanıtı kabul etme;
+#: denemediği araç/sorguları denemesi için döngüyü sürdür (bkz.
+#: ``run_stream``). Bir kaç yanlış pozitif yalnızca bir ekstra tur maliyeti
+#: getirir -- kabul edilebilir takas.
+_GIVEUP_PATTERN = re.compile(
+    "|".join(
+        (
+            r"bilmiyor",
+            r"bulamad",
+            r"ulaşamad",
+            r"erişemed",
+            r"rastlan[ıa]mad",
+            r"tespit\s+edemed",
+            r"yer\s+alm[ıi]yor",
+            r"yer\s+almamakta",
+            r"geçmiyor",
+            r"geçmemekte",
+            r"bulunmuyor",
+            r"bulunmamakta",
+            r"mevcut\s+değil",
+            r"belirtilm(?:emiş|emekte)",
+            r"içermiyor",
+            r"içermemekte",
+            r"söz\s+edilm",
+            r"bahsedilm",
+            r"herhangi\s+bir\s+bilgi\w*\s+(?:yok|bulun)",
+            r"belge\w*\s+\w*\s*yer\s+alm",
+            r"evrak\w*\s+\w*\s*(?:yok|bulun\w*may)",
+        )
+    ),
+    re.IGNORECASE,
+)
+
+#: "Bulamadım"la turu erken kapatan modele, denemediği yolları hatırlatan ve
+#: en az bir arama aracı daha çağırmasını isteyen düzeltme mesajı.
+_GIVEUP_RETRY_NUDGE = (
+    "Bu yanıtı henüz verme. Yukarıdaki soru için yüklü evrakta bilgi olup "
+    "olmadığını yeterince araştırmadın. Henüz denemediğin arama yollarını kullan: "
+    "anlamsal aramayı farklı ifadelerle tekrarla; metin/regex satır aramasını "
+    "farklı kalıplarla dene (eş anlamlılar, kısaltmalar, kısmi kökler, sayı/tarih "
+    "biçim varyantları); özet / üst veri / uygunluk çıktısını getir; sayfa "
+    "dökümünü çıkar ve ilgili sayfanın tam metnini oku. En az bir arama aracını "
+    "daha çağır. Ancak bunları da denedikten sonra sonuç çıkmazsa 'yüklü evrakta "
+    "bu bilgiye ulaşamadım' de. NİHAİ yanıtında hangi aramaları/kalıpları/"
+    "terimleri denediğini veya kaç kez arama yaptığını ANLATMA; kullanıcı yalnızca "
+    "son, net sonucu düzgün bir biçimde görmeli."
+)
+
+
+def _looks_like_giveup(text: Optional[str]) -> bool:
+    """Yanıt, bir arama sonucu değil bir "bulamadım/bilmiyorum" itirafı gibi mi okunuyor."""
+    return bool(text) and _GIVEUP_PATTERN.search(text) is not None
 
 
 class AssistantAgent(BaseAgent):
@@ -64,6 +142,7 @@ class AssistantAgent(BaseAgent):
         agent_identity: Optional[str] = None,
         user_display_name: Optional[str] = None,
         tools: list[ToolSpec],
+        document_attached: bool = False,
         config: Optional[RunnableConfig] = None,
         node: str = "assist",
     ) -> AsyncIterator[str]:
@@ -96,6 +175,11 @@ class AssistantAgent(BaseAgent):
             tools: Bu tur için bağlanabilir araçlar. Hiçbir şey ekli değilse
                 (belge yok, mevzuat erişimcisi yok) boştur -- bu durumda döngü
                 tamamen atlanır ve bu düz bir sohbet gibi davranır.
+            document_attached: Bu turda bir belge ekli mi. True ise, model
+                erişim bütçesini tüketmeden "bulamadım/bilmiyorum" diyerek
+                turu erken kapatmaya çalışırsa yanıt kabul edilmez; denemediği
+                araç/sorguları denemesi için döngü bir düzeltme mesajıyla
+                sürdürülür (bkz. ``_GIVEUP_PATTERN`` / ``_GIVEUP_RETRY_NUDGE``).
             config: Bir alt grafiği tetikleyen araç işleyicilerine iletilen ve
                 ``tool_call`` ilerleme olaylarını yayınlamak için kullanılan
                 çalıştırılabilir yapılandırma.
@@ -134,11 +218,14 @@ class AssistantAgent(BaseAgent):
         # yanıt varken döngüyü temiz bir şekilde (başka araç çağrısı olmadan)
         # bitirdiğinde set edilir -- yakınsamış bir araç turunun yaygın
         # biçimi. Diğer her çıkışta (bir turun kendi çağrısı hata fırlattı,
-        # MAX_TOOL_TURNS bir araç çağrısı beklerken tükendi ya da hiç araç
+        # tur tavanı bir araç çağrısı beklerken tükendi ya da hiç araç
         # bağlanmadı) None bırakılır; böylece bunlar tam olarak eskisi gibi
         # aşağıdaki gerçek stream() çağrısına düşmeye devam eder.
         final_response_content: Optional[str] = None
-        for _ in range(MAX_TOOL_TURNS if lc_tools else 0):
+        max_tool_turns = _max_tool_turns()
+        tool_calls_made = 0
+        giveup_nudges = 0
+        for _ in range(max_tool_turns if lc_tools else 0):
             try:
                 response = await self.llm_client.generate_with_tools(
                     messages=messages, tools=lc_tools, temperature=0.2
@@ -148,6 +235,30 @@ class AssistantAgent(BaseAgent):
                 break
 
             if not response.tool_calls:
+                # Model turu bitirmek istiyor. Bir belge ekliyken, henüz
+                # erişim bütçesini (max_tool_turns kadar araç çağrısı)
+                # tüketmeden bir "bulamadım/bilmiyorum" yanıtıyla kapatmaya
+                # çalışıyorsa kabul etme -- atladığı araç/sorguları denemesi
+                # için bir düzeltme mesajı ekleyip döngüyü sürdür. giveup
+                # nudge sayısı da tavanla sınırlı, yani en kötü ihtimalle
+                # döngü yine max_tool_turns çağrıdan sonra biter.
+                if (
+                    document_attached
+                    and lc_tools
+                    and tool_calls_made < max_tool_turns
+                    and giveup_nudges < max_tool_turns
+                    and _looks_like_giveup(response.content)
+                ):
+                    giveup_nudges += 1
+                    logger.info(
+                        "AssistantAgent give-up reply after %d tool call(s); nudging to retry (%d).",
+                        tool_calls_made,
+                        giveup_nudges,
+                    )
+                    if response.content:
+                        messages.append({"role": "assistant", "content": response.content})
+                    messages.append({"role": "user", "content": _GIVEUP_RETRY_NUDGE})
+                    continue
                 final_response_content = response.content
                 break
 
@@ -159,6 +270,7 @@ class AssistantAgent(BaseAgent):
                 }
             )
             for call in response.tool_calls:
+                tool_calls_made += 1
                 spec = tools_by_name.get(call["name"])
                 await emit_tool_call(config, node, call["name"], call.get("args") or {})
                 if spec is None:

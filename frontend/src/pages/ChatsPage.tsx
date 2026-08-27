@@ -224,17 +224,39 @@ export function ChatsPage({
         {historyLoading && <div className="processing-line"><Spinner label="Sohbet yükleniyor" />Sohbet yükleniyor…</div>}
         {guardrailEvents.length > 0 && (
           <div className="chat-guardrail-stack">
-            {guardrailEvents.map((guardrail, index) => (
-              <Alert
-                variant={guardrail.decision === "blocked" ? "error" : "warning"}
-                title={`Güvenlik kontrolü: ${guardrailDecisionLabel(guardrail.decision)}`}
-                key={`${guardrail.stage}-${guardrail.kind}-${index}`}
-              >
-                <span>
-                  {guardrail.reasons.map(formatGuardrailReason).join(" · ")}
-                </span>
-              </Alert>
-            ))}
+            {guardrailEvents.map((guardrail, index) => {
+              const summary = guardrail.reasons.filter(
+                (reason) => !reason.startsWith("Kaldırılan cümle:"),
+              );
+              const removed = guardrail.reasons
+                .filter((reason) => reason.startsWith("Kaldırılan cümle:"))
+                .map((reason) => reason.replace(/^Kaldırılan cümle:\s*/, ""));
+              return (
+                <Alert
+                  variant={guardrail.decision === "blocked" ? "error" : "warning"}
+                  title={`Güvenlik kontrolü: ${guardrailDecisionLabel(guardrail.decision)}`}
+                  key={`${guardrail.stage}-${guardrail.kind}-${index}`}
+                >
+                  <div className="chat-guardrail-reasons">
+                    {summary.length > 0 && (
+                      <p>{summary.map(formatGuardrailReason).join(" · ")}</p>
+                    )}
+                    {removed.length > 0 && (
+                      <div className="chat-guardrail-removed">
+                        <span className="chat-guardrail-removed-label">
+                          Doğrulanamadığı için kaldırılan cümle{removed.length > 1 ? "ler" : ""}
+                        </span>
+                        <ul>
+                          {removed.map((sentence, i) => (
+                            <li key={i}>{sentence}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </Alert>
+              );
+            })}
           </div>
         )}
         <MessageList

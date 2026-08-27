@@ -17,7 +17,7 @@ from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_his
 from app.ai.context.compress import truncate_with_marker
 from app.ai.context.usage import compute_context_usage
 from app.ai.embeddings.models import BaseEmbeddingsClient
-from app.ai.guardrails.llm_nuance import judge_output_leakage
+from app.ai.guardrails.llm_nuance import judge_output_leakage, judge_reply_groundedness
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
 from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
@@ -478,6 +478,54 @@ def _mevzuat_context(classification: dict[str, Any]) -> str:
             parts.append(f"[MEVZUAT] {item['mevzuat']}: {item.get('aciklama', '')}")
 
     return "\n\n".join(parts)
+
+
+#: Yüklü evrak bu turda değiştiğinde ``document_context``'in başına eklenen
+#: uyarı. Konuşma geçmişi ve hafıza özeti hâlâ eski evrağı anlatır; bu
+#: olmadan model onları bu turdaki evrak hakkında doğruymuş gibi kullanıp
+#: eski evrakla ilgili cevap veriyordu.
+_DOCUMENT_SWITCHED_NOTE = (
+    "DİKKAT: Bu turda yüklü olan belge, önceki turlarda konuşulan belgeden "
+    "FARKLI bir belgedir. Konuşma geçmişindeki ve hafıza özetindeki belgeye "
+    "özgü bilgiler (içerik, konu, tarih, sayı, taraflar, bulgular, uygunluk "
+    "durumu) BAŞKA bir belgeye aittir; onları bu belge için doğru varsayma. "
+    "Kullanıcının bu turdaki sorusunu yalnızca aşağıdaki özete ve bu turda "
+    "araçlarla getirdiğin bilgilere dayanarak yanıtla; gereken bilgiyi bu "
+    "belge için yeniden getir."
+)
+
+
+def _assist_document_context(
+    summary: str | None,
+    *,
+    document_id: str | None,
+    prior_document_id: str | None,
+) -> str:
+    """``AssistantAgent.run_stream``'in "## Bu Turda Yüklenmiş Belge" bloğunu render eder.
+
+    Args:
+        summary: Bu turun evrağının analiz özeti (``analysis["summary"]``).
+        document_id: Bu turda yüklü evrak, varsa.
+        prior_document_id: Önceki turların aktif evrağı
+            (``focus.active_document_id``) -- ``focus_node`` turun sonuna
+            kadar güncellenmediği için ``_run_assist`` sırasında hâlâ bir
+            önceki turun değerini taşır. ``document_id``'den farklıysa,
+            kullanıcı sohbet ortasında evrağı değiştirmiş demektir ve
+            bloğun başına :data:`_DOCUMENT_SWITCHED_NOTE` eklenir.
+
+    Returns:
+        Sistem prompt'una gömülecek metin.
+    """
+    if not document_id:
+        return "(Bu turda yüklenmiş bir belge yok.)"
+
+    context = (
+        f"Bir belge yüklü. Özet: {summary or 'Özet mevcut değil.'}\n"
+        "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
+    )
+    if prior_document_id and prior_document_id != document_id:
+        return f"{_DOCUMENT_SWITCHED_NOTE}\n\n{context}"
+    return context
 
 
 def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
@@ -1126,12 +1174,16 @@ def create_planning_graph(
         requester_clearance = (
             SensitivityLevel(requester_clearance_raw) if requester_clearance_raw else None
         )
-        document_context = "(Bu turda yüklenmiş bir belge yok.)"
-        if document_id:
-            document_context = (
-                f"Bir belge yüklü. Özet: {analysis.get('summary') or 'Özet mevcut değil.'}\n"
-                "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
-            )
+        # `focus.active_document_id` bu turun sonundaki `focus_node`'a kadar
+        # güncellenmez (bkz. focus_node docstring), yani burada hâlâ bir
+        # önceki turun evrağını taşır -- kullanıcı sohbet ortasında evrağı
+        # değiştirip değiştirmediğini anlamak için tam da istediğimiz değer.
+        prior_document_id = (state.get("focus") or SessionFocus()).active_document_id
+        document_context = _assist_document_context(
+            analysis.get("summary"),
+            document_id=document_id,
+            prior_document_id=prior_document_id,
+        )
 
         # A message that resolved to `assist` *because* it's plain small talk
         # (a greeting, a courtesy, a sign-off) and nothing else -- not one
@@ -1342,6 +1394,7 @@ def create_planning_graph(
                     agent_identity=format_agent_identity(profile),
                     user_display_name=format_user_address(state.get("user_display_name")),
                     tools=tools,
+                    document_attached=bool(document_id),
                     config=config,
                     node="assist",
                 ):
@@ -1367,6 +1420,20 @@ def create_planning_graph(
                     source_summary=analysis.get("summary", ""),
                 )
 
+            # Düz-cümle evrak halüsinasyonu için LLM dayanaklılık hakemi --
+            # yalnızca bir belge eklendiğinde ve bu tur bir selamlama/nezaket
+            # ifadesi değilken sorulur (küçük sohbette yargılanacak bir evrak
+            # iddiası yoktur). Kalıp-bazlı groundedness_report'un yakaladığı
+            # tipli iddialardan ayrı; ikisi output_gate'te birleşir.
+            groundedness_verdict = None
+            if document_id and not is_small_talk_turn and raw_reply:
+                groundedness_verdict = await judge_reply_groundedness(
+                    guardrail_judge_agent,
+                    reply=raw_reply,
+                    document_summary=analysis.get("summary", ""),
+                    source_text=source_materials,
+                )
+
             verdict = evaluate_response(
                 raw_reply,
                 source_materials=source_materials,
@@ -1378,6 +1445,7 @@ def create_planning_graph(
                 # per its own docstring.
                 requester_clearance=requester_clearance,
                 judge_verdict=judge_verdict,
+                groundedness_verdict=groundedness_verdict,
             )
             reply = verdict.text
             flagged = verdict.action != "pass"

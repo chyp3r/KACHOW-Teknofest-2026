@@ -13,7 +13,14 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import BaseModel
 
-from app.ai.agents.assistant import MAX_TOOL_TURNS, AssistantAgent
+from app.ai.agents.assistant import (
+    MAX_TOOL_TURNS_EVREN,
+    MAX_TOOL_TURNS_LOCAL,
+    AssistantAgent,
+    _GIVEUP_RETRY_NUDGE,
+    _looks_like_giveup,
+    _max_tool_turns,
+)
 from app.ai.llms.base import ToolCallResponse
 from app.ai.tools.document_tools import (
     GetDocumentDetailsArgs,
@@ -521,7 +528,8 @@ async def test_assistant_reuses_the_tool_loops_own_final_answer_without_restream
 @pytest.mark.asyncio
 async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     """A model that keeps requesting tools must not loop forever -- after
-    MAX_TOOL_TURNS rounds the agent forces a plain-text final answer."""
+    the provider's tool-turn cap the agent forces a plain-text final answer."""
+    max_turns = _max_tool_turns()
     handler = AsyncMock(return_value="sonuç")
     tool = ToolSpec(
         name="search_document", description="test", args_schema=_NoArgs, handler=handler
@@ -529,7 +537,7 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     always_calls_tool = ToolCallResponse(
         content="", tool_calls=[{"id": "x", "name": "search_document", "args": {}}]
     )
-    fake_llm.generate_with_tools_side_effect = [always_calls_tool] * MAX_TOOL_TURNS
+    fake_llm.generate_with_tools_side_effect = [always_calls_tool] * max_turns
     fake_llm.stream_chunks = ["nihayetinde cevap"]
     agent = AssistantAgent(fake_llm)
 
@@ -538,8 +546,167 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     ]
 
     assert "".join(chunks) == "nihayetinde cevap"
-    assert len(fake_llm.generate_with_tools_calls) == MAX_TOOL_TURNS
-    assert handler.await_count == MAX_TOOL_TURNS
+    assert len(fake_llm.generate_with_tools_calls) == max_turns
+    assert handler.await_count == max_turns
+
+
+@pytest.mark.asyncio
+async def test_tool_turn_cap_follows_provider(fake_llm):
+    """Local (Ollama) mode keeps the tight 2-turn cap; connected to Evren the
+    agent gets the wider 5-turn cap so it can try several tools before it
+    converges on an answer."""
+    handler = AsyncMock(return_value="sonuç")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    always_calls_tool = ToolCallResponse(
+        content="", tool_calls=[{"id": "x", "name": "search_document", "args": {}}]
+    )
+
+    for local_mode, expected in ((True, MAX_TOOL_TURNS_LOCAL), (False, MAX_TOOL_TURNS_EVREN)):
+        handler.reset_mock()
+        fake_llm.generate_with_tools_calls.clear()
+        fake_llm.generate_with_tools_side_effect = [always_calls_tool] * (expected + 2)
+        fake_llm.stream_chunks = ["cevap"]
+        agent = AssistantAgent(fake_llm)
+
+        with patch("app.ai.agents.assistant.settings.LOCAL_MODE", local_mode):
+            _ = [
+                chunk
+                async for chunk in agent.run_stream(
+                    query="soru", history=[], tools=[tool]
+                )
+            ]
+
+        assert len(fake_llm.generate_with_tools_calls) == expected
+        assert handler.await_count == expected
+
+
+# ==========================================
+# "Bulamadım" için erken pes etme koruması
+# ==========================================
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Yüklü evrakta bu bilgiye ulaşamadım.",
+        "Belgede böyle bir ifade geçmiyor.",
+        "Bu konuda bir bilgi bulamadım.",
+        "İlgili tarih belgede belirtilmemiş.",
+        "Evrakta bu isimden söz edilmemektedir.",
+    ],
+)
+def test_looks_like_giveup_matches_common_phrasings(text):
+    assert _looks_like_giveup(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Evrak 12.03.2026 tarihli olup konu yıllık izin talebidir.",
+        "Belgede 657 sayılı Kanun'a atıf yapılmıştır.",
+        "",
+        None,
+    ],
+)
+def test_looks_like_giveup_leaves_real_answers_alone(text):
+    assert _looks_like_giveup(text) is False
+
+
+@pytest.mark.asyncio
+async def test_a_giveup_reply_with_a_document_is_not_accepted_and_the_model_is_nudged(fake_llm):
+    """Belge ekliyken, model erişim bütçesini tüketmeden 'bulamadım' diyerek
+    turu bitirmeye çalışırsa yanıt kabul edilmez; bir düzeltme mesajıyla
+    yeniden denemesi istenir."""
+    handler = AsyncMock(return_value="3. sayfada geçiyor")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(content="Bu bilgiye ulaşamadım.", tool_calls=[]),
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document", "args": {"query": "x"}}],
+        ),
+        ToolCallResponse(content="Belgede 15 gün olarak belirtilmiş.", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="Kaç gün izin isteniyor?",
+            history=[],
+            tools=[tool],
+            document_attached=True,
+        )
+    ]
+
+    assert "".join(chunks) == "Belgede 15 gün olarak belirtilmiş."
+    # First reply rejected -> at least the nudge + one more turn happened.
+    assert len(fake_llm.generate_with_tools_calls) == 3
+    assert handler.await_count == 1
+    # The corrective nudge reached the model as a user message.
+    last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
+    assert any(
+        msg.get("role") == "user" and msg.get("content") == _GIVEUP_RETRY_NUDGE
+        for msg in last_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_giveup_reply_without_a_document_is_accepted_immediately(fake_llm):
+    """document_attached=False -- an out-of-scope 'I can't help with that'
+    must not be second-guessed."""
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs,
+        handler=AsyncMock(return_value="x"),
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(content="Bu konuda bilgi bulamadım.", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="hava nasıl?", history=[], tools=[tool], document_attached=False
+        )
+    ]
+
+    assert "".join(chunks) == "Bu konuda bilgi bulamadım."
+    assert len(fake_llm.generate_with_tools_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_giveup_reply_after_the_retrieval_budget_is_spent_is_accepted(fake_llm):
+    """The model already fired as many tool calls as the turn cap allows --
+    a 'couldn't find it' after that is genuine, not premature, so no nudge."""
+    handler = AsyncMock(return_value="sonuç")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    spent = _max_tool_turns()
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="",
+            tool_calls=[
+                {"id": f"c{i}", "name": "search_document", "args": {}} for i in range(spent)
+            ],
+        ),
+        ToolCallResponse(content="Bu bilgiye ulaşamadım.", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="soru", history=[], tools=[tool], document_attached=True
+        )
+    ]
+
+    assert "".join(chunks) == "Bu bilgiye ulaşamadım."
+    assert len(fake_llm.generate_with_tools_calls) == 2  # no extra nudge turn
+    assert handler.await_count == spent
 
 
 # ==========================================
