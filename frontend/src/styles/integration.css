@@ -417,9 +417,10 @@
 }
 .chat-composer:focus-within > small { max-height: 24px; margin-top: var(--space-2); opacity: 1; }
 
-/* Bağlam penceresi göstergesi (ContextUsageRing) -- çalışma modunun altında,
-   Claude'daki gibi. Sadece bir halka; tıklanınca dar bir popup açılır. */
-.composer-mode-stack { display: grid; justify-items: end; gap: var(--space-1); margin-left: auto; }
+/* Bağlam penceresi göstergesi (ContextUsageRing) -- çalışma modu seçicisinin
+   sağında. Sadece bir halka; tıklanınca dar bir popup açılır. */
+.composer-mode-stack { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.composer-mode-stack .composer-mode { margin-left: 0; }
 .context-usage { position: relative; display: inline-flex; }
 .context-usage-trigger { display: inline-flex; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
 .context-usage-ring { flex: 0 0 auto; animation: context-usage-in .28s ease both; }
