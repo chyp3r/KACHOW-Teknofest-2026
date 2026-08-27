@@ -44,14 +44,25 @@ from app.core.config import settings  # noqa: E402
 from prepare_resmi_yazisma_markdown import (  # noqa: E402
     CORPUS_ROOT,
     _audit_privacy_findings,
+    _INSTITUTION_LINE,
     read_text,
     semantic_anonymize,
     split_front_matter,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+#: Pilot'un kendi çıktısı (20 vaka, TARGET_DECISIONS'ın eski 3-türlü hali
+#: ile üretildi) -- artık bu betik tarafından yazılmıyor, yalnız tarihsel
+#: referans olarak kalıyor. Ana 240 vakalık üretim ayrı, kalıcı bir
+#: klasöre yazılır (VAKA_URETIMI_240_PROMPT.md Aşama 3.6).
 PILOT_ROOT = REPO_ROOT / "datasets" / "resmi_yazisma_vakalar_pilot"
 PILOT_OUTPUT = PILOT_ROOT / "vakalar-taslak.jsonl"
+
+MAIN_ROOT = REPO_ROOT / "datasets" / "resmi_yazisma_vakalar"
+MAIN_OUTPUT = MAIN_ROOT / "vakalar.jsonl"
+MAIN_MANIFEST = MAIN_ROOT / "vaka-manifesti.jsonl"
+MAIN_ERRORS = MAIN_ROOT / "vaka-hatalari.jsonl"
 
 #: Kanonik karar sonucu kümesi -- GELEN_EVRAK_KARAR_CEVAP_VERI_PLANI.md'nin
 #: 8'li ``decision`` enum'u. ``itiraz`` bu kümede YOKTUR: itiraz bir gelen
@@ -74,15 +85,51 @@ ALLOWED_DECISIONS: frozenset[str] = frozenset(
     }
 )
 
-# Aşama 0'da belirlenen açık: bu üç karar türü mevcut korpusta ya hiç
-# yok ya da başka bir türle karışık etiketli. Betik yalnız bunlardan
-# üretir -- zaten bol olan türlerden (bilgi_edinme, ek_belge_iletimi)
-# üretmek sahte bir hacim artışı olur, çeşitlilik açığını kapatmaz.
-# NOT: tam kapsamlı 8-türlü kota (240 vakalık ana üretim) ayrı bir aşamada
-# bu sabitin üzerine yazılacak; pilot yalnız 3 türü kapsar.
+# Aşama 2: VAKA_URETIMI_240_PROMPT.md'deki kota tablosu. Gerçek korpusta
+# zaten bol olan alt-niyetlerden (bilgi_edinme cevabı, olağan cevap
+# yazısı gibi) üretmek sahte bir hacim artışı olur; kotalar gerçek
+# örnek sayısı düşük olan türlere ağırlık verir (bkz. tablo notları).
 TARGET_DECISIONS: dict[str, dict[str, Any]] = {
+    "tam_kabul": {
+        "adet": 35,
+        "aciklama": (
+            "Başvuru talebi tamamen kabul edilmiştir; kurum talep edilen "
+            "işlemi olduğu gibi gerçekleştirir."
+        ),
+        "few_shot_glob": "02_cevap_yazisi/06_olumlu_cevap/*.md",
+    },
+    "ret": {
+        "adet": 35,
+        "aciklama": (
+            "Başvuru talebi tamamen reddedilmiştir; kurum gerekçeli bir "
+            "ret cevabı verir. Bu, KISMİ kabulden FARKLIDIR -- burada "
+            "hiçbir talep karşılanmaz."
+        ),
+        "few_shot_glob": "02_cevap_yazisi/07_ret_kismen_kabul/*.md",
+        "niyet_filter": "ret",
+    },
+    "kismi_kabul": {
+        "adet": 30,
+        "aciklama": (
+            "Başvuru talebinin bir kısmı kabul edilmiş, bir kısmı "
+            "reddedilmiştir; kurum hangi kısmın neden kabul/ret edildiğini "
+            "ayrı ayrı gerekçelendirir."
+        ),
+        "few_shot_glob": "02_cevap_yazisi/07_ret_kismen_kabul/*.md",
+        "niyet_filter": "ret_kismen_kabul",
+    },
+    "eksik_belge": {
+        "adet": 30,
+        "aciklama": (
+            "Başvuru, eksik belge/bilgi nedeniyle sonuçlandırılamıyor; "
+            "kurum başvurandan somut, isimlendirilmiş bir belge/bilgi "
+            "talep ediyor. Bu, YETKİSİZLİK'ten FARKLIDIR -- burada kurum "
+            "yetkilidir, yalnızca eksik belge var."
+        ),
+        "few_shot_glob": "02_cevap_yazisi/08_eksik_belge_yetkisizlik/*.md",
+    },
     "yetkisizlik": {
-        "adet": 5,
+        "adet": 30,
         "aciklama": (
             "Başvuru, muhatap kurumun görev alanına girmiyor; başvuru "
             "sahibi doğru kuruma yönlendiriliyor. Bu, eksik belge "
@@ -94,8 +141,19 @@ TARGET_DECISIONS: dict[str, dict[str, Any]] = {
         # karışık olsa da resmî ret/yönlendirme dilini taşır.
         "few_shot_glob": "02_cevap_yazisi/08_eksik_belge_yetkisizlik/*.md",
     },
+    "yalnizca_bilgilendirme": {
+        "adet": 25,
+        "aciklama": (
+            "Gelen evrak bir karar talep etmiyor (duyuru/bilgi paylaşımı "
+            "niteliğinde) veya kurum, başvuruya ilişkin yalnız mevcut "
+            "durumu/süreci bilgilendiriyor; KARAR üretmiyor. decision "
+            "burada 'bir işlemin sonucu' değil, 'karar gerektirmeyen "
+            "bilgilendirme' anlamına gelir."
+        ),
+        "few_shot_glob": "03_bilgilendirme_metni/*/*.md",
+    },
     "belirsiz_basvuru": {
-        "adet": 5,
+        "adet": 30,
         "aciklama": (
             "Başvuru talebi belirsiz veya çelişkili; kurum karar vermek "
             "yerine ek açıklama/bilgi talep ediyor. Cevap bir karar "
@@ -104,7 +162,7 @@ TARGET_DECISIONS: dict[str, dict[str, Any]] = {
         "few_shot_glob": "02_cevap_yazisi/03_bilgi_edinme/*.md",
     },
     "coklu_talep": {
-        "adet": 5,
+        "adet": 25,
         "aciklama": (
             "Tek başvuru yazısında birden fazla, birbirinden bağımsız "
             "talep var; kurum her talebi ayrı ayrı sonuçlandırıyor "
@@ -114,18 +172,40 @@ TARGET_DECISIONS: dict[str, dict[str, Any]] = {
     },
 }
 
-assert TARGET_DECISIONS.keys() <= ALLOWED_DECISIONS, (
-    "TARGET_DECISIONS yalnız ALLOWED_DECISIONS üyelerini anahtar olarak "
-    f"kullanabilir, geçersiz: {TARGET_DECISIONS.keys() - ALLOWED_DECISIONS}"
+assert TARGET_DECISIONS.keys() == ALLOWED_DECISIONS, (
+    "TARGET_DECISIONS tam olarak ALLOWED_DECISIONS'ın 8 üyesini kapsamalı "
+    f"-- eksik: {ALLOWED_DECISIONS - TARGET_DECISIONS.keys()}, "
+    f"fazla: {TARGET_DECISIONS.keys() - ALLOWED_DECISIONS}"
 )
 
+TOTAL_TARGET_CASES = sum(spec["adet"] for spec in TARGET_DECISIONS.values())
+assert TOTAL_TARGET_CASES == 240, f"Toplam kota 240 olmalı, şu an: {TOTAL_TARGET_CASES}"
+
 FEW_SHOT_PER_TYPE = 3
+
+#: ``--seed`` ile geçersiz kılınabilir (bkz. main()); ``_load_few_shots``
+#: bu değeri okur. Evren'in kendi örnekleme sıcaklığı deterministik
+#: değildir (LLM çıktısı), bu tohum yalnız BİZİM tarafımızdaki tek
+#: rastgelelik kaynağını -- few-shot örnek seçimini -- kontrol eder.
+_FEW_SHOT_SEED = 42
 MAX_EXAMPLE_CHARS = 2200
 
-#: İtiraz artık ayrı bir karar türü değil -- ana 240 vakalık üretimde her
-#: kotanın İÇİNDE, ``incoming_type: "itiraz"`` olarak, kotanın kendi
-#: decision değeriyle üretilir (bkz. VAKA_URETIMI_240_PROMPT.md Aşama 2).
+#: İtiraz artık ayrı bir karar türü değil -- her kotanın İÇİNDE,
+#: ``incoming_type: "itiraz"`` olarak, kotanın kendi decision değeriyle
+#: üretilir. Toplamın ~%15-20'si itiraz olmalı ve her karar türünde en az
+#: 3 itiraz örneği bulunmalı (VAKA_URETIMI_240_PROMPT.md Aşama 2).
 INCOMING_TYPE_ITIRAZ = "itiraz"
+ITIRAZ_MIN_SHARE = 0.15
+ITIRAZ_MAX_SHARE = 0.20
+ITIRAZ_MIN_PER_DECISION = 3
+
+#: Kurum çeşitliliği: en az 25 farklı kurum, tek bir kurum 240'ın en fazla
+#: %8'i (19 vaka). İlk 25 vaka tamamlanmadan sınır uygulanmaz -- aksi
+#: halde erken üretimde rastgele tekrar eden bir kurum, henüz hiçbir
+#: alternatif üretilmemişken kalıcı olarak yasaklanabilir.
+INSTITUTION_MIN_COUNT = 25
+INSTITUTION_MAX_SHARE = 19 / 240
+INSTITUTION_WARMUP_CASES = 25
 
 
 class _GeneratedCase(BaseModel):
@@ -171,18 +251,30 @@ class FewShotExample:
     body_excerpt: str
 
 
-def _load_few_shots(pattern: str, count: int) -> list[FewShotExample]:
+def _load_few_shots(
+    pattern: str, count: int, *, niyet_filter: str | None = None
+) -> list[FewShotExample]:
     """Gerçek, zaten anonimleştirilmiş kartlardan üslup referansı seç.
 
     Yalnız kalite kapısını geçmiş (``candidate``) kartlar kullanılır --
     reddedilmiş/bozuk bir kartı örnek göstermek üretimi bozar.
+
+    Args:
+        pattern: ``CORPUS_ROOT``'a göreli glob (ör. ``"02_cevap_yazisi/*.md"``).
+        count: En fazla kaç örnek döndürüleceği.
+        niyet_filter: Verilirse, yalnız ``niyet`` alanı bu değere TAM eşit
+            olan kartlar seçilir -- ör. ``07_ret_kismen_kabul/`` klasörü
+            hem "ret" hem "ret_kismen_kabul" niyetli kartları birlikte
+            barındırır, bu ikisi filtre olmadan ayırt edilemez.
     """
     candidates = sorted(CORPUS_ROOT.glob(pattern))
-    random.Random(42).shuffle(candidates)  # deterministik ama çeşitli seçim
+    random.Random(_FEW_SHOT_SEED).shuffle(candidates)  # deterministik ama çeşitli seçim
     examples: list[FewShotExample] = []
     for path in candidates:
         meta, body = split_front_matter(read_text(path))
         if meta.get("rag_status") != "candidate":
+            continue
+        if niyet_filter is not None and meta.get("niyet") != niyet_filter:
             continue
         examples.append(
             FewShotExample(
@@ -196,7 +288,14 @@ def _load_few_shots(pattern: str, count: int) -> list[FewShotExample]:
     return examples
 
 
-def _build_messages(decision: str, spec: dict[str, Any], examples: list[FewShotExample]) -> list[dict]:
+def _build_messages(
+    decision: str,
+    spec: dict[str, Any],
+    examples: list[FewShotExample],
+    *,
+    avoid_institutions: list[str] | None = None,
+    force_itiraz: bool = False,
+) -> list[dict]:
     example_blocks = "\n\n".join(
         f"[ÜSLUP ÖRNEĞİ {i + 1} -- {ex.kategori}: {ex.baslik}]\n{ex.body_excerpt}"
         for i, ex in enumerate(examples)
@@ -218,22 +317,40 @@ def _build_messages(decision: str, spec: dict[str, Any], examples: list[FewShotE
         "tutarlı bir kurgu yazmak.\n\n"
         "Aşağıdaki üslup örnekleri yalnız BİÇİM ve TON referansıdır; "
         "içeriklerini kopyalama veya hafifçe değiştirerek yeniden üretme, "
-        "tamamen yeni bir olay kurgula. Kamu kurumu adları için yalnız "
-        "genel/gerçek kurum "
-        "TÜRLERİNİ (ör. 'İlçe Kaymakamlığı', 'Sosyal Güvenlik Kurumu İl "
-        "Müdürlüğü') kullan, uydurma özel isim veya sahte kanun/madde "
-        "numarası üretme -- yalnız gerçekten var olduğunu bildiğin genel "
-        "mevzuat referanslarını (ör. '4982 sayılı Bilgi Edinme Hakkı "
-        "Kanunu') kullan, emin değilsen legal_basis'i boş bırak. "
-        "must_not_invent listesine, bir taslak yazma modelinin bu vakada "
-        "uydurmaya en çok eğilimli olacağı 2-4 somut değeri yaz (ör. "
-        "'gerçekte belirtilmeyen bir evrak sayısı', 'gerçekte belirtilmeyen "
-        "bir tarih'). used_person_names ÇOK ÖNEMLİ: incoming_document ve "
-        "gold_draft'ta adı geçen HER kurgusal kişiyi (başvuran, vekil, "
-        "üçüncü bir kişiden bahsederken kullandığın isim -- hepsini) eksiksiz "
-        "listele; bu liste metni ayrıca maskeleyecek bir güvenlik katmanının "
-        "girdisidir, unutulan bir isim maskelenmeden kalır."
+        "tamamen yeni bir olay kurgula. Kamu kurumu adı için SOMUT ve "
+        "GERÇEKÇİ, TAMAMEN UYDURMA bir kurum-il/ilçe birleşimi yaz (ör. "
+        "'T.C. Sivas Valiliği', 'T.C. Bornova Kaymakamlığı') -- kurum "
+        "TÜRÜ gerçek ve tanınabilir olmalı, ama ilini/ilçesini/tam adını "
+        "her vakada değiştir; aynı kurumu tekrar tekrar kullanma. Uydurma "
+        "özel isim veya sahte kanun/madde numarası üretme -- yalnız "
+        "gerçekten var olduğunu bildiğin genel mevzuat referanslarını "
+        "(ör. '4982 sayılı Bilgi Edinme Hakkı Kanunu') kullan, emin "
+        "değilsen legal_basis'i boş bırak. must_not_invent listesine, bir "
+        "taslak yazma modelinin bu vakada uydurmaya en çok eğilimli "
+        "olacağı 2-4 somut değeri yaz (ör. 'gerçekte belirtilmeyen bir "
+        "evrak sayısı', 'gerçekte belirtilmeyen bir tarih'). "
+        "used_person_names ÇOK ÖNEMLİ: incoming_document ve gold_draft'ta "
+        "adı geçen HER kurgusal kişiyi (başvuran, vekil, üçüncü bir "
+        "kişiden bahsederken kullandığın isim -- hepsini) eksiksiz "
+        "listele; bu liste metni ayrıca maskeleyecek bir güvenlik "
+        "katmanının girdisidir, unutulan bir isim maskelenmeden kalır."
     )
+    avoid_block = ""
+    if avoid_institutions:
+        avoid_block = (
+            "\n\nKURUM ÇEŞİTLİLİĞİ: aşağıdaki kurumlar bu üretim turunda "
+            "zaten yeterince kullanıldı, YENİDEN KULLANMA, farklı bir "
+            f"kurum uydur: {', '.join(avoid_institutions)}."
+        )
+    itiraz_block = ""
+    if force_itiraz:
+        itiraz_block = (
+            "\n\nBu vaka bir İTİRAZ olmalı: incoming_document, kurumun "
+            "DAHA ÖNCE verdiği bir karara karşı yapılan bir itiraz "
+            "dilekçesi olsun (incoming_type alanına 'itiraz' yaz). "
+            f"decision_reason, itirazın neden '{decision}' sonucuna "
+            "bağlandığını, önceki kararla ilişkisini kurarak açıklamalı."
+        )
     user = (
         f"Hedef karar türü: {decision}\n"
         f"Vaka tanımı: {spec['aciklama']}\n\n"
@@ -242,11 +359,20 @@ def _build_messages(decision: str, spec: dict[str, Any], examples: list[FewShotE
         "bir gelen evrak + kurum kararı + cevap yazısı vakası üret. "
         "incoming_document başvuranın yazdığı evrakın tam metni olmalı; "
         "gold_draft kurumun buna verdiği resmî cevabın tam metni olmalı."
+        f"{avoid_block}{itiraz_block}"
     )
     return [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
+
+
+def _extract_institution(text: str) -> str | None:
+    """Gövdeden antet kurumunu çıkar (kurum çeşitliliği sayacı için)."""
+    match = _INSTITUTION_LINE.search(text[:600])
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(1)).strip(" .,'’")
 
 
 def _scrub_reported_names(text: str, names: list[str]) -> str:
@@ -282,24 +408,42 @@ def _anonymization_findings(text: str) -> list[dict]:
 
 
 def _case_id(decision: str, index: int) -> str:
-    return f"GKC-PILOT-{decision.upper()}-{index:03d}"
+    return f"GKC-{decision.upper()}-{index:03d}"
 
 
-async def _generate_one(decision: str, spec: dict[str, Any], index: int) -> dict[str, Any] | None:
-    examples = _load_few_shots(spec["few_shot_glob"], FEW_SHOT_PER_TYPE)
+def _itiraz_count_for(adet: int) -> int:
+    """Bu kararın kotasından kaç vaka itiraz olmalı (Aşama 2: ~%17,5 hedef,
+    her türde en az ITIRAZ_MIN_PER_DECISION)."""
+    return max(ITIRAZ_MIN_PER_DECISION, round(adet * 0.175))
+
+
+async def _generate_one(
+    decision: str,
+    spec: dict[str, Any],
+    index: int,
+    *,
+    avoid_institutions: list[str] | None = None,
+    force_itiraz: bool = False,
+) -> tuple[dict[str, Any] | None, str]:
+    """Tek bir vaka üretmeyi dener. Döndürür: (vaka ya da None, başarısızlık
+    kategorisi -- boş dize başarı demektir). Hata mesajı hiçbir ham hassas
+    değer taşımaz, yalnız kategori etiketi taşır (bkz. MAIN_ERRORS)."""
+    examples = _load_few_shots(
+        spec["few_shot_glob"], FEW_SHOT_PER_TYPE, niyet_filter=spec.get("niyet_filter")
+    )
     if not examples:
-        print(f"  [atlandı] {decision} #{index}: üslup örneği bulunamadı ({spec['few_shot_glob']})")
-        return None
+        return None, "few_shot_bulunamadi"
 
     client = get_llm_client(
         provider="evren", model=settings.EVREN_LLM_LARGE_MODEL, temperature=0.8
     )
-    messages = _build_messages(decision, spec, examples)
+    messages = _build_messages(
+        decision, spec, examples, avoid_institutions=avoid_institutions, force_itiraz=force_itiraz
+    )
     try:
         result = await client.generate_structured(messages=messages, response_model=_GeneratedCase)
-    except Exception as exc:  # keep the pilot batch auditable, not fatal
-        print(f"  [hata] {decision} #{index}: {type(exc).__name__}: {exc}")
-        return None
+    except Exception as exc:  # keep the batch auditable, not fatal
+        return None, f"llm_hatasi:{type(exc).__name__}"
 
     anonymized_incoming = _scrub_reported_names(
         semantic_anonymize(result.incoming_document), result.used_person_names
@@ -311,12 +455,21 @@ async def _generate_one(decision: str, spec: dict[str, Any], index: int) -> dict
     bad_draft = _anonymization_findings(anonymized_draft)
     if bad_incoming or bad_draft:
         kinds = sorted({f["bulgu_turu"] for f in [*bad_incoming, *bad_draft]})
-        print(f"  [reddedildi] {decision} #{index}: anonimleştirme bulgusu kaldı: {kinds}")
-        return None
+        return None, f"anonimlestirme:{','.join(kinds)}"
+
+    # TODO (Aşama 3.2 -- Opus tasarımı bekliyor): legal_basis, mevzuat.gov.tr
+    # MCP'siyle (resolve_and_fetch + gerçek başlık karşılaştırması) burada
+    # doğrulanmalı; doğrulanamayan referans taşıyan vaka reddedilip aynı
+    # (decision, index) için yeniden denenmeli. Pilotta bu elle yapıldı ve
+    # 22 referanstan 2'si (%9) ilk turda yanlış çıktı -- bu adım olmadan
+    # 240'lık üretimde ~20 vaka yanlış mevzuat atfı taşıyabilir.
 
     case_id = _case_id(decision, index)
     source_group = hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:16]
-    return {
+    institution = _extract_institution(anonymized_incoming) or _extract_institution(
+        anonymized_draft
+    )
+    case = {
         "case_id": case_id,
         "incoming_document": anonymized_incoming,
         "incoming_type": result.incoming_type,
@@ -335,35 +488,116 @@ async def _generate_one(decision: str, spec: dict[str, Any], index: int) -> dict
         "provenance": {
             "uretim_yontemi": "evren_llm_large_few_shot",
             "uslup_referanslari": [ex.baslik for ex in examples],
+            "kurum_tahmini": institution,
         },
         "review_status": "taslak",
         "source_group": source_group,
         "dataset_split": "n/a",
     }
+    return case, ""
 
 
-async def _run(apply: bool) -> list[dict[str, Any]]:
+def _load_existing_case_ids(path: Path) -> set[str]:
+    """--resume için: dosyada zaten yazılı case_id'leri oku."""
+    if not path.exists():
+        return set()
+    ids: set[str] = set()
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            ids.add(json.loads(line)["case_id"])
+    return ids
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> None:
+    """Checkpoint yazımı: her başarılı vaka HEMEN diske eklenir (atomik --
+    aç/yaz/kapat tek satırlık append, yarım satır bırakmaz)."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+async def _run(
+    *, apply: bool, resume: bool, max_cases: int | None, max_retries: int = 3
+) -> list[dict[str, Any]]:
+    total_quota = sum(spec["adet"] for spec in TARGET_DECISIONS.values())
+    already_done = _load_existing_case_ids(MAIN_OUTPUT) if (apply and resume) else set()
+    if already_done:
+        print(f"--resume: {len(already_done)} vaka zaten mevcut, atlanacak.")
+
+    institution_counts: dict[str, int] = {}
+    total_generated_this_run = 0
     cases: list[dict[str, Any]] = []
-    for decision, spec in TARGET_DECISIONS.items():
-        print(f"Üretiliyor: {decision} ({spec['adet']} vaka)")
-        for index in range(1, spec["adet"] + 1):
-            case = await _generate_one(decision, spec, index)
-            if case:
-                cases.append(case)
-                preview = case["incoming_document"][:160].replace("\n", " ")
-                print(f"  [tamam] {case['case_id']}: {preview}...")
 
-    print(f"\nToplam üretilen ve denetimden geçen vaka: {len(cases)}/{sum(s['adet'] for s in TARGET_DECISIONS.values())}")
+    for decision, spec in TARGET_DECISIONS.items():
+        itiraz_quota = _itiraz_count_for(spec["adet"])
+        print(f"Üretiliyor: {decision} ({spec['adet']} vaka, {itiraz_quota} itiraz)")
+        for index in range(1, spec["adet"] + 1):
+            if max_cases is not None and total_generated_this_run >= max_cases:
+                print(f"--max-cases={max_cases} sınırına ulaşıldı, durduruluyor.")
+                return cases
+
+            case_id = _case_id(decision, index)
+            if case_id in already_done:
+                continue
+
+            total_this_run = sum(institution_counts.values())
+            avoid = None
+            if total_this_run + len(already_done) >= INSTITUTION_WARMUP_CASES:
+                cap = round(INSTITUTION_MAX_SHARE * total_quota)
+                avoid = sorted(k for k, v in institution_counts.items() if v >= cap) or None
+
+            force_itiraz = index <= itiraz_quota
+
+            case: dict[str, Any] | None = None
+            reason = ""
+            for attempt in range(1, max_retries + 1):
+                case, reason = await _generate_one(
+                    decision, spec, index, avoid_institutions=avoid, force_itiraz=force_itiraz
+                )
+                if case:
+                    break
+                print(f"  [deneme {attempt}/{max_retries}] {case_id}: {reason}")
+                if apply:
+                    _append_jsonl(
+                        MAIN_ERRORS,
+                        {
+                            "case_id": case_id,
+                            "decision": decision,
+                            "index": index,
+                            "attempt": attempt,
+                            "basarisizlik_kategorisi": reason,
+                        },
+                    )
+
+            if not case:
+                print(f"  [BAŞARISIZ] {case_id}: {max_retries} denemede de üretilemedi ({reason})")
+                continue
+
+            cases.append(case)
+            total_generated_this_run += 1
+            institution = case["provenance"]["kurum_tahmini"]
+            if institution:
+                institution_counts[institution] = institution_counts.get(institution, 0) + 1
+            preview = case["incoming_document"][:140].replace("\n", " ")
+            itiraz_tag = " [itiraz]" if force_itiraz else ""
+            print(f"  [tamam] {case_id}{itiraz_tag}: {preview}...")
+
+            if apply:
+                _append_jsonl(MAIN_OUTPUT, case)
+
+    grand_total = len(already_done) + total_generated_this_run
+    print(f"\nBu çalıştırmada üretilen: {total_generated_this_run}")
+    print(f"Toplam (resume dahil): {grand_total}/{total_quota}")
+    print(f"Kurum çeşitliliği (bu çalıştırma): {len(institution_counts)} farklı kurum")
 
     if apply and cases:
-        PILOT_ROOT.mkdir(parents=True, exist_ok=True)
-        with PILOT_OUTPUT.open("w", encoding="utf-8") as handle:
-            for case in cases:
-                handle.write(json.dumps(case, ensure_ascii=False, sort_keys=True) + "\n")
-        print(f"Yazıldı: {PILOT_OUTPUT.relative_to(REPO_ROOT).as_posix()}")
+        print(f"Yazıldı (checkpoint, satır satır): {MAIN_OUTPUT.relative_to(REPO_ROOT).as_posix()}")
         print(
             "Not: bu dosya üretim ornekler.jsonl'e otomatik KARIŞMAZ. "
-            "Sıradaki adım için VAKA_URETIM_PLAYBOOK.md Aşama 2/3'e bakın."
+            "Sıradaki adımlar için VAKA_URETIMI_240_PROMPT.md Aşama 4'e bakın."
         )
     elif not apply:
         print("(--dry-run: hiçbir dosya yazılmadı)")
@@ -375,7 +609,26 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--dry-run", action="store_true", help="Üret ama diske yazma.")
-    mode.add_argument("--apply", action="store_true", help="Üret ve vakalar-taslak.jsonl'e yaz.")
+    mode.add_argument(
+        "--apply", action="store_true", help="Üret ve vakalar.jsonl'e satır satır ekle."
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="vakalar.jsonl'de zaten var olan case_id'leri atla, kalanları üret.",
+    )
+    parser.add_argument(
+        "--max-cases",
+        type=int,
+        default=None,
+        help="Bu çalıştırmada üretilecek en fazla YENİ vaka sayısı (küçük parti/doğrulama batch'i için).",
+    )
+    parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Few-shot örnek seçiminin deterministik tohumu (varsayılan: 42).",
+    )
     return parser.parse_args()
 
 
@@ -389,7 +642,9 @@ def main() -> int:
             file=sys.stderr,
         )
         return 2
-    asyncio.run(_run(apply=args.apply))
+    global _FEW_SHOT_SEED
+    _FEW_SHOT_SEED = args.seed
+    asyncio.run(_run(apply=args.apply, resume=args.resume, max_cases=args.max_cases))
     return 0
 
 
