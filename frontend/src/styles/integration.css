@@ -518,17 +518,16 @@
 .chat-history-refresh .spinner { width: var(--icon-xs); height: var(--icon-xs); }
 .chat-session-groups { display: grid; gap: var(--space-5); }
 .chat-session-group > h3 { margin: 0 var(--space-1) var(--space-2); color: var(--text-muted); }
-.chat-session-group .chat-sessions { display: grid; gap: var(--space-1); padding: 0; overflow: visible; }
-.chat-session-group .chat-sessions > button { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: var(--space-2); padding: var(--space-3) var(--space-2); }
-.chat-session-group .chat-sessions > button > svg { margin-top: var(--space-1); color: var(--text-muted); }
-.chat-session-group .chat-sessions > button.active { border-color: color-mix(in srgb, var(--accent-blue) 35%, var(--border-glass)); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
-.chat-session-group .chat-sessions > button.active > svg { color: var(--accent-blue); }
-.chat-session-copy { display: grid; min-width: 0; }
-.chat-session-copy strong,
-.chat-session-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-session-copy strong { }
-.chat-session-copy .chat-session-preview { margin-top: var(--space-1); color: var(--text-secondary); }
-.chat-session-copy time { margin-top: var(--space-1); color: var(--text-muted); }
+/* Satırlar paylaşılan <ListRow> ile render edilir (leading | content |
+   metadata grid'i design-system.css'te). Buradaki eski, elle yazılmış
+   2 kolonlu grid override'ı `<time>` "14 Ağustos"u ikonun altına
+   düşürüyordu -- kaldırıldı; yalnızca seçili-satır vurgusu ve tarihin
+   tek satırda kalması için küçük eklemeler bırakıldı. */
+.chat-session-group .chat-sessions { display: grid; gap: var(--space-1); padding: 0; }
+.chat-session-group .chat-sessions > .list-row { border-radius: var(--radius-md); }
+.chat-session-group .chat-sessions > .list-row.active { border-color: color-mix(in srgb, var(--accent-blue) 35%, var(--border-glass)); background: color-mix(in srgb, var(--accent-blue) 10%, transparent); }
+.chat-session-group .chat-sessions > .list-row.active .list-row-leading { color: var(--accent-blue); }
+.chat-history-drawer .list-row-metadata { white-space: nowrap; }
 .chat-history-no-results { padding: var(--space-8) var(--space-3); color: var(--text-secondary); text-align: center; }
 
 .document-picker-layer { position: fixed; inset: 0; z-index: 80; }
