@@ -34,6 +34,21 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Frontend seçim alanları, tarayıcı varsayılanı yerine erişilebilir ortak `Dropdown` bileşenine taşındı.
 
 ### Düzeltildi
+- **Asistan, aracı hiç çağırmadan bir transfer/gönderim onay ekranı vaat
+  edebiliyordu.** Kullanıcı "taslağı X'e gönder" dediğinde, model bazen
+  `propose_transfer` aracını hiç çağırmadan "gönderilmek üzere önerildi,
+  onay ekranınız açılacak" gibi bir yanıt yazıyordu -- ama araç
+  çağrılmadığı için hiçbir onay ekranı (`TransferConfirmCard`) açılmıyordu.
+  Kök neden: aracın kendi açıklaması onay-ekranı mekanizmasını anlatıyor
+  ama hiçbir mekanizma modeli bu aracı gerçekten çağırmaya zorlamıyordu
+  (belge sorularındaki `_final_answer_nudge`'ın aksine, transfer istekleri
+  hiçbir "gerçekten araç çağır" baskısına tabi değildi). `assistant.md`'ye
+  ve `propose_transfer`'ın araç açıklamasına, bu vaadin yalnızca aracı
+  gerçekten çağırdıktan sonra kurulabileceğini belirten açık bir kısıt
+  eklendi. Ayrıca yeni bir `TRANSFER_REPLY_WITHOUT_PROPOSAL` sayaçı, bu
+  desenin (yanıt metni transferi anlatıyor ama araç hiç çağrılmamış)
+  gelecekte tekrarlanmasını sessizce geçiştirmeyecek (davranışı
+  değiştirmez, yalnızca gözlemler).
 - **İmza durumunda "kontrol edilmedi" ile "bulunamadı" ayrıştırıldı.**
   Vision opt-in olunca (yukarıya bakın) `detect_marks` çoğu belgede artık
   çalışmıyor; `ExtractedDocument.detected_marks`'ın varsayılanı boş liste

@@ -182,7 +182,10 @@ def build_transfer_tools(
                 "birine bir şey göndermek istediğini açıkça belirttiğinde çağır -- "
                 "asla kendiliğinden, taslak üretiminin bir devamı olarak çağırma. "
                 "Bu çağrı transferi hemen gerçekleştirmez; kullanıcıya ayrı bir onay "
-                "ekranı gösterilir, gönderim yalnızca kullanıcı orada onaylarsa olur."
+                "ekranı gösterilir, gönderim yalnızca kullanıcı orada onaylarsa olur. "
+                "Bu aracı çağırmadan, bir gönderim önerildiğini veya bir onay ekranı "
+                "açılacağını asla söyleme -- bu vaat yalnızca bu aracı gerçekten "
+                "çağırdıktan ve onaylayan bir sonuç aldıktan sonra geçerlidir."
             ),
             args_schema=ProposeTransferArgs,
             handler=_propose_transfer,
