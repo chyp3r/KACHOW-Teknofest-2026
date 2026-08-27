@@ -14,15 +14,47 @@ from app.core.context import get_current_tenant
 
 logger = logging.getLogger(__name__)
 
+def _pool_kwargs() -> dict:
+    """Her iki engine'in paylaştığı havuz ayarları (bkz. ``settings.DB_POOL_*``).
+
+    Ayarlanmadan bırakıldığında SQLAlchemy varsayılanları yalnızca 5 + 10
+    bağlantı verir; birkaç dakikalarca süren istek bunu tüketip diğer her
+    şeyi zaman aşımına uğratıyordu (bkz. #288).
+    """
+    return dict(
+        echo=False,  # Debug SQL sorgu loglaması için True yapın
+        future=True,
+        pool_pre_ping=True,  # Kullanmadan önce bağlantıları test et
+        pool_size=settings.DB_POOL_SIZE,
+        max_overflow=settings.DB_MAX_OVERFLOW,
+        pool_timeout=settings.DB_POOL_TIMEOUT,
+        pool_recycle=settings.DB_POOL_RECYCLE_SECONDS,
+    )
+
+
+def _app_connect_args() -> dict:
+    """asyncpg ``server_settings`` -- yalnızca uygulamanın çalışma zamanı bağlantısına.
+
+    ``idle_in_transaction_session_timeout``, sızan bir bağlantının (bir
+    istek transaction'ı açık bırakıp dakikalarca AI işi yapması) 30 dakika
+    yerine ~1 dakikada Postgres tarafından koparılmasını sağlar. Owner
+    bağlantısına bilinçli olarak uygulanmaz: onun tüketicileri (giriş/
+    token yenileme/kayıt) kısa ve DDL'e yakın yollardır.
+    """
+    ms = settings.DB_IDLE_IN_TXN_TIMEOUT_MS
+    if ms and ms > 0:
+        return {"server_settings": {"idle_in_transaction_session_timeout": str(ms)}}
+    return {}
+
+
 # PostgreSQL bağlantısı için eşzamansız motor oluştur -- Faz 3'ten (Postgres
 # RLS) itibaren uygulamanın kısıtlı, owner olmayan rolü. Bunun neden bir
 # tablo-sahibi/superuser bağlantısı olmaması gerektiği için
 # settings.DATABASE_URL'in kendi docstring'ine bakın.
 engine = create_async_engine(
     settings.DATABASE_URL,
-    echo=False,  # Debug SQL sorgu loglaması için True yapın
-    future=True,
-    pool_pre_ping=True,  # Kullanmadan önce bağlantıları test et
+    connect_args=_app_connect_args(),
+    **_pool_kwargs(),
 )
 
 # Eşzamansız oturum oluşturucu
@@ -41,9 +73,7 @@ AsyncSessionLocal = async_sessionmaker(
 #: genel bir kaçış kapağı olarak değil.
 owner_engine = create_async_engine(
     settings.effective_alembic_database_url,
-    echo=False,
-    future=True,
-    pool_pre_ping=True,
+    **_pool_kwargs(),
 )
 
 OwnerAsyncSessionLocal = async_sessionmaker(
@@ -193,6 +223,51 @@ async def tenant_session(
             raise
         finally:
             await session.close()
+
+
+@asynccontextmanager
+async def request_tenant_session() -> AsyncGenerator[AsyncSession, None]:
+    """``get_db`` ile aynı oturum, ama bir FastAPI bağımlılığı *değil*.
+
+    ``get_db`` bir ``yield``-bağımlılığı olduğu için, tuttuğu bağlantı
+    ancak HTTP yanıtı tümüyle gönderildikten sonra iade edilir -- bir
+    ``StreamingResponse`` akarken veya handler dakikalarca süren bir AI
+    çağrısı yaparken bu, bağlantının tüm o süre boyunca ``idle in
+    transaction`` beklemesi demektir (bkz. #288).
+
+    Bu yardımcı, ``get_db`` ile aynı tenant GUC'larını
+    (``app.core.context.get_current_tenant``'tan -- ``TenantContextMiddleware``
+    her bağımlılıktan önce doldurur) uygular, ama ``async with`` bloğu
+    biter bitmez bağlantıyı bırakır. Handler'ın *kısa* DB işini (auth
+    araması, sahiplik/erişim kontrolleri) uzun işten önce yapıp bağlantıyı
+    geri vermesi için kullanılır.
+    """
+    tenant = get_current_tenant()
+    async with tenant_session(
+        tenant.company_id if tenant else None,
+        tenant.is_root if tenant else False,
+    ) as session:
+        yield session
+
+
+def pool_status() -> dict[str, int]:
+    """Uygulama engine'inin havuz sayaçlarının anlık görüntüsü.
+
+    ``app.lifespan``'in periyodik doygunluk logu ve ``/health`` tarafından
+    kullanılır. ``QueuePool`` kullanılmadığında (örn. testlerde
+    ``NullPool``) sayaçlar eksik olabilir, bu yüzden her biri savunmacı
+    biçimde okunur.
+    """
+    pool = engine.pool
+    out: dict[str, int] = {}
+    for name in ("size", "checkedin", "checkedout", "overflow"):
+        getter = getattr(pool, name, None)
+        try:
+            out[name] = int(getter()) if callable(getter) else 0
+        except Exception:
+            out[name] = 0
+    out["capacity"] = settings.DB_POOL_SIZE + settings.DB_MAX_OVERFLOW
+    return out
 
 
 async def verify_db_connection() -> bool:

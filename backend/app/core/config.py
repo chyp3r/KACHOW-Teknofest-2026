@@ -43,6 +43,31 @@ class Settings(BaseSettings):
     #: -- gerçek bir dağıtımda asla bu değer olması amaçlanmamıştır.
     KACHOW_APP_DB_PASSWORD: str = "kachow_app_dev_only"
 
+    #: SQLAlchemy async engine havuz ayarları. Ayarlanmadıkları için
+    #: kod tabanı uzun süre SQLAlchemy varsayılanlarıyla (5 + 10 = 15
+    #: bağlantı, 30 sn bekleme) çalıştı -- birkaç eşzamanlı, dakikalarca
+    #: süren sohbet/analiz isteği (her biri bir bağlantıyı `idle in
+    #: transaction` tutuyordu) havuzu tüketip diğer her isteği zaman
+    #: aşımına uğratıyordu (bkz. #288).
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: float = 30.0
+    #: Bağlantıları bu yaştan sonra sessizce geri dönüştür -- uzun ömürlü
+    #: boşta bağlantıların bir load balancer / Postgres tarafından
+    #: koparılıp havuzda ölü kalmasını önler.
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    #: Postgres tarafı emniyet ağı (yalnızca uygulamanın çalışma zamanı
+    #: bağlantısına uygulanır, owner bağlantısına değil): bir bağlantı bu
+    #: kadar milisaniye boyunca `idle in transaction` kalırsa Postgres onu
+    #: koparır. Bir bağlantı sızıntısı 30 dakika yerine ~1 dakikada
+    #: kendini toparlar, yani yığılma tüm uygulamayı düşürmek yerine
+    #: kısmi bozulmayla atlatılır. 0 devre dışı bırakır.
+    DB_IDLE_IN_TXN_TIMEOUT_MS: int = 60000
+    #: Havuz doygunluğunu periyodik loglayan arka plan görevi (bkz.
+    #: `app.lifespan`). Saniye cinsinden aralık; 0 devre dışı bırakır.
+    #: Kullanılan bağlantı oranı %80'i geçtiğinde WARNING loglar.
+    DB_POOL_MONITOR_INTERVAL_SECONDS: int = 30
+
     #: LangGraph'ın AsyncPostgresSaver'ı, planlama grafiğinde HITL'i (eksik
     #: bilgi istekleri) destekler. Başlangıçta en iyi çaba: False
     #: olduğunda veya Postgres ulaşılamaz olduğunda, grafikler bir
