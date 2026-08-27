@@ -69,6 +69,10 @@ pytesseract==0.3.13
 pillow==12.3.0
 beautifulsoup4==4.15.0
 python-docx==1.2.0
+# Taslak dışa aktarımı (app.domains.drafts.export): docx için python-docx,
+# pdf için reportlab -- ikisi de artık bir prod endpoint'i tarafından
+# kullanılıyor (GET /drafts/{id}/export), yalnızca e2e testleri değil.
+reportlab==5.0.0
 # arq itself is lightweight (redis-backed job queue, no ML deps) and is
 # needed by the main backend process too -- it's the caller that enqueues a
 # LoRA training job (app.domains.training.service), not only the worker

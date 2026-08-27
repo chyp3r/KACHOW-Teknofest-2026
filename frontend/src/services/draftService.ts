@@ -1,7 +1,23 @@
-import { apiRequest } from "./apiClient";
+import { apiFetch, apiRequest } from "./apiClient";
 import type { PaginatedResponse } from "../types/api";
 import type { DraftShare, PersistedDraft } from "../types/drafts";
 import { collectPages } from "./pagination";
+
+export type DraftExportFormat = "docx" | "pdf";
+
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const utf8 = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8?.[1]) {
+    try {
+      return decodeURIComponent(utf8[1]);
+    } catch {
+      /* aşağıdaki düz filename'e düş */
+    }
+  }
+  const plain = header.match(/filename="?([^";]+)"?/i);
+  return plain?.[1] ?? fallback;
+}
 
 export const draftService = {
   list: () =>
@@ -51,4 +67,32 @@ export const draftService = {
     apiRequest<{ deleted: boolean }>(`/api/v1/drafts/${encodeURIComponent(draftId)}`, {
       method: "DELETE",
     }),
+
+  /** Taslağı docx/pdf olarak indirir: binary yanıtı bir blob'a çevirip
+   * tarayıcıda bir "kaydet" tetikler. Zarf tabanlı `apiRequest` JSON
+   * beklediği için ham `apiFetch` (auth + refresh davranışı korunur). */
+  export: async (
+    draftId: string,
+    fmt: DraftExportFormat,
+    version?: number,
+  ): Promise<void> => {
+    const response = await apiFetch(
+      `/api/v1/drafts/${encodeURIComponent(draftId)}/export?fmt=${fmt}`,
+    );
+    if (!response.ok) {
+      throw new Error("Taslak indirilemedi.");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filenameFromDisposition(
+      response.headers.get("Content-Disposition"),
+      `taslak-v${version ?? 1}.${fmt}`,
+    );
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  },
 };

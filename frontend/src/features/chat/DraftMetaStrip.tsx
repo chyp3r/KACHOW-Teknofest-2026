@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, Route, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, FileDown, FileText, Route, XCircle } from "lucide-react";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
 import { UnitPicker } from "../drafts/UnitPicker";
 import { draftService } from "../../services/draftService";
@@ -175,6 +175,32 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
                 onSave={(destination) => updateDestinationMutation.mutate(destination)}
               />
             )}
+          </div>
+        )}
+
+        {draftId && (
+          <div className="draft-download-row">
+            <span>İndir:</span>
+            <button
+              type="button"
+              className="draft-download-link"
+              onClick={() =>
+                void draftService.export(draftId, "docx", persistedDraftQuery.data?.version)
+              }
+            >
+              <FileText size={13} />
+              Word (.docx)
+            </button>
+            <button
+              type="button"
+              className="draft-download-link"
+              onClick={() =>
+                void draftService.export(draftId, "pdf", persistedDraftQuery.data?.version)
+              }
+            >
+              <FileDown size={13} />
+              PDF
+            </button>
           </div>
         )}
 

@@ -1,5 +1,4 @@
 -r requirements.txt
-reportlab==5.0.0
 Levenshtein==0.27.3
 pytest-cov==7.1.0
 pytest-timeout==2.4.0
