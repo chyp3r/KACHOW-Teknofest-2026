@@ -1568,17 +1568,22 @@ def test_get_document_extractor_wires_a_header_field_probe(
     assert chain.header_field_probe("Sayı : E-123\nKonu : Test") >= 1
 
 
-def test_get_document_extractor_wires_a_scan_text_layer_probe(
+def test_get_document_extractor_never_wires_a_vision_escalation_path(
     _reset_document_extractor_singleton,
 ):
-    from app.infrastructure.extractors import get_document_extractor
+    """The default upload chain must never be able to reach a vision-model
+    call -- header_repair/scan_text_layer_probe/signature_probe were
+    measured to push a single upload from ~14s to ~34s (see
+    get_document_extractor's own docstring). Vision OCR is opt-in only,
+    via DocumentService.generate_detailed_analysis."""
+    from app.infrastructure.extractors import TesseractExtractor, get_document_extractor
 
     chain = get_document_extractor()
 
-    assert chain.scan_text_layer_probe is not None
-    # Wired to the real is_scanned_text_layer -- garbage bytes must fail
-    # closed (False), not raise.
-    assert chain.scan_text_layer_probe(b"not a pdf") is False
+    assert chain.header_repair is None
+    assert chain.scan_text_layer_probe is None
+    assert chain.signature_probe is None
+    assert any(isinstance(extractor, TesseractExtractor) for extractor in chain.extractors)
 
 
 def test_get_document_extractor_returns_the_same_instance_across_calls(
