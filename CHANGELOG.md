@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [Unreleased]
+## [3.55]
 ### Eklendi
 - `docs/diagrams/` altında sistemin tamamını (backend + frontend) kapsayan 8
   Mermaid diyagramı eklendi: use case, Görev 1 ve Görev 2 sıra diyagramları,
@@ -183,6 +183,26 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Sohbete evrak yüklenirken tüm ekranı kaplayan analiz görünümü kaldırıldı;
   yükleme ve analiz ilerlemesi artık konuşma içinde kompakt bir durum mesajı
   olarak gösteriliyor.
+- Taslak ve revizyon akışları arasındaki tutarsızlıklar giderildi (#282):
+  taslak turundaki eksik-bilgi kapısında verilen cevaplar ve "Sen karar ver"
+  ertelemeleri artık `DraftVersion` üzerinde taşınıyor
+  ([focus.py](backend/app/ai/session/focus.py),
+  [planning_graph.py](backend/app/ai/workflows/planning_graph.py)), böylece
+  sonraki bir revizyon turu aynı yer tutucuyu tekrar sormuyor;
+  `revise_graph.verify_node` artık taslak akışıyla aynı `instruction_haystack`'i
+  (önceki turlar + yerleşmiş yazım briefi) doğrulayıcıya geçiyor, dolayısıyla
+  daha önce verilmiş bir isim/kurum revizyonda `dayanaksiz_iddia` olarak
+  puanlanmıyor ([revise_graph.py](backend/app/ai/workflows/revise_graph.py),
+  [revise.py](backend/app/ai/workflows/revise.py)). Her iki akışın paylaştığı
+  eksik-alan sorusu artık her alan için "bu alan nedir / neden gerekli"
+  açıklaması ve mümkünse bir örnek içeriyor
+  ([missing_info.py](backend/app/ai/verification/missing_info.py)).
+- Asistan, yüklü evraktan özet/bilgi istendiğinde artık sahip olduğu araçların
+  adını ("`get_document_details` aracını kullanabilirim" gibi) kullanıcıya
+  açıklamıyor ve "görmek ister misiniz?" diye izin sormuyor; salt-okunur
+  isteği doğrudan yerine getirip sonucu sunuyor. Bir sonraki akışa devretme /
+  aktarım gibi bağlayıcı işlemlerde onay davranışı korunuyor
+  ([assistant.md](backend/app/ai/prompts/templates/assistant.md)).
 
 ## [3.54.0] - 2026-08-24
 İki kullanıcı bildirimi: gerçek taranmış belgelerde `İmza sahibi`/`İmza
