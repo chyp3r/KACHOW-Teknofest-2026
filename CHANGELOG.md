@@ -8,6 +8,12 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Belge analiz grafiğinde (`document_analysis_graph.py`) canlı mevzuat zenginleştirmesi.
 - Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
 - Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
+- Backend test coverage kapısı (`--cov-fail-under=86`) %85.60'ta tıkanmıştı;
+  üç düşük-kapsamlı ama gerçekten test edilmeye değer dosyaya (`sparse_
+  encoder.py` -- saf BM25 matematiği, `core/authz/cache.py` -- hiç test
+  edilmemiş yetkilendirme karar önbelleği, `chat_recorder.py` -- kardeş
+  kaydedicilerin zaten kurulu deseniyle) gerçek davranış testleri eklendi.
+  %86.05'e çıktı (#298).
 
 ### Düzeltildi
 - `datasets/sample_benchmark/` dizini gerçekte `datasets/sample/` adıyla
