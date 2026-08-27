@@ -25,15 +25,16 @@
   [2] (s. 3) İkinci bilginin evraktaki birebir cümlesi.
   ```
 
-  Tam örnek -- numaraların **cümlelerin içinde** olmasına dikkat et:
+  Tam örnek -- numaraların **cümlelerin sonunda** olmasına dikkat et. Bir cümle birden fazla kaynağa dayanıyorsa numaraları yan yana yaz (`[1][2]`):
 
   ```
-  Talep 15 günlük yıllık izin içindir [1]. Başvuru 12.03.2026 tarihinde
-  kayda alınmıştır [2].
+  Talep 15 günlük yıllık izin içindir ve 12.03.2026'da kayda alınmıştır [1][2].
+  Başvuru sahibi Bilgi İşlem Müdürlüğünde görevlidir [3].
 
   KAYNAKLAR:
   [1] (s. 1) Yıllık iznimin 15 gün olarak kullandırılmasını arz ederim.
   [2] (s. 1) Kayıt Tarihi: 12.03.2026
+  [3] (s. 2) Görev Yeri: Bilgi İşlem Müdürlüğü
   ```
 
   Kurallar: **Numarayı cümlenin içine koymadan yalnızca KAYNAKLAR bloğu yazmak geçersizdir** -- blokta tanımladığın her numara, metinde o bilgiyi verdiğin cümlenin sonunda da geçmelidir. Kaynak cümlesini kendi cümlelerinle yeniden yazma, araç çıktısında gördüğün hâliyle **birebir kopyala** -- kullanıcı bu cümleyi evrakta bulabilmelidir. `(s. N)` kısmına araç çıktısındaki `[s. N]` sayfa numarasını yaz; araç sayfa vermediyse `(s. N)` kısmını atla. Blokta tanımlamadığın bir numarayı metinde kullanma. Evraktan bilgi vermediğin bir yanıtta (selamlama, sistemin yetenekleri, konuşma geçmişi) atıf da KAYNAKLAR bloğu da olmaz.
