@@ -27,6 +27,16 @@ def test_first_document_of_the_session_has_no_switch_note():
     assert _DOCUMENT_SWITCHED_NOTE not in text
 
 
+def test_the_summary_is_marked_as_not_being_an_answer_source():
+    """The model used to answer document questions straight from this summary
+    without searching -- the block has to say, in the prompt itself, that the
+    summary is context and not a source."""
+    text = _assist_document_context(
+        "Yıllık izin talebi.", document_id="uploads/a.pdf", prior_document_id=None
+    )
+    assert "CEVAP KAYNAĞI DEĞİLDİR" in text
+
+
 def test_same_document_across_turns_has_no_switch_note():
     text = _assist_document_context(
         "Yıllık izin talebi.",

@@ -519,9 +519,16 @@ def _assist_document_context(
     if not document_id:
         return "(Bu turda yüklenmiş bir belge yok.)"
 
+    # Özetin ne OLMADIĞI açıkça yazılır: bu blok eskiden yalnızca özeti
+    # veriyordu ve model, evrakta hiç arama yapmadan doğrudan özetten (ya da
+    # özetin çevresini kendi uydurarak) cevap yazıyordu. Özet yalnızca
+    # "elimde ne var" bilgisidir; içerik sorularının kaynağı evrakın kendisi.
     context = (
         f"Bir belge yüklü. Özet: {summary or 'Özet mevcut değil.'}\n"
-        "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
+        "Bu özet, belgenin ne olduğunu bilmen içindir; içeriğe dair soruların "
+        "CEVAP KAYNAĞI DEĞİLDİR. Belgenin içeriği, üst verisi veya herhangi bir "
+        "ayrıntısı sorulduğunda önce ilgili aracı çağırıp bilgiyi evrakın "
+        "kendisinden getir; özete dayanarak cevap yazma."
     )
     if prior_document_id and prior_document_id != document_id:
         return f"{_DOCUMENT_SWITCHED_NOTE}\n\n{context}"
@@ -1394,7 +1401,11 @@ def create_planning_graph(
                     agent_identity=format_agent_identity(profile),
                     user_display_name=format_user_address(state.get("user_display_name")),
                     tools=tools,
-                    document_attached=bool(document_id),
+                    # Bir belge ekliyse ve bu tur düz bir selamlama değilse,
+                    # model hiç arama yapmadan (ya da bütçesini tüketmeden
+                    # "bulamadım" diyerek) cevap yazamaz -- bkz.
+                    # AssistantAgent._final_answer_nudge.
+                    require_retrieval=bool(document_id) and not is_small_talk_turn,
                     config=config,
                     node="assist",
                 ):

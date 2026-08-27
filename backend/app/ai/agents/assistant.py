@@ -43,6 +43,28 @@ def _max_tool_turns() -> int:
     return MAX_TOOL_TURNS_LOCAL if settings.LOCAL_MODE else MAX_TOOL_TURNS_EVREN
 
 
+#: Hiç araç çağırmadan cevap yazmaya çalışan modele verilen düzeltme.
+#:
+#: Erken pes etme (`_GIVEUP_PATTERN`) korumasının kaçırdığı, daha sık ve daha
+#: zararlı olan durum: model evrakta HİÇ arama yapmadan, sistem prompt'undaki
+#: analiz özetine dayanarak kendinden emin bir cevap uyduruyor. Bu bir
+#: "bulamadım" itirafı gibi okunmadığı için kalıp eşleşmesi onu yakalamaz --
+#: yakalanan tek sinyal, araç çağrısı sayısının sıfır olmasıdır.
+#:
+#: Son cümle bilerek var: yüklü evrakla ilgisi olmayan meta sorular ("bu
+#: sistemde neler yapabilirim", "az önce ne sordum") da bu düzeltmeyi görür ve
+#: bu izin olmadan model onları da evrakta aramaya çalışırdı.
+_NO_RETRIEVAL_NUDGE = (
+    "Bu yanıtı verme. Bu turda yüklü evrakta HİÇBİR arama yapmadın. Sistem "
+    "yönergesindeki özet, içerik sorularını yanıtlamak için bir kaynak "
+    "DEĞİLDİR; yalnızca belgenin ne olduğunu bilmen içindir. Sorunun cevabını "
+    "evrakın kendisinden getir: soruya en uygun arama aracını ŞİMDİ çağır "
+    "(anlamsal arama, metin/regex satır araması, üst veri/özet getirme, sayfa "
+    "dökümü veya ilgili sayfanın tam metni). Kullanıcının sorusu yüklü evrakla "
+    "ilgili değilse -- sistemin yetenekleri, konuşmanın geçmişi veya sıradan "
+    "bir nezaket ifadesiyse -- araç çağırmadan doğrudan yanıtla."
+)
+
 #: Bir belge ekliyken, model araç çağırmayı bırakıp bu kalıplardan birini
 #: içeren bir "bulamadım / bilmiyorum" yanıtıyla turu bitirmeye çalışıyorsa ve
 #: henüz erişim (retrieval) bütçesini tüketmemişse, yanıtı kabul etme;
@@ -99,6 +121,49 @@ def _looks_like_giveup(text: Optional[str]) -> bool:
     return bool(text) and _GIVEUP_PATTERN.search(text) is not None
 
 
+def _final_answer_nudge(
+    *,
+    content: Optional[str],
+    require_retrieval: bool,
+    has_tools: bool,
+    tool_calls_made: int,
+    max_tool_turns: int,
+) -> Optional[str]:
+    """Modelin bitirmek istediği turu reddedip reddetmeyeceğimize karar verir.
+
+    Model araç çağırmayı bırakıp nihai yanıtını yazdığında çağrılır. İki
+    reddetme sebebi var, en güçlüsü önce:
+
+    1. **Hiç arama yapılmadı.** Bir belge ekli, gerçek bir soru soruldu ve
+       model sıfır araç çağrısıyla cevap yazıyor -- cevabın kaynağı olsa olsa
+       sistem yönergesindeki özet ya da modelin kendi uydurması olabilir.
+    2. **Erken pes etme.** Model "bulamadım/bilmiyorum" diyor ama erişim
+       bütçesini (``max_tool_turns``) henüz tüketmedi.
+
+    Args:
+        content: Modelin yazdığı nihai yanıt metni.
+        require_retrieval: Bu turda bir belge ekli ve tur, evrakla ilgili
+            olabilecek gerçek bir soru mu (bkz. ``run_stream``'in aynı adlı
+            parametresi). False ise hiçbir reddetme yapılmaz.
+        has_tools: Bu tura bağlanmış en az bir araç var mı -- yoksa modelden
+            arama yapmasını istemek anlamsızdır.
+        tool_calls_made: Bu turda şimdiye kadar yürütülen araç çağrısı sayısı.
+        max_tool_turns: Sağlayıcıya göre erişim bütçesi (bkz.
+            ``_max_tool_turns``).
+
+    Returns:
+        Modele iletilecek düzeltme mesajı, ya da yanıt kabul edilecekse
+        ``None``.
+    """
+    if not require_retrieval or not has_tools:
+        return None
+    if tool_calls_made == 0:
+        return _NO_RETRIEVAL_NUDGE
+    if tool_calls_made < max_tool_turns and _looks_like_giveup(content):
+        return _GIVEUP_RETRY_NUDGE
+    return None
+
+
 class AssistantAgent(BaseAgent):
     """Sohbet şeklinde yanıt verir, gerektiğinde erişim (retrieval) araçlarına başvurur.
 
@@ -142,7 +207,7 @@ class AssistantAgent(BaseAgent):
         agent_identity: Optional[str] = None,
         user_display_name: Optional[str] = None,
         tools: list[ToolSpec],
-        document_attached: bool = False,
+        require_retrieval: bool = False,
         config: Optional[RunnableConfig] = None,
         node: str = "assist",
     ) -> AsyncIterator[str]:
@@ -175,11 +240,12 @@ class AssistantAgent(BaseAgent):
             tools: Bu tur için bağlanabilir araçlar. Hiçbir şey ekli değilse
                 (belge yok, mevzuat erişimcisi yok) boştur -- bu durumda döngü
                 tamamen atlanır ve bu düz bir sohbet gibi davranır.
-            document_attached: Bu turda bir belge ekli mi. True ise, model
-                erişim bütçesini tüketmeden "bulamadım/bilmiyorum" diyerek
-                turu erken kapatmaya çalışırsa yanıt kabul edilmez; denemediği
-                araç/sorguları denemesi için döngü bir düzeltme mesajıyla
-                sürdürülür (bkz. ``_GIVEUP_PATTERN`` / ``_GIVEUP_RETRY_NUDGE``).
+            require_retrieval: Bu turda bir belge ekli ve tur, evrakla ilgili
+                olabilecek gerçek bir soru mu (yani bir selamlama/nezaket
+                ifadesi değil). True ise modelin nihai yanıtı iki durumda
+                reddedilir ve döngü bir düzeltme mesajıyla sürdürülür (bkz.
+                ``_final_answer_nudge``): hiç araç çağırmadan cevap yazması,
+                ya da erişim bütçesini tüketmeden "bulamadım" demesi.
             config: Bir alt grafiği tetikleyen araç işleyicilerine iletilen ve
                 ``tool_call`` ilerleme olaylarını yayınlamak için kullanılan
                 çalıştırılabilir yapılandırma.
@@ -224,7 +290,7 @@ class AssistantAgent(BaseAgent):
         final_response_content: Optional[str] = None
         max_tool_turns = _max_tool_turns()
         tool_calls_made = 0
-        giveup_nudges = 0
+        nudges = 0
         for _ in range(max_tool_turns if lc_tools else 0):
             try:
                 response = await self.llm_client.generate_with_tools(
@@ -235,29 +301,34 @@ class AssistantAgent(BaseAgent):
                 break
 
             if not response.tool_calls:
-                # Model turu bitirmek istiyor. Bir belge ekliyken, henüz
-                # erişim bütçesini (max_tool_turns kadar araç çağrısı)
-                # tüketmeden bir "bulamadım/bilmiyorum" yanıtıyla kapatmaya
-                # çalışıyorsa kabul etme -- atladığı araç/sorguları denemesi
-                # için bir düzeltme mesajı ekleyip döngüyü sürdür. giveup
-                # nudge sayısı da tavanla sınırlı, yani en kötü ihtimalle
-                # döngü yine max_tool_turns çağrıdan sonra biter.
-                if (
-                    document_attached
-                    and lc_tools
-                    and tool_calls_made < max_tool_turns
-                    and giveup_nudges < max_tool_turns
-                    and _looks_like_giveup(response.content)
-                ):
-                    giveup_nudges += 1
+                # Model turu bitirmek istiyor. Cevabı, arama yapmadan ya da
+                # erişim bütçesini tüketmeden yazılmışsa kabul etme: atladığı
+                # yolları denemesi için bir düzeltme mesajı ekleyip döngüyü
+                # sürdür (bkz. _final_answer_nudge). Düzeltme sayısı da
+                # tavanla sınırlı, yani en kötü ihtimalle döngü yine
+                # max_tool_turns çağrıdan sonra biter.
+                nudge = (
+                    _final_answer_nudge(
+                        content=response.content,
+                        require_retrieval=require_retrieval,
+                        has_tools=bool(lc_tools),
+                        tool_calls_made=tool_calls_made,
+                        max_tool_turns=max_tool_turns,
+                    )
+                    if nudges < max_tool_turns
+                    else None
+                )
+                if nudge is not None:
+                    nudges += 1
                     logger.info(
-                        "AssistantAgent give-up reply after %d tool call(s); nudging to retry (%d).",
+                        "AssistantAgent rejected a final answer written after %d tool "
+                        "call(s); nudging the model to use its tools (nudge %d).",
                         tool_calls_made,
-                        giveup_nudges,
+                        nudges,
                     )
                     if response.content:
                         messages.append({"role": "assistant", "content": response.content})
-                    messages.append({"role": "user", "content": _GIVEUP_RETRY_NUDGE})
+                    messages.append({"role": "user", "content": nudge})
                     continue
                 final_response_content = response.content
                 break
