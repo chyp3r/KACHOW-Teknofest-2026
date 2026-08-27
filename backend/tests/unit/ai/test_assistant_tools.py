@@ -18,9 +18,11 @@ from app.ai.agents.assistant import (
     MAX_TOOL_TURNS_LOCAL,
     AssistantAgent,
     _GIVEUP_RETRY_NUDGE,
+    _NARRATION_NUDGE,
     _NO_RETRIEVAL_NUDGE,
     _final_answer_nudge,
     _looks_like_giveup,
+    _looks_like_narration,
     _max_tool_turns,
 )
 from app.ai.llms.base import ToolCallResponse
@@ -614,6 +616,52 @@ def test_looks_like_giveup_leaves_real_answers_alone(text):
     assert _looks_like_giveup(text) is False
 
 
+@pytest.mark.parametrize(
+    "text",
+    [
+        # The exact reported regression.
+        "Şimdi de \"Hacettepe\" kelimesiyle birlikte \"R&D\" veya \"Community\" "
+        "gibi kelimeleri içeren tüm geçişleri kontrol edelim:",
+        "Bir de şu terimleri arayalım.",
+        "Önce belgenin sayfa dökümüne bakalım.",
+        "Şimdi ilgili bölümü inceleyelim:",
+        "Bir sonraki adımda tam metni okuyacağım.",
+    ],
+)
+def test_looks_like_narration_catches_an_announced_next_step(text):
+    assert _looks_like_narration(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Evrak, 15 günlük yıllık izin talebidir [s. 2].",
+        "Belgede ACM ICPC'ye dair bir bilgi bulunmamaktadır.",
+        "Merhaba, size nasıl yardımcı olabilirim?",
+        "",
+        None,
+    ],
+)
+def test_looks_like_narration_leaves_real_answers_alone(text):
+    assert _looks_like_narration(text) is False
+
+
+def test_an_announced_next_step_is_rejected_even_after_searching():
+    """The reported breakage: the model replied with a search plan instead of
+    an answer, and because it carried no tool call the loop shipped it to the
+    user as the final reply. Rejected regardless of how many searches ran."""
+    assert (
+        _final_answer_nudge(
+            content='Şimdi de "Hacettepe" ile "R&D" geçişlerini kontrol edelim:',
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=3,
+            max_tool_turns=5,
+        )
+        == _NARRATION_NUDGE
+    )
+
+
 def test_a_confident_answer_written_without_any_search_is_rejected():
     """The reported bug: the model answers about the document having called
     nothing at all. It reads as a real answer, so the give-up pattern never
@@ -708,7 +756,55 @@ async def test_an_answer_with_zero_searches_is_not_accepted_and_the_model_is_nud
     assert handler.await_count == 1
     last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
     assert any(
-        msg.get("role") == "user" and msg.get("content") == _NO_RETRIEVAL_NUDGE
+        msg.get("role") == "system" and msg.get("content") == _NO_RETRIEVAL_NUDGE
+        for msg in last_messages
+    )
+    # The rejected text must not survive in context -- keeping it let the
+    # hallucinated answer bleed back into the final reply.
+    assert not any("10 günlük" in (msg.get("content") or "") for msg in last_messages)
+
+
+@pytest.mark.asyncio
+async def test_a_search_plan_never_reaches_the_user_as_the_final_answer(fake_llm):
+    """End-to-end for the reported breakage: after being nudged the model
+    answered with a plan ('şimdi de ... kontrol edelim:') and no tool call.
+    That text must be rejected, not streamed to the user as the reply."""
+    handler = AsyncMock(return_value="[s. 1] ACM Hacettepe -- TEKNOFEST Teams Lead")
+    tool = ToolSpec(
+        name="search_document_regex", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document_regex", "args": {"pattern": "ICPC"}}],
+        ),
+        ToolCallResponse(
+            content='Şimdi de "Hacettepe" ile "R&D" geçişlerini kontrol edelim:',
+            tool_calls=[],
+        ),
+        ToolCallResponse(
+            content="Belgede ACM Hacettepe'de TEKNOFEST Teams Lead görevi kayıtlıdır [s. 1].",
+            tool_calls=[],
+        ),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="ICPC madalyası var mı?",
+            history=[],
+            tools=[tool],
+            require_retrieval=True,
+        )
+    ]
+
+    answer = "".join(chunks)
+    assert answer == "Belgede ACM Hacettepe'de TEKNOFEST Teams Lead görevi kayıtlıdır [s. 1]."
+    assert "kontrol edelim" not in answer
+    last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
+    assert any(
+        msg.get("role") == "system" and msg.get("content") == _NARRATION_NUDGE
         for msg in last_messages
     )
 
@@ -751,7 +847,7 @@ async def test_a_giveup_reply_with_a_document_is_not_accepted_and_the_model_is_n
     # The corrective nudge reached the model as a user message.
     last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
     assert any(
-        msg.get("role") == "user" and msg.get("content") == _GIVEUP_RETRY_NUDGE
+        msg.get("role") == "system" and msg.get("content") == _GIVEUP_RETRY_NUDGE
         for msg in last_messages
     )
 

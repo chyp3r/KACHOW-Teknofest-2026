@@ -43,6 +43,14 @@ def _max_tool_turns() -> int:
     return MAX_TOOL_TURNS_LOCAL if settings.LOCAL_MODE else MAX_TOOL_TURNS_EVREN
 
 
+#: Düzeltme mesajlarının rolü. **user değil.** İlk sürümde bunlar bir
+#: ``user`` turu olarak enjekte ediliyordu ve model onları kullanıcının
+#: gerçek isteği sanıp konuşma diliyle cevaplıyordu -- "Şimdi de 'Hacettepe'
+#: kelimesiyle birlikte ... geçişleri kontrol edelim:" gibi bir arama planı
+#: yazıyor, o plan da nihai yanıt olarak kullanıcıya gidiyordu. Bir sistem
+#: turu, cevaplanacak bir mesaj değil uyulacak bir yönerge olarak okunur.
+_NUDGE_ROLE = "system"
+
 #: Hiç araç çağırmadan cevap yazmaya çalışan modele verilen düzeltme.
 #:
 #: Erken pes etme (`_GIVEUP_PATTERN`) korumasının kaçırdığı, daha sık ve daha
@@ -55,14 +63,57 @@ def _max_tool_turns() -> int:
 #: sistemde neler yapabilirim", "az önce ne sordum") da bu düzeltmeyi görür ve
 #: bu izin olmadan model onları da evrakta aramaya çalışırdı.
 _NO_RETRIEVAL_NUDGE = (
-    "Bu yanıtı verme. Bu turda yüklü evrakta HİÇBİR arama yapmadın. Sistem "
-    "yönergesindeki özet, içerik sorularını yanıtlamak için bir kaynak "
-    "DEĞİLDİR; yalnızca belgenin ne olduğunu bilmen içindir. Sorunun cevabını "
-    "evrakın kendisinden getir: soruya en uygun arama aracını ŞİMDİ çağır "
-    "(anlamsal arama, metin/regex satır araması, üst veri/özet getirme, sayfa "
-    "dökümü veya ilgili sayfanın tam metni). Kullanıcının sorusu yüklü evrakla "
-    "ilgili değilse -- sistemin yetenekleri, konuşmanın geçmişi veya sıradan "
-    "bir nezaket ifadesiyse -- araç çağırmadan doğrudan yanıtla."
+    "[SİSTEM] Yazmak üzere olduğun yanıt iptal edildi ve kullanıcıya "
+    "gösterilmedi: yüklü evrakta hiç arama yapmadan yazılmıştı. Sistem "
+    "yönergesindeki özet bir cevap kaynağı değildir. Soruya en uygun arama "
+    "aracını şimdi çağır ve cevabı evraktan getir. Araç çağrısının yanına "
+    "açıklama, plan veya 'şimdi şunu kontrol edelim' türü bir metin YAZMA. "
+    "Kullanıcının sorusu evrakla ilgili değilse -- sistemin yetenekleri, "
+    "konuşmanın geçmişi veya sıradan bir nezaket ifadesiyse -- araç "
+    "çağırmadan doğrudan yanıtla."
+)
+
+#: Model, cevap yerine bir arama planı yazdığında verilen düzeltme.
+#:
+#: Bildirilen bozulmanın doğrudan biçimi: model araç çağırmak yerine (ya da
+#: çağırmadan önce) "Şimdi de şu kelimeleri kontrol edelim:" diye bir sonraki
+#: adımını anlatan bir metin döndürüyor, hiç araç çağrısı olmadığı için döngü
+#: bunu nihai yanıt sanıp kullanıcıya gönderiyordu.
+_NARRATION_NUDGE = (
+    "[SİSTEM] Bu metin kullanıcıya gösterilmedi. Sıradaki adımını anlatan "
+    "cümleler ('şimdi şunu kontrol edelim', 'şu terimleri arayalım', 'bir de "
+    "buna bakalım') kullanıcıya gitmez. İki seçeneğin var: aramayı yapacaksan "
+    "ilgili aracı yanına hiçbir açıklama yazmadan doğrudan çağır; arama "
+    "bittiyse nihai yanıtı yaz -- yalnızca sonuç, varsa sayfa atfıyla, süreç "
+    "anlatımı olmadan."
+)
+
+#: Bir sonraki adımı duyuran, cevap değil plan olan bir yanıt. Türkçe'nin
+#: istek kipi ("kontrol edelim", "bakalım", "arayalım") bu bozulmanın en
+#: güvenilir işareti; ``\w{0,3}`` araya giren kaynaştırma harfini
+#: ("araYalım", "inceleYelim") soğurur.
+_NARRATION_PATTERN = re.compile(
+    r"\b(?:kontrol\s+ed|gözden\s+geçir|karşılaştır|araştır|incele|doğrula|"
+    r"tara|dene|bak|ara)\w{0,3}(?:elim|alım|eyim|ayım)\b"
+    r"|^\s*şimdi\s+de\b"
+    r"|\bbir\s+sonraki\s+adım",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _looks_like_narration(text: Optional[str]) -> bool:
+    """Yanıt, bir cevap değil bir sonraki arama adımının duyurusu gibi mi okunuyor."""
+    return bool(text) and _NARRATION_PATTERN.search(text) is not None
+
+
+#: Düzeltme verilmiş bir turda, nihai yanıtı üreten son ``stream()`` çağrısına
+#: eklenen kapanış yönergesi (bkz. ``run_stream``).
+_FINAL_ANSWER_INSTRUCTION = (
+    "[SİSTEM] Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: "
+    "bulduğun cevabı (varsa sayfa atfıyla) ya da tek cümlelik 'yüklü evrakta "
+    "bu bilgiye ulaşılamadı' ifadesini. Hangi aramaları yaptığını, hangi "
+    "terimleri denediğini veya sırada ne yapacağını ANLATMA; kullanıcı arama "
+    "sürecini görmemeli."
 )
 
 #: Bir belge ekliyken, model araç çağırmayı bırakıp bu kalıplardan birini
@@ -103,16 +154,14 @@ _GIVEUP_PATTERN = re.compile(
 #: "Bulamadım"la turu erken kapatan modele, denemediği yolları hatırlatan ve
 #: en az bir arama aracı daha çağırmasını isteyen düzeltme mesajı.
 _GIVEUP_RETRY_NUDGE = (
-    "Bu yanıtı henüz verme. Yukarıdaki soru için yüklü evrakta bilgi olup "
-    "olmadığını yeterince araştırmadın. Henüz denemediğin arama yollarını kullan: "
-    "anlamsal aramayı farklı ifadelerle tekrarla; metin/regex satır aramasını "
-    "farklı kalıplarla dene (eş anlamlılar, kısaltmalar, kısmi kökler, sayı/tarih "
-    "biçim varyantları); özet / üst veri / uygunluk çıktısını getir; sayfa "
-    "dökümünü çıkar ve ilgili sayfanın tam metnini oku. En az bir arama aracını "
-    "daha çağır. Ancak bunları da denedikten sonra sonuç çıkmazsa 'yüklü evrakta "
-    "bu bilgiye ulaşamadım' de. NİHAİ yanıtında hangi aramaları/kalıpları/"
-    "terimleri denediğini veya kaç kez arama yaptığını ANLATMA; kullanıcı yalnızca "
-    "son, net sonucu düzgün bir biçimde görmeli."
+    "[SİSTEM] Yazmak üzere olduğun 'bulunamadı' yanıtı iptal edildi ve "
+    "kullanıcıya gösterilmedi: erişim bütçen dolmadan pes ettin. Henüz "
+    "denemediğin bir arama yolunu şimdi dene -- farklı ifadelerle anlamsal "
+    "arama, farklı metin kalıpları, üst veri/özet, sayfa dökümü veya ilgili "
+    "sayfanın tam metni. İlgili aracı yanına açıklama veya plan yazmadan "
+    "doğrudan çağır. Bu da sonuç vermezse nihai yanıtın tek cümle olsun: "
+    "'yüklü evrakta bu bilgiye ulaşamadım'. Hangi aramaları veya terimleri "
+    "denediğini ANLATMA."
 )
 
 
@@ -131,13 +180,17 @@ def _final_answer_nudge(
 ) -> Optional[str]:
     """Modelin bitirmek istediği turu reddedip reddetmeyeceğimize karar verir.
 
-    Model araç çağırmayı bırakıp nihai yanıtını yazdığında çağrılır. İki
+    Model araç çağırmayı bırakıp nihai yanıtını yazdığında çağrılır. Üç
     reddetme sebebi var, en güçlüsü önce:
 
-    1. **Hiç arama yapılmadı.** Bir belge ekli, gerçek bir soru soruldu ve
+    1. **Cevap değil, plan.** Model bir sonraki arama adımını anlatıyor
+       ("şimdi de şu kelimeleri kontrol edelim:") -- bu bir yanıt değildir ve
+       araç çağrısı taşımadığı için döngü onu nihai yanıt sanardı. Araç
+       çağrısı sayısından bağımsız olarak reddedilir.
+    2. **Hiç arama yapılmadı.** Bir belge ekli, gerçek bir soru soruldu ve
        model sıfır araç çağrısıyla cevap yazıyor -- cevabın kaynağı olsa olsa
        sistem yönergesindeki özet ya da modelin kendi uydurması olabilir.
-    2. **Erken pes etme.** Model "bulamadım/bilmiyorum" diyor ama erişim
+    3. **Erken pes etme.** Model "bulamadım/bilmiyorum" diyor ama erişim
        bütçesini (``max_tool_turns``) henüz tüketmedi.
 
     Args:
@@ -157,6 +210,8 @@ def _final_answer_nudge(
     """
     if not require_retrieval or not has_tools:
         return None
+    if _looks_like_narration(content):
+        return _NARRATION_NUDGE
     if tool_calls_made == 0:
         return _NO_RETRIEVAL_NUDGE
     if tool_calls_made < max_tool_turns and _looks_like_giveup(content):
@@ -326,9 +381,11 @@ class AssistantAgent(BaseAgent):
                         tool_calls_made,
                         nudges,
                     )
-                    if response.content:
-                        messages.append({"role": "assistant", "content": response.content})
-                    messages.append({"role": "user", "content": nudge})
+                    # Reddedilen metin bilerek bağlama EKLENMEZ. Eklendiğinde
+                    # iki zararı oluyordu: uydurulmuş cevap ya da arama planı
+                    # bağlamda kalıp nihai yanıta sızıyor, ve model o anlatım
+                    # üslubunu ("şimdi de şuna bakalım") sürdürüyordu.
+                    messages.append({"role": _NUDGE_ROLE, "content": nudge})
                     continue
                 final_response_content = response.content
                 break
@@ -373,6 +430,15 @@ class AssistantAgent(BaseAgent):
             final_chunks.append(final_response_content)
             yield final_response_content
         else:
+            # Bir düzeltme verildiyse konuşmanın son turları araç sonuçları ve
+            # sistem uyarılarıdır; buradan devam eden bir stream, cevabı değil
+            # süreci anlatmaya meyleder. Nihai yanıtın ne olması gerektiğini
+            # son bir kez söyle -- yalnızca bu durumda, sıradan (düzeltmesiz)
+            # yolun davranışı değişmesin.
+            if nudges:
+                messages.append(
+                    {"role": _NUDGE_ROLE, "content": _FINAL_ANSWER_INSTRUCTION}
+                )
             async for chunk in self.llm_client.stream(messages=messages, temperature=0.2):
                 final_chunks.append(chunk)
                 yield chunk
