@@ -88,6 +88,35 @@ async def test_context_usage_is_reported_against_the_providers_window(
 
 
 @pytest.mark.asyncio
+async def test_a_compacted_marker_shrinks_the_verbatim_window(fake_llm, fake_fast_llm):
+    """``history_summarized_through`` ilerlemişse (kullanıcı sohbeti sıkıştırdı)
+    o turlar artık modele birebir gönderilmez -- yalnızca özet olarak yaşar."""
+    fake_llm.stream_chunks = ["tamam"]
+    graph = _build_graph(fake_llm, fake_fast_llm)
+    config = {"configurable": {"thread_id": "context-budget-compacted"}}
+
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"Tur {i} mesajı"}
+        for i in range(10)
+    ]
+    await graph.aupdate_state(
+        config,
+        {"history": history, "history_summary": "eski özet", "history_summarized_through": 8},
+    )
+
+    await graph.ainvoke(
+        {"input_text": "Son duruma göre devam edelim", "document_id": None}, config=config
+    )
+
+    sent_messages = fake_llm.stream_calls[-1]["messages"]
+    conversational_turns = [m for m in sent_messages if m["role"] in ("user", "assistant")]
+    # 8 tur özete katlandı; en fazla son 2 birebir tur + bu turun mesajı.
+    assert len(conversational_turns) <= 3
+    usage = (await graph.aget_state(config)).values["final_output"].get("context_usage")
+    assert usage is not None
+
+
+@pytest.mark.asyncio
 async def test_a_wider_provider_window_grows_the_budget(fake_llm, fake_fast_llm, monkeypatch):
     """Evren'in penceresine geçince bağlam bütçesi (available) buna göre büyür."""
     from app.core.config import settings

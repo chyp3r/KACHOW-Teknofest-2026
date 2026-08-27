@@ -411,3 +411,24 @@ async def cancel_chat_session(
         company_id=current_user.company_id,
     )
     return SuccessResponse(data=result)
+
+
+@router.post("/sessions/{session_id}/compact", response_model=None)
+async def compact_chat_session(
+    session_id: str,
+    service: ChatService = Depends(get_chat_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Sohbeti sıkıştır: birebir geçmiş penceresini yuvarlanan özete katla.
+
+    Bağlam göstergesinin "Bağlamı sıkıştır" düğmesi çağırır. Aktif bir tur
+    veya bekleyen bir HITL varsa ``{"status": "busy"}`` döner.
+    """
+    if not session_id:
+        raise HTTPException(status_code=422, detail="session_id gereklidir.")
+    result = await service.compact_session(
+        session_id,
+        user_id=current_user.id,
+        company_id=current_user.company_id,
+    )
+    return SuccessResponse(data=result)

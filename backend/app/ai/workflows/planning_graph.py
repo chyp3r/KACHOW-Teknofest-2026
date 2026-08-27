@@ -15,6 +15,7 @@ from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
 from app.ai.context.compress import truncate_with_marker
+from app.ai.context.usage import compute_context_usage
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
@@ -1198,8 +1199,16 @@ def create_planning_graph(
         )
 
         remaining_for_history = context_budget.available - assembled.total_tokens
+        # Kullanıcı bağlamı elle sıkıştırdıysa (ChatService.compact_session)
+        # ``history_summarized_through`` ileri alınır; özetlenmiş turlar artık
+        # birebir pencereye girmez, yalnızca `history_summary`'de yaşar.
+        # Otomatik konsolidasyon zaten bu işareti steady-state'te ~son
+        # HISTORY_WINDOW turuna denk tutar, bu yüzden sıradan turda etki
+        # nötrdür.
+        _compacted_through = max(0, int(state.get("history_summarized_through") or 0))
+        _windowable_history = _prior_turns(state, HISTORY_RAW_CAP)[_compacted_through:]
         history = select_history_window(
-            _prior_turns(state, HISTORY_RAW_CAP),
+            _windowable_history,
             remaining_for_history,
             llm_client.count_tokens,
             min_turns=0 if is_small_talk_turn else 2,
@@ -1216,33 +1225,20 @@ def create_planning_graph(
             )
 
         # Bağlam penceresi doluluk dökümü -- frontend'in sohbet alanındaki
-        # dairesel göstergesini besler ("bağlam penceresinin ne kadarı ne
-        # için kullanıldı"). Modelin gerçekten kullandığı bütçe kalemleriyle
-        # birebir: sabit maliyet (sistem yönergesi + kullanıcı mesajı),
-        # context_builder'ın yerleştirdiği bloklar, seçilen geçmiş penceresi
-        # ve tamamlama için ayrılan pay. `count_tokens` gerçek üretim
-        # çağrısının boyutlandırıldığı aynı tahmin edicidir.
-        _ct = llm_client.count_tokens
-        _usage_segments = [
-            {"key": "system", "label": "Sistem yönergesi",
-             "tokens": _ct(assistant_agent.system_prompt)},
-            {"key": "document_context", "label": "Belge bağlamı",
-             "tokens": _ct(assembled.get("document_context")) if document_id else 0},
-            {"key": "history_summary", "label": "Geçmiş özeti",
-             "tokens": _ct(assembled.get("history_summary")) if not is_small_talk_turn else 0},
-            {"key": "history", "label": "Sohbet geçmişi",
-             "tokens": sum(_ct(str(turn.get("content", ""))) for turn in history)},
-            {"key": "input", "label": "Güncel mesaj", "tokens": _ct(state["input_text"])},
-            {"key": "reserved", "label": "Yanıt için ayrılan",
-             "tokens": ASSIST_COMPLETION_RESERVE_TOKENS},
-        ]
-        _usage_used = sum(segment["tokens"] for segment in _usage_segments)
-        context_usage = {
-            "total": context_window,
-            "used": min(_usage_used, context_window),
-            "free": max(context_window - _usage_used, 0),
-            "segments": [s for s in _usage_segments if s["tokens"] > 0],
-        }
+        # dairesel göstergesini besler. Modelin gerçekten kullandığı bütçe
+        # kalemleriyle birebir; ChatService.compact_session ile aynı
+        # yardımcıyı paylaşır (bkz. app.ai.context.usage).
+        context_usage = compute_context_usage(
+            llm_client,
+            system_prompt=assistant_agent.system_prompt,
+            input_text=state["input_text"],
+            document_context=assembled.get("document_context") if document_id else "",
+            history_summary=(
+                "" if is_small_talk_turn else (assembled.get("history_summary") or "")
+            ),
+            history_turns=history,
+            reserved_tokens=ASSIST_COMPLETION_RESERVE_TOKENS,
+        )
 
         referenced_anchor: dict[str, str] = {}
 

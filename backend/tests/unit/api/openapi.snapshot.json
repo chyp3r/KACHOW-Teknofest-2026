@@ -5165,7 +5165,7 @@
     },
     "/api/v1/chat/message": {
       "post": {
-        "description": "Bir sohbet etkileşimini düzenler ve tamamlanmış sonucu döndürür.\n\nKullanıcı girdisini, analiz, taslak yazımı, evrak soru-cevap ya da düz\nsohbete mi ihtiyaç duyduğunu çözen ana planlama grafiği üzerinden\nyönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir\n``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile\ndevam ettirin.",
+        "description": "Bir sohbet etkileşimini düzenler ve tamamlanmış sonucu döndürür.\n\nKullanıcı girdisini, analiz, taslak yazımı, evrak soru-cevap ya da düz\nsohbete mi ihtiyaç duyduğunu çözen ana planlama grafiği üzerinden\nyönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir\n``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile\ndevam ettirin.\n\nKısa preflight DB işi (evrak erişimi + revizyon taslağı çözümü) ayrı\nbir kısa ömürlü oturumda yapılır ve bağlantı, dakikalarca sürebilen\nplanlama grafiği çalışmadan önce iade edilir (bkz. #288).",
         "operationId": "send_chat_message_api_v1_chat_message_post",
         "requestBody": {
           "content": {
@@ -5403,6 +5403,53 @@
           }
         ],
         "summary": "Cancel Chat Session",
+        "tags": [
+          "chat",
+          "chat"
+        ]
+      }
+    },
+    "/api/v1/chat/sessions/{session_id}/compact": {
+      "post": {
+        "description": "Sohbeti sıkıştır: birebir geçmiş penceresini yuvarlanan özete katla.\n\nBağlam göstergesinin \"Bağlamı sıkıştır\" düğmesi çağırır. Aktif bir tur\nveya bekleyen bir HITL varsa ``{\"status\": \"busy\"}`` döner.",
+        "operationId": "compact_chat_session_api_v1_chat_sessions__session_id__compact_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Compact Chat Session",
         "tags": [
           "chat",
           "chat"
@@ -8138,6 +8185,66 @@
         ]
       }
     },
+    "/api/v1/drafts/{draft_id}/export": {
+      "get": {
+        "description": "Bir taslak sürümünü indirilebilir bir belgeye dönüştürür (docx | pdf).\n\nRouter'daki diğer rotalardan farklı olarak bir ``SuccessResponse`` zarfı\ndeğil, doğrudan ``attachment`` olarak işaretlenmiş binary döndürür.",
+        "operationId": "export_draft_api_v1_drafts__draft_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Çıktı biçimi.",
+            "in": "query",
+            "name": "fmt",
+            "required": false,
+            "schema": {
+              "default": "docx",
+              "description": "Çıktı biçimi.",
+              "pattern": "^(docx|pdf)$",
+              "title": "Fmt",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export Draft",
+        "tags": [
+          "drafts",
+          "drafts"
+        ]
+      }
+    },
     "/api/v1/drafts/{draft_id}/review/approve": {
       "post": {
         "description": "Confirm that an authorized human reviewed this draft version.",
@@ -9677,6 +9784,34 @@
           }
         ],
         "summary": "Root Overview",
+        "tags": [
+          "root",
+          "root"
+        ]
+      }
+    },
+    "/api/v1/root/users/insights": {
+      "get": {
+        "description": "\"Kullanıcı İstatistikleri\" konsolunu besleyen zengin sistem-geneli\ndöküm: KPI'lar, günlük aktiflik zaman serisi, rol dağılımı, kurum\nkoltukları, en aktif kullanıcılar, iş akışı türü/sonuç dağılımı,\nguardrail sinyalleri ve Prometheus'tan global AI token kullanımı.\n\n\"Aktif\" burada da izlenen bir giriş zaman damgası değil, bir ``runs``\nsatırı demektir (bkz. ``root_user_stats``).",
+        "operationId": "root_user_insights_api_v1_root_users_insights_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/APIResponse_dict_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Root User Insights",
         "tags": [
           "root",
           "root"
