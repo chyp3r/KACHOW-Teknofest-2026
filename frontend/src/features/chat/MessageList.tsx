@@ -1,5 +1,5 @@
 import { Bot, FilePenLine, FileSearch, Info, MessageCircle, MessageSquare, Route, Sparkles, UploadCloud, UserRound } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIEvent } from "react";
 import type {
   ChatMessage,
@@ -22,6 +22,43 @@ import { ResolvedPromptCard } from "./ResolvedPromptCard";
 import type { PromptAnswers } from "./PromptQuestionCard";
 import type { FeedbackTargetKind } from "../../types/feedback";
 import { AnimatedMessageText } from "./AnimatedMessageText";
+
+function MessagePrimaryContent({
+  message,
+  onProgress,
+  onCitationClick,
+}: {
+  message: ChatMessage;
+  onProgress: () => void;
+  onCitationClick?: (target: CitationTarget) => void;
+}) {
+  const [completedAnimationText, setCompletedAnimationText] = useState<string | null>(
+    message.animate ? null : message.text,
+  );
+  const showDraftMeta =
+    !message.animate || !message.text || completedAnimationText === message.text;
+
+  return (
+    <>
+      {message.text && (
+        <AnimatedMessageText
+          text={message.text}
+          animate={message.animate}
+          onProgress={onProgress}
+          onComplete={() => {
+            setCompletedAnimationText(message.text);
+            onProgress();
+          }}
+          onCitationClick={onCitationClick}
+        />
+      )}
+      {message.resolvedPrompt && (
+        <ResolvedPromptCard interaction={message.resolvedPrompt} />
+      )}
+      {showDraftMeta && <DraftMetaStrip details={message.details} />}
+    </>
+  );
+}
 
 // What a message's vote should be filed under, plus a small context
 // snapshot worth carrying alongside it (see FeedbackModel.context) --
@@ -192,18 +229,11 @@ export function MessageList({
                     ? "KACHOW Asistan"
                     : "Siz"}
               </header>
-              {message.text && (
-                <AnimatedMessageText
-                  text={message.text}
-                  animate={message.animate}
-                  onProgress={scrollToBottom}
-                  onCitationClick={onCitationClick}
-                />
-              )}
-              {message.resolvedPrompt && (
-                <ResolvedPromptCard interaction={message.resolvedPrompt} />
-              )}
-              <DraftMetaStrip details={message.details} />
+              <MessagePrimaryContent
+                message={message}
+                onProgress={scrollToBottom}
+                onCitationClick={onCitationClick}
+              />
               {message.questions?.length ? (
                 <PromptQuestionCard
                   questions={message.questions}

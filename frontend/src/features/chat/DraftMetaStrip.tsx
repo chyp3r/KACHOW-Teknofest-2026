@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertCircle, CheckCircle2, FileDown, FileText, Route, XCircle } from "lucide-react";
+import { useId, useState } from "react";
+import { AlertCircle, CheckCircle2, ChevronDown, FileDown, FileText, Route, XCircle } from "lucide-react";
 import { ApiErrorNotice } from "../../components/ApiErrorNotice";
 import { UnitPicker } from "../drafts/UnitPicker";
 import { draftService } from "../../services/draftService";
@@ -51,6 +52,8 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   const draft = details?.draft as DraftDetails | undefined;
   const routing = details?.routing as RoutingDetails | undefined;
   const draftId = draft?.id;
+  const detailId = useId();
+  const [expanded, setExpanded] = useState(false);
   const queryClient = useQueryClient();
   // Chat message details are an immutable snapshot of the turn that created
   // them. The persisted draft is the authoritative source after a human
@@ -90,6 +93,14 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   // Every row here already fired at least once (see confidence_rules.
   // score_findings) -- no further filtering needed.
   const appliedRules = draft.applied_rules ?? [];
+  const hasControlNotes = Boolean(!isRejected && draft.evaluation_notes);
+  const hasExpandedContent = Boolean(
+    appliedRules.length > 0 ||
+    hasControlNotes ||
+    routedUnit ||
+    draftId ||
+    changelogSummary,
+  );
 
   if (
     !hasScore &&
@@ -106,118 +117,156 @@ export function DraftMetaStrip({ details }: { details?: Record<string, unknown> 
   return (
     <section className="draft-meta-strip" aria-label="Taslak kontrol özeti">
       <header className="draft-meta-header">
-        {hasScore ? (
-          <div className="draft-score-metric">
-            <span>Güven skoru</span>
-            <strong>{draft.combined_score}</strong>
-            <span>/100</span>
-            <span className="sr-only">Güven skoru: {draft.combined_score}/100</span>
-          </div>
+        {hasExpandedContent ? (
+          <button
+            type="button"
+            className="draft-meta-toggle"
+            aria-expanded={expanded}
+            aria-controls={detailId}
+            aria-label={expanded ? "Taslak kontrol ayrıntılarını gizle" : "Taslak kontrol ayrıntılarını göster"}
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <span className="draft-score-metric">
+              {hasScore ? (
+                <>
+                  <span>Güven skoru</span>
+                  <strong>{draft.combined_score}</strong>
+                  <span>/100</span>
+                  <span className="sr-only">Güven skoru: {draft.combined_score}/100</span>
+                </>
+              ) : (
+                <strong>Taslak durumu</strong>
+              )}
+            </span>
+            <ChevronDown aria-hidden="true" />
+          </button>
         ) : (
-          <strong>Taslak durumu</strong>
+          <div className="draft-score-metric">
+            {hasScore ? (
+              <>
+                <span>Güven skoru</span>
+                <strong>{draft.combined_score}</strong>
+                <span>/100</span>
+                <span className="sr-only">Güven skoru: {draft.combined_score}/100</span>
+              </>
+            ) : (
+              <strong>Taslak durumu</strong>
+            )}
+          </div>
         )}
-        <div className="draft-meta-statuses">
-          {isRejected && (
-            <span className="draft-meta-chip draft-meta-danger">
-              <XCircle size={13} />
-              Reddedildi
-              {draft.rejection_reason ? ` (gerekçe: ${draft.rejection_reason})` : ""}
-            </span>
+        <div className="draft-meta-actions">
+          {draftId && (
+            <details className="draft-download-menu">
+              <summary>
+                <FileDown aria-hidden="true" />
+                İndir
+              </summary>
+              <div role="menu" aria-label="İndirme formatı">
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                    void draftService.export(draftId, "docx", persistedDraftQuery.data?.version);
+                  }}
+                >
+                  <FileText aria-hidden="true" />
+                  Word (.docx)
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(event) => {
+                    event.currentTarget.closest("details")?.removeAttribute("open");
+                    void draftService.export(draftId, "pdf", persistedDraftQuery.data?.version);
+                  }}
+                >
+                  <FileDown aria-hidden="true" />
+                  PDF
+                </button>
+              </div>
+            </details>
           )}
-          {isReviseExhausted && (
-            <span className="draft-meta-chip draft-meta-warning">
-              <AlertCircle size={13} />
-              Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
-            </span>
-          )}
-          {hasScore && !isRejected && !isReviseExhausted && (
-            <span className="draft-meta-chip draft-meta-success">
-              <CheckCircle2 size={13} />
-              Hazır
-            </span>
-          )}
+          <div className="draft-meta-statuses">
+            {isRejected && (
+              <span className="draft-meta-chip draft-meta-danger">
+                <XCircle size={13} />
+                Reddedildi
+                {draft.rejection_reason ? ` (gerekçe: ${draft.rejection_reason})` : ""}
+              </span>
+            )}
+            {isReviseExhausted && (
+              <span className="draft-meta-chip draft-meta-warning">
+                <AlertCircle size={13} />
+                Revizyon turu sınırına ulaşıldı; bu son sürüm korundu.
+              </span>
+            )}
+            {hasScore && !isRejected && !isReviseExhausted && (
+              <span className="draft-meta-chip draft-meta-success">
+                <CheckCircle2 size={13} />
+                Hazır
+              </span>
+            )}
+          </div>
         </div>
       </header>
 
       <ApiErrorNotice error={updateDestinationMutation.error} />
 
-      <div className="draft-meta-body">
-        {appliedRules.length > 0 && (
-          <details className="draft-meta-detail">
-            <summary>Skor dökümü ({appliedRules.length})</summary>
-            <div className="draft-meta-detail-content">
-              {appliedRules.map((rule) => (
-                <p key={rule.rule_id}>
-                  {rule.label}
-                  {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
-                  {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
-                </p>
-              ))}
+      {expanded && (
+        <div className="draft-meta-body" id={detailId}>
+          {appliedRules.length > 0 && (
+            <section className="draft-meta-detail">
+              <h4>Skor dökümü ({appliedRules.length})</h4>
+              <div className="draft-meta-detail-content">
+                {appliedRules.map((rule) => (
+                  <p key={rule.rule_id}>
+                    {rule.label}
+                    {rule.occurrences > 1 ? ` (×${rule.occurrences})` : ""}
+                    {rule.penalty_applied > 0 ? ` — -${rule.penalty_applied} puan` : ""}
+                  </p>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {hasControlNotes && (
+            <section className="draft-meta-detail">
+              <h4>Kontrol notları</h4>
+              <div className="draft-meta-detail-content">
+                <p>{draft.evaluation_notes}</p>
+              </div>
+            </section>
+          )}
+
+          {(routedUnit || draftId) && (
+            <div className="draft-routing-row">
+              {routedUnit && (
+                <span className="draft-meta-chip draft-routing-value">
+                  <Route size={14} />
+                  {destinationOverridden ? "Hedef birim" : "Önerilen birim"}: {routedUnit}
+                  {alternativeUnits.length > 0 && !destinationOverridden
+                    ? ` · Alternatif: ${alternativeUnits.join(", ")}`
+                    : ""}
+                </span>
+              )}
+              {draftId && (
+                <UnitPicker
+                  currentDestination={routedUnit ?? null}
+                  saving={updateDestinationMutation.isPending}
+                  onSave={(destination) => updateDestinationMutation.mutate(destination)}
+                />
+              )}
             </div>
-          </details>
-        )}
+          )}
 
-        {(routedUnit || draftId) && (
-          <div className="draft-routing-row">
-            {routedUnit && (
-              <span className="draft-meta-chip draft-routing-value">
-                <Route size={14} />
-                {destinationOverridden ? "Hedef birim" : "Önerilen birim"}: {routedUnit}
-                {alternativeUnits.length > 0 && !destinationOverridden
-                  ? ` · Alternatif: ${alternativeUnits.join(", ")}`
-                  : ""}
-              </span>
-            )}
-            {draftId && (
-              <UnitPicker
-                currentDestination={routedUnit ?? null}
-                saving={updateDestinationMutation.isPending}
-                onSave={(destination) => updateDestinationMutation.mutate(destination)}
-              />
-            )}
-          </div>
-        )}
-
-        {draftId && (
-          <div className="draft-download-row">
-            <span>İndir:</span>
-            <button
-              type="button"
-              className="draft-download-link"
-              onClick={() =>
-                void draftService.export(draftId, "docx", persistedDraftQuery.data?.version)
-              }
-            >
-              <FileText size={13} />
-              Word (.docx)
-            </button>
-            <button
-              type="button"
-              className="draft-download-link"
-              onClick={() =>
-                void draftService.export(draftId, "pdf", persistedDraftQuery.data?.version)
-              }
-            >
-              <FileDown size={13} />
-              PDF
-            </button>
-          </div>
-        )}
-
-        {draft.requires_human_approval && !isRejected && draft.evaluation_notes && (
-          <details className="draft-meta-detail">
-            <summary>Kontrol notları</summary>
-            <div className="draft-meta-detail-content">
-              <p>{draft.evaluation_notes}</p>
-            </div>
-          </details>
-        )}
-        {changelogSummary && (
-          <p className="draft-meta-change-summary">
-            <strong>Değişiklik özeti:</strong> {changelogSummary}
-          </p>
-        )}
-      </div>
+          {changelogSummary && (
+            <p className="draft-meta-change-summary">
+              <strong>Değişiklik özeti:</strong> {changelogSummary}
+            </p>
+          )}
+        </div>
+      )}
     </section>
   );
 }

@@ -229,6 +229,33 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
   return messages;
 }
 
+function preserveLatestLiveAnimation(
+  hydratedMessages: ChatMessage[],
+  currentMessages: ChatMessage[],
+): ChatMessage[] {
+  const liveMessage = [...currentMessages]
+    .reverse()
+    .find((message) => message.sender === "assistant" && message.animate);
+  if (!liveMessage) return hydratedMessages;
+
+  let matchingIndex = -1;
+  for (let index = hydratedMessages.length - 1; index >= 0; index -= 1) {
+    const message = hydratedMessages[index];
+    if (
+      message?.sender === liveMessage.sender &&
+      message.text === liveMessage.text
+    ) {
+      matchingIndex = index;
+      break;
+    }
+  }
+  if (matchingIndex < 0) return hydratedMessages;
+
+  return hydratedMessages.map((message, index) =>
+    index === matchingIndex ? { ...message, animate: true } : message,
+  );
+}
+
 export function useChatWorkflow(
   selectedDocument: DocumentMetadata | null,
   userId: string,
@@ -388,9 +415,15 @@ export function useChatWorkflow(
     // already have is that stale race, not a genuine "history shrank"
     // signal (chat history is append-only) -- session switches always
     // start `messages` at `[]` first (see the effect above), so a real
-    // hydration is never mistaken for one of these.
+    // hydration is never mistaken for one of these. An equal/newer read may
+    // replace the local row to add its persisted id, but must keep the latest
+    // live row's transient animation flag until MessageList finishes revealing
+    // it; otherwise its draft metadata appears before the reply text.
     const items = messagesQuery.data.items;
-    setMessages((previous) => (items.length >= previous.length ? toChatMessages(items) : previous));
+    setMessages((previous) => {
+      if (items.length < previous.length) return previous;
+      return preserveLatestLiveAnimation(toChatMessages(items), previous);
+    });
   }, [messagesQuery.data]);
 
   // Rehydrates the workflow stepper's plan/order from the last persisted
