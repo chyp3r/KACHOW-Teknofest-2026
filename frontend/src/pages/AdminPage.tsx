@@ -14,7 +14,7 @@ import {
 } from "../types/security";
 import { ASSIGNABLE_ROLE_LABELS, type User, type UserRole } from "../types/users";
 import { Button } from "../components/Button";
-import { Input, Select } from "../components/FormControls";
+import { Dropdown, Input } from "../components/FormControls";
 import { SectionHeader } from "../components/SectionHeader";
 import { Alert, Card, Spinner } from "../components/Surface";
 import { AiManagementPanel } from "../features/admin/AiManagementPanel";
@@ -192,7 +192,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
             placeholder="kullanici@kurum.gov.tr"
             aria-label="Davet e-posta adresi"
           />
-          <Select
+          <Dropdown
             value={inviteRole}
             onChange={(event) => setInviteRole(event.target.value as UserRole)}
             aria-label="Davet rolü"
@@ -202,7 +202,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                 {label}
               </option>
             ))}
-          </Select>
+          </Dropdown>
           <Button
             disabled={busy || !/^\S+@\S+\.\S+$/.test(inviteEmail)}
             onClick={() => void invite()}
@@ -246,7 +246,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                       <span>{item.email}</span>
                     </td>
                     <td>
-                      <Select
+                      <Dropdown
                         value={item.role}
                         disabled={!canManage || busy || item.id === user.id}
                         aria-label={`${item.username} rolü`}
@@ -261,10 +261,10 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                             {label}
                           </option>
                         ))}
-                      </Select>
+                      </Dropdown>
                     </td>
                     <td>
-                      <Select
+                      <Dropdown
                         value={item.clearance_level}
                         disabled={!canManage || busy || item.role !== "employee"}
                         aria-label={`${item.username} gizlilik yetkisi`}
@@ -282,7 +282,7 @@ export function AdminPage({ onLogin }: { onLogin: () => void }) {
                             </option>
                           ),
                         )}
-                      </Select>
+                      </Dropdown>
                     </td>
                     <td>
                       <StatusBadge

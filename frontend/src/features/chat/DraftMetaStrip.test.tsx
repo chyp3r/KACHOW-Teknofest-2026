@@ -244,7 +244,8 @@ describe("DraftMetaStrip", () => {
     expandDraftMeta();
     fireEvent.click(screen.getByRole("button", { name: "Birimi değiştir" }));
     const select = await screen.findByLabelText("Hedef birim");
-    fireEvent.change(select, { target: { value: "Mali İşler" } });
+    fireEvent.click(select);
+    fireEvent.click(await screen.findByRole("option", { name: "Mali İşler" }));
     fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
 
     await waitFor(() => expect(updateDestinationMock).toHaveBeenCalledWith("draft-1", "Mali İşler"));

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Button } from "../../components/Button";
-import { Input, Select } from "../../components/FormControls";
+import { Dropdown, Input } from "../../components/FormControls";
 import { queryKeys } from "../../query/queryKeys";
 import { unitsService } from "../../services/unitsService";
 import type { Unit } from "../../types/units";
@@ -99,7 +99,7 @@ function UnitPickerForm({
         onSave(pendingValue);
       }}
     >
-      <Select
+      <Dropdown
         label="Hedef birim"
         controlSize="sm"
         value={selected}
@@ -111,7 +111,7 @@ function UnitPickerForm({
           </option>
         ))}
         <option value={CUSTOM_VALUE}>Diğer birim…</option>
-      </Select>
+      </Dropdown>
       {selected === CUSTOM_VALUE && (
         <Input
           label="Birim adı"

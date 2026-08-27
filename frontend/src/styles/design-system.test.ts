@@ -40,7 +40,7 @@ describe("design-system tokens", () => {
 
   it("preserves the dashboard title hierarchy and status-safe document master rows", () => {
     expect(referenceCss).toContain("line-height: 1.05");
-    expect(referenceCss).toContain(".home-activity-panel > header > .select { width: 10rem; flex: 0 0 10rem; }");
+    expect(referenceCss).toContain(".home-activity-panel > header > .dropdown { width: 10rem; flex: 0 0 10rem; }");
     expect(referenceCss).toMatch(/\.draft-master li > button \{[\s\S]*?min-height: 7rem;[\s\S]*?padding: var\(--space-4\);/);
     expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?height: auto;[\s\S]*?min-height: 8rem;/);
     expect(referenceCss).toMatch(/\.document-master-list \.document-list-item \{[\s\S]*?align-items: start;[\s\S]*?gap: 0\.75rem;[\s\S]*?padding: var\(--space-4\) var\(--space-2\) var\(--space-5\) var\(--space-4\);/);

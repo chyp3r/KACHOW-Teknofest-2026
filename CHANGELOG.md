@@ -4,6 +4,7 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Değiştirildi
+- Frontend seçim alanları, tarayıcı varsayılanı yerine erişilebilir ortak `Dropdown` bileşenine taşındı.
 - **İmza tespiti doğruluğu gerçek korpusta ölçüldü ve düzeltildi.**
   `detect_marks`'ın (`marks.py`) imza recall'ı, elle etiketlenmiş 23
   belgelik gerçek korpusta (`datasets/resmi_yazisma/ocr_ground_truth.json`)

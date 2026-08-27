@@ -225,7 +225,7 @@
   color: var(--text-secondary);
   }
 .draft-create-grid label > small { position: absolute; top: 0; right: 0; color: var(--text-muted); }
-.draft-create-grid select { min-width: 0; min-height: 38px; padding-block: var(--space-2); }
+.draft-create-grid .dropdown { min-width: 0; min-height: 38px; }
 .draft-instructions-field { grid-column: 1 / -2; }
 .draft-instructions-field textarea { min-height: 66px; max-height: 120px; padding: var(--space-2) var(--space-3); resize: vertical; }
 .draft-create-submit { grid-column: -2; min-width: 138px; min-height: var(--control-md); }
@@ -301,7 +301,7 @@
 .document-list-heading { margin: 0; padding: var(--space-4) var(--space-5) var(--space-3); }
 .document-list-toolbar { margin: 0; padding: 0 var(--space-5) var(--space-4); }
 .document-list-toolbar .search-field { flex: 1; }
-.document-list-toolbar select { min-width: 200px; }
+.document-list-toolbar .dropdown { min-width: 0; }
 .document-list-card > .empty-state { padding: var(--space-12) var(--space-5); border-top: 1px solid var(--border-default); }
 .document-accordion-list { margin: 0; padding: 0; border-top: 1px solid var(--border-default); list-style: none; }
 .document-accordion-list > li + li { border-top: 1px solid var(--border-default); }
@@ -531,7 +531,7 @@
    sağında. Sadece bir halka; tıklanınca dar bir popup açılır. */
 .composer-mode-stack { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 .composer-mode-stack .composer-mode { margin-left: 0; }
-.context-usage { position: relative; display: inline-flex; }
+.context-usage { position: relative; z-index: 111; display: inline-flex; flex: 0 0 auto; }
 .context-usage-trigger { display: inline-flex; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
 .context-usage-ring { flex: 0 0 auto; animation: context-usage-in .28s ease both; }
 /* Yaylar veri her tur değişince yükselip/inerken yumuşak geçsin. */
@@ -924,7 +924,7 @@
   .document-list-heading { padding-inline: var(--space-4); }
   .document-list-toolbar { display: grid; grid-template-columns: 1fr; padding-inline: var(--space-4); }
   .document-list-toolbar .search-field,
-  .document-list-toolbar select,
+  .document-list-toolbar .dropdown,
   .document-list-toolbar .button { width: 100%; min-width: 0; }
   .document-accordion-trigger {
     grid-template-areas:
@@ -972,7 +972,7 @@
 .sidebar-footer { gap: var(--space-3); }
 .theme-control { min-width: 0; }
 .theme-control .form-field { width: auto; }
-.theme-control select { background: var(--surface-input); }
+.theme-control .dropdown { background: var(--surface-input); }
 
 .page-header { align-items: flex-start; margin-bottom: var(--space-6); }
 .drafts-page .page-header,
@@ -989,9 +989,10 @@
 
 .composer-dock { border-top: 0; background: transparent; }
 .chat-composer { display: grid; gap: var(--space-3); padding: var(--space-3); background: var(--surface-panel); }
-.composer-controls { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin: 0; }
+.composer-controls { display: flex; flex-direction: row; align-items: center; justify-content: space-between; min-width: 0; margin: 0; }
+.composer-controls .document-selector { min-width: 0; }
 .composer-mode { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto; white-space: nowrap; }
-.composer-mode .select { width: auto; min-width: 6.25rem; }
+.composer-mode .dropdown { flex: 0 0 6.25rem; width: 6.25rem; min-width: 6.25rem; }
 .composer-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); }
 .composer-input .field-control { display: grid; }
 .composer-input textarea { min-height: var(--control-lg); background: var(--surface-input); }
@@ -1141,6 +1142,8 @@
 }
 
 @media (max-width: 47.5rem) {
+  .composer-controls { flex-wrap: wrap; }
+  .composer-mode-stack { margin-left: auto; }
   .brand { grid-template-columns: auto minmax(0, 1fr) auto; }
   .page-actions { width: 100%; }
   .chat-empty-state { min-height: 19rem; padding-block: var(--space-6); }
@@ -1279,7 +1282,7 @@
   .management-list > li { align-items: flex-start; flex-wrap: wrap; padding-inline: var(--space-4); }
   .management-row-actions { width: 100%; justify-content: flex-start; }
   .management-rule-row { grid-template-columns: minmax(0, 1fr) var(--touch-target); }
-  .management-rule-row .select { grid-column: 1; }
+  .management-rule-row .dropdown { grid-column: 1; }
   .audit-list > li { grid-template-columns: 1fr auto; }
   .audit-list > li time { grid-column: 1 / -1; }
   .pool-item-list .management-row-actions { margin-left: 0; }

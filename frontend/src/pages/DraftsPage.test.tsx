@@ -140,7 +140,8 @@ describe("DraftsPage", () => {
     fireEvent.click(screen.getByRole("tab", { name: "Ayrıntılar" }));
     fireEvent.click(screen.getByRole("button", { name: "Birimi değiştir" }));
     const select = await screen.findByLabelText("Hedef birim");
-    fireEvent.change(select, { target: { value: "__custom__" } });
+    fireEvent.click(select);
+    fireEvent.click(await screen.findByRole("option", { name: "Diğer birim…" }));
     fireEvent.change(screen.getByLabelText("Birim adı"), { target: { value: "Basın Birimi" } });
     fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
 
