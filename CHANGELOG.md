@@ -4,6 +4,39 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Eklendi
+- (#284) `scripts/mevzuat_dogrulama.py`: üretilen vakalardaki mevzuat
+  atıflarını mevzuat.gov.tr'ye karşı **tür-farkındalıklı** doğrulayan modül
+  (Aşama 3.2). Her atıf koşulsuz `mevzuat_tur="KANUN"` ile aranmaz; kanun,
+  KHK, yönetmelik, CB kararnamesi, CB kararı, genelge, tebliğ ve tüzük için
+  ayrı aday tür kümeleri kullanılır (tek bir "yönetmelik" kavramı sunucuda
+  `YONETMELIK`/`CB_YONETMELIK`/`KKY`/`UY` kovalarına dağılmıştır — 2646
+  sayılı Resmî Yazışmalar Yönetmeliği yalnız `CB_YONETMELIK` altındadır).
+  Numara eşleşmesi TEK BAŞINA yetersizdir: pilotta üretilen 22 atıftan 2'si
+  (%9) gerçek bir numaraya uydurma bir ad yakıştırıyordu (5615 →
+  "Sosyal Yardımlaşma Kanunu" iddiası, gerçekte "Gelir Vergisi Kanunu…";
+  5403 → "Köy Kanunu" iddiası, gerçekte "Toprak Koruma ve Arazi Kullanımı
+  Kanunu"), bu yüzden resmî başlık da Türkçe eke toleranslı sözcük
+  karşılaştırmasıyla doğrulanır ve madde verilmişse maddenin metinde
+  gerçekten var olduğu kontrol edilir. Doğrulama fail-closed'dır: tanınmayan
+  tür, eşleşmeyen numara, uyuşmayan başlık, olmayan madde ve mülga kayıt
+  reddedilir; `mevzuat_client.resolve_and_fetch`'in filtresiz yedek araması
+  bilerek kullanılmaz (yanlış mevzuatla eşleşip doğrulanmış görünürdü).
+  MCP altyapı hatası ayrı bir sonuç türüdür (`MevzuatAltyapiHatasi`) ve
+  "atıf yanlış" sayılmaz.
+
+### Değiştirildi
+- (#284) `scripts/generate_yazisma_vaka_pilotu.py`: `legal_basis` artık
+  `list[str]` değil, `type`/`number`/`title`/`article`/`verification_source`/
+  `verification_status` alanlı yapısal kayıt listesi (Aşama 3.2 şeması).
+  Kaydedilen `title`, modelin iddiası değil MCP'den gelen **resmî** addır;
+  `verification_*` alanlarını LLM değil betik doldurur. Metin bekleyen
+  tüketiciler için türetilmiş `legal_basis_text` alanı eklendi. Doğrulanamayan
+  TEK bir atıf tüm vakayı geçersiz kılar ve reddedilen atıf bir sonraki
+  denemenin prompt'una geri bildirilir (sıcaklık 0.8'de model aksi halde aynı
+  yanlış eşleşmeyi tekrarlıyordu). `main()` mevzuat-mcp kayıtlı değilse
+  fail-closed durur; üst üste 5 altyapı hatasında tur, yazılmış vakaları
+  koruyarak durdurulur (`--resume` ile devam edilir).
+
 - (#284) `scripts/generate_yazisma_vaka_pilotu.py`: gerçek anonimleştirilmiş
   korpus kartlarını few-shot referans alıp Evren (`llm-large`) ile
   az-temsil-edilen karar türlerinden (yetkisizlik, belirsiz başvuru, çoklu

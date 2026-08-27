@@ -12,8 +12,10 @@ korpus kartları few-shot örnek olarak Evren'e (``llm-large``) verilir ve
 Üretilen her vaka, yazılmadan önce aynı anonimleştirme/denetim hattından
 (``prepare_resmi_yazisma_markdown.semantic_anonymize`` +
 ``_audit_privacy_findings``) geçirilir; otomatik-düzeltilebilir bir bulgu
-kalan vaka yazılmaz. Çıktı üretim ``ornekler.jsonl``'e asla otomatik
-karışmaz -- ayrı bir klasöre, ``review_status: "taslak"`` ile yazılır.
+kalan vaka yazılmaz. Ayrıca her mevzuat atfı ``mevzuat_dogrulama`` ile
+mevzuat.gov.tr'ye karşı doğrulanır; doğrulanamayan tek bir atıf vakayı
+geçersiz kılar. Çıktı üretim ``ornekler.jsonl``'e asla otomatik karışmaz --
+ayrı bir klasöre, ``review_status: "taslak"`` ile yazılır.
 
 Kullanım:
     python scripts/generate_yazisma_vaka_pilotu.py --dry-run
@@ -41,6 +43,13 @@ from pydantic import BaseModel, Field  # noqa: E402
 
 from app.ai.llms import get_llm_client  # noqa: E402
 from app.core.config import settings  # noqa: E402
+from app.mcp.registry import MEVZUAT_SERVER, is_registered, register_servers  # noqa: E402
+from mevzuat_dogrulama import (  # noqa: E402
+    MevzuatAltyapiHatasi,
+    MevzuatAtfi,
+    MevzuatDogrulayici,
+    atif_metni,
+)
 from prepare_resmi_yazisma_markdown import (  # noqa: E402
     CORPUS_ROOT,
     _audit_privacy_findings,
@@ -208,6 +217,33 @@ INSTITUTION_MAX_SHARE = 19 / 240
 INSTITUTION_WARMUP_CASES = 25
 
 
+#: Üst üste bu kadar MCP altyapı hatası görülürse tur durdurulur. Sunucu
+#: düştüğünde her vakayı 3 kez deneyip elemek, 240 vakalık bir turda
+#: yüzlerce Evren çağrısını boşa harcayıp sonunda mevzuatsız/eksik bir veri
+#: seti bırakırdı -- erken ve gürültülü durmak doğrusudur.
+MEVZUAT_ALTYAPI_HATA_ESIGI = 5
+
+
+class _LegalReference(BaseModel):
+    """LLM'in ürettiği tek bir mevzuat atfı (Aşama 3.2 yapısal şeması).
+
+    ``verification_source``/``verification_status`` bilerek BURADA YOK:
+    onları LLM değil, ``mevzuat_dogrulama`` doldurur. Modelin kendi
+    çıktısını "doğrulanmış" diye işaretlemesine izin vermek, doğrulamanın
+    tamamını anlamsız kılardı.
+    """
+
+    type: str = Field(
+        description=(
+            "Mevzuat türü: kanun | khk | yonetmelik | cb_kararname | "
+            "cb_karar | genelge | teblig | tuzuk"
+        )
+    )
+    number: str = Field(description="Resmî mevzuat numarası, ör. '4982'")
+    title: str = Field(description="Mevzuatın resmî adı, ör. 'Bilgi Edinme Hakkı Kanunu'")
+    article: str = Field(default="", description="Madde numarası; emin değilsen boş bırak")
+
+
 class _GeneratedCase(BaseModel):
     """Evren'in doldurduğu alanlar -- ``case_id``/``provenance``/``split``
     gibi üretim-sonrası alanlar betik tarafından ayrıca eklenir, LLM'e
@@ -230,8 +266,14 @@ class _GeneratedCase(BaseModel):
     must_not_invent: list[str] = Field(
         description="Gelen evrakta OLMAYAN, taslağın asla üretmemesi gereken değerler"
     )
-    legal_basis: list[str] = Field(
-        default_factory=list, description="Genel/kamusal mevzuat referansları (madde/kanun no)"
+    legal_basis: list[_LegalReference] = Field(
+        default_factory=list,
+        description=(
+            "Yalnız GERÇEKTEN var olduğundan emin olduğun, numaralı ve resmî "
+            "adını doğru bildiğin mevzuat. Emin değilsen listeyi BOŞ bırak -- "
+            "her atıf mevzuat.gov.tr'ye karşı otomatik doğrulanır ve "
+            "doğrulanamayan bir atıf tüm vakayı geçersiz kılar."
+        ),
     )
     used_person_names: list[str] = Field(
         description=(
@@ -295,6 +337,7 @@ def _build_messages(
     *,
     avoid_institutions: list[str] | None = None,
     force_itiraz: bool = False,
+    rejected_refs: list[str] | None = None,
 ) -> list[dict]:
     example_blocks = "\n\n".join(
         f"[ÜSLUP ÖRNEĞİ {i + 1} -- {ex.kategori}: {ex.baslik}]\n{ex.body_excerpt}"
@@ -321,11 +364,22 @@ def _build_messages(
         "GERÇEKÇİ, TAMAMEN UYDURMA bir kurum-il/ilçe birleşimi yaz (ör. "
         "'T.C. Sivas Valiliği', 'T.C. Bornova Kaymakamlığı') -- kurum "
         "TÜRÜ gerçek ve tanınabilir olmalı, ama ilini/ilçesini/tam adını "
-        "her vakada değiştir; aynı kurumu tekrar tekrar kullanma. Uydurma "
-        "özel isim veya sahte kanun/madde numarası üretme -- yalnız "
-        "gerçekten var olduğunu bildiğin genel mevzuat referanslarını "
-        "(ör. '4982 sayılı Bilgi Edinme Hakkı Kanunu') kullan, emin "
-        "değilsen legal_basis'i boş bırak. must_not_invent listesine, bir "
+        "her vakada değiştir; aynı kurumu tekrar tekrar kullanma.\n\n"
+        "MEVZUAT (legal_basis) -- EN SIK YAPILAN HATA: Bir mevzuat "
+        "NUMARASINI doğru hatırlayıp o numaraya YANLIŞ BİR AD yakıştırmak "
+        "(ör. 5615'i 'Sosyal Yardımlaşma Kanunu' sanmak; gerçekte Gelir "
+        "Vergisi Kanunu'dur). Her atıf mevzuat.gov.tr'ye karşı OTOMATİK "
+        "doğrulanır: numara, tür ve RESMÎ AD birlikte tutmalıdır; madde "
+        "verirsen o maddenin gerçekten var olduğu da kontrol edilir. Tek bir "
+        "hatalı atıf, kusursuz olsa bile TÜM vakayı çöpe atar. Bu yüzden: "
+        "yalnız resmî adını da numarasını da KESİN bildiğin, herkesçe "
+        "bilinen genel mevzuata atıf yap (ör. type='kanun', number='4982', "
+        "title='Bilgi Edinme Hakkı Kanunu'); numaralandırılmamış kurum içi "
+        "genelge/tebliğe atıf YAPMA; emin değilsen legal_basis'i BOŞ BIRAK. "
+        "Boş bırakmak bir eksiklik DEĞİLDİR -- resmî yazışmaların çoğu "
+        "mevzuat atfı içermez. Madde numarasından emin değilsen article'ı "
+        "boş bırak; atfın geri kalanı yine değerlendirilir. "
+        "must_not_invent listesine, bir "
         "taslak yazma modelinin bu vakada uydurmaya en çok eğilimli "
         "olacağı 2-4 somut değeri yaz (ör. 'gerçekte belirtilmeyen bir "
         "evrak sayısı', 'gerçekte belirtilmeyen bir tarih'). "
@@ -351,6 +405,16 @@ def _build_messages(
             f"decision_reason, itirazın neden '{decision}' sonucuna "
             "bağlandığını, önceki kararla ilişkisini kurarak açıklamalı."
         )
+    # Aynı (decision, index) yeniden denenirken önceki turda DOĞRULAMAYI
+    # GEÇEMEYEN atıflar modele geri bildirilir; aksi halde model, sıcaklık
+    # 0.8'de bile aynı yanlış numara/ad eşleşmesini ısrarla üretebilir.
+    reddedilen_block = ""
+    if rejected_refs:
+        reddedilen_block = (
+            "\n\nÖNCEKİ DENEMEDE DOĞRULANAMAYAN MEVZUAT ATIFLARI -- bunları "
+            "TEKRAR KULLANMA, ya farklı ve kesin bildiğin bir mevzuata atıf "
+            f"yap ya da legal_basis'i boş bırak: {'; '.join(rejected_refs)}."
+        )
     user = (
         f"Hedef karar türü: {decision}\n"
         f"Vaka tanımı: {spec['aciklama']}\n\n"
@@ -359,7 +423,7 @@ def _build_messages(
         "bir gelen evrak + kurum kararı + cevap yazısı vakası üret. "
         "incoming_document başvuranın yazdığı evrakın tam metni olmalı; "
         "gold_draft kurumun buna verdiği resmî cevabın tam metni olmalı."
-        f"{avoid_block}{itiraz_block}"
+        f"{avoid_block}{itiraz_block}{reddedilen_block}"
     )
     return [
         {"role": "system", "content": system},
@@ -422,28 +486,46 @@ async def _generate_one(
     spec: dict[str, Any],
     index: int,
     *,
+    dogrulayici: MevzuatDogrulayici,
     avoid_institutions: list[str] | None = None,
     force_itiraz: bool = False,
-) -> tuple[dict[str, Any] | None, str]:
-    """Tek bir vaka üretmeyi dener. Döndürür: (vaka ya da None, başarısızlık
-    kategorisi -- boş dize başarı demektir). Hata mesajı hiçbir ham hassas
-    değer taşımaz, yalnız kategori etiketi taşır (bkz. MAIN_ERRORS)."""
+    rejected_refs: list[str] | None = None,
+) -> tuple[dict[str, Any] | None, str, list[str]]:
+    """Tek bir vaka üretmeyi dener.
+
+    Returns:
+        ``(vaka ya da None, başarısızlık kategorisi, doğrulanamayan atıflar)``.
+        Boş kategori başarı demektir. Üçüncü öğe, bir sonraki denemenin
+        prompt'una geri beslenecek atıf özetlerini taşır. Hata mesajı hiçbir
+        ham hassas değer taşımaz, yalnız kategori etiketi taşır (bkz.
+        MAIN_ERRORS).
+
+    Raises:
+        MevzuatAltyapiHatasi: MCP sunucusuna ulaşılamadığında. Bu bilerek
+            yakalanmaz -- bir altyapı arızasını "vaka kötü" diye kaydetmek,
+            sunucu düştüğünde tüm turu sessizce mevzuatsız bırakırdı.
+    """
     examples = _load_few_shots(
         spec["few_shot_glob"], FEW_SHOT_PER_TYPE, niyet_filter=spec.get("niyet_filter")
     )
     if not examples:
-        return None, "few_shot_bulunamadi"
+        return None, "few_shot_bulunamadi", []
 
     client = get_llm_client(
         provider="evren", model=settings.EVREN_LLM_LARGE_MODEL, temperature=0.8
     )
     messages = _build_messages(
-        decision, spec, examples, avoid_institutions=avoid_institutions, force_itiraz=force_itiraz
+        decision,
+        spec,
+        examples,
+        avoid_institutions=avoid_institutions,
+        force_itiraz=force_itiraz,
+        rejected_refs=rejected_refs,
     )
     try:
         result = await client.generate_structured(messages=messages, response_model=_GeneratedCase)
     except Exception as exc:  # keep the batch auditable, not fatal
-        return None, f"llm_hatasi:{type(exc).__name__}"
+        return None, f"llm_hatasi:{type(exc).__name__}", []
 
     anonymized_incoming = _scrub_reported_names(
         semantic_anonymize(result.incoming_document), result.used_person_names
@@ -455,14 +537,28 @@ async def _generate_one(
     bad_draft = _anonymization_findings(anonymized_draft)
     if bad_incoming or bad_draft:
         kinds = sorted({f["bulgu_turu"] for f in [*bad_incoming, *bad_draft]})
-        return None, f"anonimlestirme:{','.join(kinds)}"
+        return None, f"anonimlestirme:{','.join(kinds)}", []
 
-    # TODO (Aşama 3.2 -- Opus tasarımı bekliyor): legal_basis, mevzuat.gov.tr
-    # MCP'siyle (resolve_and_fetch + gerçek başlık karşılaştırması) burada
-    # doğrulanmalı; doğrulanamayan referans taşıyan vaka reddedilip aynı
-    # (decision, index) için yeniden denenmeli. Pilotta bu elle yapıldı ve
-    # 22 referanstan 2'si (%9) ilk turda yanlış çıktı -- bu adım olmadan
-    # 240'lık üretimde ~20 vaka yanlış mevzuat atfı taşıyabilir.
+    # Aşama 3.2: mevzuat atıfları mevzuat.gov.tr'ye karşı doğrulanır.
+    # Pilotta bu adım elle yapılmıştı ve 22 atıftan 2'si (%9) yanlış
+    # çıkmıştı; otomatikleştirilmeden 240'lık üretim ~20 hatalı atıf
+    # taşırdı. TEK bir doğrulanamayan atıf vakayı geçersiz kılar --
+    # kısmen doğru bir gerekçe listesi eğitim verisi olarak yanlış olandan
+    # daha tehlikelidir, çünkü hatayı gözden geçirenden gizler.
+    dogrulanmis: list[dict[str, Any]] = []
+    reddedilenler: list[str] = []
+    gerekceler: list[str] = []
+    for ref in result.legal_basis:
+        sonuc = await dogrulayici.dogrula(
+            MevzuatAtfi(tur=ref.type, numara=ref.number, baslik=ref.title, madde=ref.article)
+        )
+        if sonuc.gecerli:
+            dogrulanmis.append(sonuc.kayit)
+            continue
+        reddedilenler.append(f"{ref.type} {ref.number} ({ref.title})")
+        gerekceler.append(sonuc.gerekce.split(":", 1)[0])
+    if reddedilenler:
+        return None, f"mevzuat_dogrulanamadi:{','.join(sorted(set(gerekceler)))}", reddedilenler
 
     case_id = _case_id(decision, index)
     source_group = hashlib.sha256(case_id.encode("utf-8")).hexdigest()[:16]
@@ -483,7 +579,10 @@ async def _generate_one(
         "gold_draft": anonymized_draft,
         "must_include": result.must_include,
         "must_not_invent": result.must_not_invent,
-        "legal_basis": result.legal_basis,
+        # Yapısal (Aşama 3.2) + türetilmiş okunabilir biçim. ``title``
+        # LLM'in iddiası değil, MCP'den gelen RESMÎ addır.
+        "legal_basis": dogrulanmis,
+        "legal_basis_text": [atif_metni(kayit) for kayit in dogrulanmis],
         "source_origin": "sentetik_kurgu",
         "provenance": {
             "uretim_yontemi": "evren_llm_large_few_shot",
@@ -494,7 +593,7 @@ async def _generate_one(
         "source_group": source_group,
         "dataset_split": "n/a",
     }
-    return case, ""
+    return case, "", []
 
 
 def _load_existing_case_ids(path: Path) -> set[str]:
@@ -530,6 +629,8 @@ async def _run(
     institution_counts: dict[str, int] = {}
     total_generated_this_run = 0
     cases: list[dict[str, Any]] = []
+    dogrulayici = MevzuatDogrulayici()
+    ardisik_altyapi_hatasi = 0
 
     for decision, spec in TARGET_DECISIONS.items():
         itiraz_quota = _itiraz_count_for(spec["adet"])
@@ -553,10 +654,34 @@ async def _run(
 
             case: dict[str, Any] | None = None
             reason = ""
+            rejected_refs: list[str] = []
             for attempt in range(1, max_retries + 1):
-                case, reason = await _generate_one(
-                    decision, spec, index, avoid_institutions=avoid, force_itiraz=force_itiraz
-                )
+                try:
+                    case, reason, rejected_refs = await _generate_one(
+                        decision,
+                        spec,
+                        index,
+                        dogrulayici=dogrulayici,
+                        avoid_institutions=avoid,
+                        force_itiraz=force_itiraz,
+                        rejected_refs=rejected_refs,
+                    )
+                except MevzuatAltyapiHatasi as exc:
+                    ardisik_altyapi_hatasi += 1
+                    print(
+                        f"  [deneme {attempt}/{max_retries}] {case_id}: "
+                        f"mevzuat_altyapi_hatasi ({exc}) "
+                        f"[{ardisik_altyapi_hatasi}/{MEVZUAT_ALTYAPI_HATA_ESIGI}]"
+                    )
+                    if ardisik_altyapi_hatasi >= MEVZUAT_ALTYAPI_HATA_ESIGI:
+                        raise RuntimeError(
+                            "mevzuat-mcp sunucusuna üst üste "
+                            f"{ardisik_altyapi_hatasi} kez ulaşılamadı; üretim "
+                            "durduruldu. Sunucuyu düzeltip --resume ile devam "
+                            "edin -- yazılmış vakalar korunur."
+                        ) from exc
+                    continue
+                ardisik_altyapi_hatasi = 0
                 if case:
                     break
                 print(f"  [deneme {attempt}/{max_retries}] {case_id}: {reason}")
@@ -592,6 +717,9 @@ async def _run(
     print(f"\nBu çalıştırmada üretilen: {total_generated_this_run}")
     print(f"Toplam (resume dahil): {grand_total}/{total_quota}")
     print(f"Kurum çeşitliliği (bu çalıştırma): {len(institution_counts)} farklı kurum")
+    atifli = sum(1 for case in cases if case["legal_basis"])
+    atif_sayisi = sum(len(case["legal_basis"]) for case in cases)
+    print(f"Doğrulanmış mevzuat atfı: {atif_sayisi} adet, {atifli} vakada")
 
     if apply and cases:
         print(f"Yazıldı (checkpoint, satır satır): {MAIN_OUTPUT.relative_to(REPO_ROOT).as_posix()}")
@@ -639,6 +767,19 @@ def main() -> int:
             "HATA: EVREN_API_KEY tanımlı değil. Bu betik yalnız Evren "
             "(llm-large) ile çalışacak şekilde tasarlandı -- bkz. "
             "VAKA_URETIM_PLAYBOOK.md 'Ön koşullar'.",
+            file=sys.stderr,
+        )
+        return 2
+    # Aşama 3.2: mevzuat doğrulaması ZORUNLUDUR, isteğe bağlı bir ek değil.
+    # Sunucu kayıtlı değilken üretmeye devam etmek, doğrulanmamış atıflar
+    # taşıyan bir veri seti üretip bunu "doğrulanmış" klasörüne yazmak
+    # olurdu; bu yüzden burada fail-closed durulur.
+    register_servers()
+    if not is_registered(MEVZUAT_SERVER):
+        print(
+            "HATA: mevzuat-mcp sunucusu kayıtlı değil, mevzuat atıfları "
+            "doğrulanamaz. MEVZUAT_MCP_ENABLED=true veya MEVZUAT_SOURCE=mcp "
+            "ayarlayın (bkz. app/mcp/registry.py).",
             file=sys.stderr,
         )
         return 2

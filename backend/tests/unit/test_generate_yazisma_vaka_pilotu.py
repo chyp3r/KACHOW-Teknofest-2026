@@ -158,3 +158,153 @@ def test_scrub_reported_names_ignores_names_shorter_than_two_characters():
     scrubbed = pilot._scrub_reported_names(text, ["A", ""])
 
     assert scrubbed == text
+
+
+# --- Aşama 3.2: mevzuat doğrulamasının üretim hattındaki sözleşmesi ----
+
+
+class _SahteDogrulayici:
+    """``MevzuatDogrulayici`` yerine geçer; MCP'ye hiç gitmez."""
+
+    def __init__(self, gecerli_numaralar: set[str]) -> None:
+        self.gecerli_numaralar = gecerli_numaralar
+        self.sorulan: list[str] = []
+
+    async def dogrula(self, atif):
+        self.sorulan.append(atif.numara)
+        if atif.numara in self.gecerli_numaralar:
+            return _gecerli_sonuc(atif)
+        return _gecersiz_sonuc()
+
+
+def _gecerli_sonuc(atif):
+    from mevzuat_dogrulama import DogrulamaSonucu
+
+    return DogrulamaSonucu(
+        True,
+        resmi_baslik="BİLGİ EDİNME HAKKI KANUNU",
+        mevzuat_id="103705",
+        kanonik_tur="kanun",
+        kayit={
+            "type": "kanun",
+            "number": atif.numara,
+            "title": "BİLGİ EDİNME HAKKI KANUNU",
+            "article": atif.madde,
+            "verification_source": "mevzuat-mcp:103705",
+            "verification_status": "dogrulandi",
+        },
+    )
+
+
+def _gecersiz_sonuc():
+    from mevzuat_dogrulama import DogrulamaSonucu
+
+    return DogrulamaSonucu(False, "baslik_uyusmazligi:kanun/5615")
+
+
+def _sahte_llm(monkeypatch, legal_basis):
+    """``_generate_one``'ın Evren çağrısını sabit bir çıktıyla değiştirir."""
+    case = pilot._GeneratedCase(
+        incoming_document="T.C.\nİZMİR VALİLİĞİ\n\nSayı: E-2026/1\n\nTalebimiz ekte sunulmuştur.",
+        incoming_type="dilekce",
+        requested_action="Belge örneği talebi",
+        decision_reason="Talep mevzuata uygundur.",
+        outgoing_correspondence_type="cevap_yazisi",
+        required_facts=["Başvuru tarihi"],
+        gold_draft="T.C.\nİZMİR VALİLİĞİ\n\nTalebiniz uygun görülmüştür.",
+        must_include=["uygun görülmüştür"],
+        must_not_invent=["gerçekte belirtilmeyen bir evrak sayısı"],
+        legal_basis=legal_basis,
+        used_person_names=[],
+    )
+
+    class _Client:
+        async def generate_structured(self, **_kwargs):
+            return case
+
+    monkeypatch.setattr(pilot, "get_llm_client", lambda **_kwargs: _Client())
+
+
+@pytest.mark.asyncio
+async def test_generate_one_rejects_a_case_whose_citation_fails_verification(monkeypatch):
+    """Aşama 3.2'nin sözleşmesi: doğrulanamayan TEK bir atıf, kusursuz olsa
+    bile tüm vakayı geçersiz kılar ve reddedilen atıf bir sonraki denemeye
+    geri bildirilmek üzere döndürülür."""
+    _sahte_llm(
+        monkeypatch,
+        [pilot._LegalReference(type="kanun", number="5615", title="Sosyal Yardımlaşma Kanunu")],
+    )
+
+    case, reason, rejected = await pilot._generate_one(
+        "tam_kabul",
+        pilot.TARGET_DECISIONS["tam_kabul"],
+        1,
+        dogrulayici=_SahteDogrulayici(set()),
+    )
+
+    assert case is None
+    assert reason.startswith("mevzuat_dogrulanamadi")
+    assert rejected == ["kanun 5615 (Sosyal Yardımlaşma Kanunu)"]
+
+
+@pytest.mark.asyncio
+async def test_generate_one_stores_the_official_title_not_the_llm_claim(monkeypatch):
+    """Vakaya yazılan başlık, modelin iddiası değil MCP'den gelen resmî
+    addır -- aksi halde doğrulama, yanlış metni veri setinde bırakırdı."""
+    _sahte_llm(
+        monkeypatch,
+        [pilot._LegalReference(type="kanun", number="4982", title="bilgi edinme kanunu")],
+    )
+
+    case, reason, _ = await pilot._generate_one(
+        "tam_kabul",
+        pilot.TARGET_DECISIONS["tam_kabul"],
+        1,
+        dogrulayici=_SahteDogrulayici({"4982"}),
+    )
+
+    assert reason == ""
+    assert case["legal_basis"] == [
+        {
+            "type": "kanun",
+            "number": "4982",
+            "title": "BİLGİ EDİNME HAKKI KANUNU",
+            "article": "",
+            "verification_source": "mevzuat-mcp:103705",
+            "verification_status": "dogrulandi",
+        }
+    ]
+    assert case["legal_basis_text"] == ["4982 sayılı BİLGİ EDİNME HAKKI KANUNU"]
+
+
+@pytest.mark.asyncio
+async def test_generate_one_accepts_a_case_with_no_citation_at_all(monkeypatch):
+    """Resmî yazışmaların çoğu mevzuat atfı içermez; boş liste bir
+    başarısızlık değildir ve hiç MCP çağrısı doğurmaz."""
+    _sahte_llm(monkeypatch, [])
+    dogrulayici = _SahteDogrulayici(set())
+
+    case, reason, _ = await pilot._generate_one(
+        "tam_kabul", pilot.TARGET_DECISIONS["tam_kabul"], 1, dogrulayici=dogrulayici
+    )
+
+    assert reason == ""
+    assert case["legal_basis"] == []
+    assert dogrulayici.sorulan == []
+
+
+def test_rejected_refs_are_fed_back_into_the_retry_prompt():
+    """Sıcaklık 0.8'de bile model aynı yanlış numara/ad eşleşmesini ısrarla
+    üretebilir; reddedilen atıf prompt'a geri yazılmazsa üç deneme de aynı
+    hatayı tekrarlar."""
+    examples = [pilot.FewShotExample("Örnek", "cevap_yazisi", "gövde")]
+
+    messages = pilot._build_messages(
+        "ret",
+        pilot.TARGET_DECISIONS["ret"],
+        examples,
+        rejected_refs=["kanun 5615 (Sosyal Yardımlaşma Kanunu)"],
+    )
+
+    assert "5615" in messages[-1]["content"]
+    assert "TEKRAR KULLANMA" in messages[-1]["content"]
