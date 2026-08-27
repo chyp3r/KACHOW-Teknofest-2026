@@ -804,7 +804,10 @@ button:disabled, select:disabled, input:disabled, textarea:disabled { cursor: no
 .icon-button.sidebar-close, .icon-button.mobile-menu-button { display: none; }
 
 .page, .chat-page { height: 100%; min-height: 0; padding: var(--space-8) var(--space-8); }
-.page-scroll { overflow-y: auto; }
+/* scrollbar-gutter: kısa içerikli bir sekmede (ör. "Gelen Evraklar") dikey
+   kaydırma çubuğu kaybolunca içerik kutusu genişleyip üstteki başlık/sekme
+   barını yatayda zıplatıyordu -- gutter her durumda ayrılır. */
+.page-scroll { overflow-y: auto; scrollbar-gutter: stable; }
 .page-header { justify-content: space-between; gap: var(--space-5); margin-bottom: var(--space-6); }
 .page-header h1 { }
 .page-header p, .section-heading p, .card p { color: var(--text-secondary); margin-top: var(--space-1); }
