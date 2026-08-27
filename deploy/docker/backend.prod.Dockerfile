@@ -7,7 +7,8 @@
 # ---------------------------------------------------------------------------
 # Stage 1: builder -- compile the Python dependency wheels/venv. Only
 # requirements.txt, never requirements-dev.txt (pytest, pytest-benchmark,
-# reportlab, Levenshtein -- none of it runs in production).
+# Levenshtein -- none of it runs in production). reportlab moved into
+# requirements.txt: the draft docx/pdf export endpoint is a prod feature.
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim AS builder
 
@@ -64,6 +65,8 @@ WORKDIR /workspace
 # default-jre-headless: opendataloader-pdf (Java 11+ CLI).
 # tesseract-ocr + tesseract-ocr-tur: Turkish OCR for scanned evrak.
 # antiword: deterministic text extraction for the legacy binary .doc corpus.
+# fonts-liberation: Times New Roman-metric serif with full Turkish glyphs,
+#   used by the draft PDF export (app.domains.drafts.export).
 # libpq5: asyncpg/psycopg runtime client library (not -dev; no compilation
 # happens in this stage).
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -71,6 +74,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-tur \
     antiword \
+    fonts-liberation \
     libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
