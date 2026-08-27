@@ -15,17 +15,17 @@ dogrulama: "resmi_kaynaktan_indirildi"
 extractor: "pdfium_notice_splitter"
 used_ocr: "false"
 page_count: "1"
-kaynak_sayfa: "74"
 quality_score: "1.0"
 rag_status: "candidate"
 kaynak_kurum: "Türk Patent ve Marka Kurumu"
-kaynak_sha256: "f81f55e9eb0d3edca8c6a555244e8c890de2be8c022bb6b933eb0221da1e5bf5"
-lisans_durumu: "usage_review_required"
 anonimlestirme_durumu: "uygun"
 anonimlestirilen_alan_sayisi: "5"
+kaynak_sayfa: "74"
+kaynak_sha256: "f81f55e9eb0d3edca8c6a555244e8c890de2be8c022bb6b933eb0221da1e5bf5"
+lisans_durumu: "usage_review_required"
 ---
 
-Evrak No: [EVRAK SAYISI]  Başvuru No: [BAŞVURU NUMARASI]
+Evrak No: [EVRAK SAYISI] Başvuru No: [BAŞVURU NUMARASI]
 İlgi : 19.03.2018 tarih ve [İLGİ EVRAK SAYISI] sayılı dilekçeniz.
 19.03.2018 tarih ve [İLGİ EVRAK SAYISI] sayı ile Kurumumuz kayıtlarına giren "greenpest çevre sağlığı ve
 temizliği sanayi ticaret limited şirketi" ibareli marka tescil başvurunuza [BAŞVURU NUMARASI] başvuru numarası

@@ -43,5 +43,5 @@ Yukarıda arz edilen nedenlerle anlaşmalı boşanmamıza karar verilmesini sayg
 
 20.06.2021
 Davacı
-[KİŞİ ADI]
+[İMZA SAHİBİ]
 İmza

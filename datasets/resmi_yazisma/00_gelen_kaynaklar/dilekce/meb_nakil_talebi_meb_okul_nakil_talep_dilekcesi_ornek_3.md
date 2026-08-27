@@ -36,5 +36,5 @@ Veli Bilgileri:
 Gereğini saygılarımla arz ederim.
 
 24.11.2021
-[KİŞİ ADI]
+[İMZA SAHİBİ]
 İmza

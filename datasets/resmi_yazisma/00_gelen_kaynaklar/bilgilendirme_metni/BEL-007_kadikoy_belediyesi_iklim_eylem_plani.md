@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Kadıköy Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Kadıköy Belediye Meclis Kararı (Karar No: 2024/18)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Oturum:** 2
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 Çevre ve İklim Değişikliği Komisyonu'nun Kadıköy Belediyesi Sürdürülebilir Enerji ve İklim Eylem Planı (SECAP) güncellenmesi ve yerel düzeyde sera gazı salımının %40 azaltılması hedeflerinin kabulü hakkındaki raporu.

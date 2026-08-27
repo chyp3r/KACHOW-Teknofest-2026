@@ -4,7 +4,7 @@
   "aktif_korpus_kaydi": 1723,
   "karantina_kaydi": 40,
   "tekil_belge": 870,
-  "anonimlestirilmis_kayit": 1555,
+  "anonimlestirilmis_kayit": 1559,
   "kaynak_kurum_bilinmiyor": 0,
   "kalan_yuksek_guvenli_pii_kaydi": 0,
   "kurum_dagilimi": {
@@ -103,19 +103,19 @@
     "ust_yazi": 130
   },
   "rag_dagilimi": {
-    "candidate": 638,
+    "candidate": 584,
     "reference_only": 37,
-    "rejected": 1048
+    "rejected": 1102
   },
   "rag_dagilimi_aktif_korpus": {
-    "candidate": 638,
+    "candidate": 584,
     "reference_only": 37,
-    "rejected": 1048
+    "rejected": 1102
   },
   "rag_dagilimi_tum_kartlar": {
-    "candidate": 638,
+    "candidate": 584,
     "reference_only": 72,
-    "rejected": 1053
+    "rejected": 1107
   },
   "anonimlestirme_dagilimi": {
     "uygun": 1763
@@ -129,12 +129,12 @@
     "04_diger_resmi_yazisma": 126,
     "99_reddedilenler": 40
   },
-  "ham_kaynak_sayisi": 492,
+  "ham_kaynak_sayisi": 480,
   "ham_kaynak_turu_dagilimi": {
     "doc": 19,
     "docx": 57,
     "html": 50,
-    "pdf": 366
+    "pdf": 354
   },
   "semantik_yer_tutucu_dagilimi": {
     "[01]": 1,
@@ -144,27 +144,37 @@
     "[4]": 1,
     "[59-89]": 1,
     "[6402-103]": 1,
+    "[ABONE NUMARASI]": 3,
     "[ADRES]": 44,
     "[BAŞVURU BİLGİSİ]": 53,
-    "[BAŞVURU NUMARASI]": 36,
+    "[BAŞVURU NUMARASI]": 39,
+    "[BAŞVURU SAHİBİ]": 10,
     "[BAŞVURUYA ÖZGÜ BİLGİ]": 307,
-    "[E-POSTA]": 18,
+    "[E-POSTA]": 22,
     "[EVRAK SAYISI]": 1716,
     "[IBAN]": 3,
     "[KAYIT NUMARASI]": 3,
-    "[KURUM ADI]": 22,
+    "[KURUM ADI]": 20,
     "[KURUM ADRESİ]": 66,
     "[KURUM İLETİŞİM BİLGİLERİ]": 145,
-    "[KİŞİ ADI]": 374,
+    "[KİŞİ ADI]": 391,
     "[KİŞİ/KURUM ADI]": 1,
     "[MARKA ADI]": 19,
     "[MEVZUAT ALINTILARI KISALTILMIŞTIR]": 76,
+    "[SAYAÇ NUMARASI]": 3,
+    "[SİCİL NUMARASI]": 17,
     "[T.C. KİMLİK NO]": 199,
     "[TELEFON]": 32,
     "[VEKİL ADI]": 5,
     "[YARGI MERCİİ]": 1,
+    "[ÖĞRENCİ NUMARASI]": 1,
     "[İL ADI]": 16,
     "[İLGİ EVRAK SAYISI]": 25,
-    "[İMZA SAHİBİ]": 1366
-  }
+    "[İMZA SAHİBİ]": 1388
+  },
+  "anonimlestirme_denetim_bulgusu": 130,
+  "anonimlestirme_denetim_dagilimi": {
+    "otomatik_duzeltildi": 130
+  },
+  "baglamsal_inceleme_bekleyen_kayit": 0
 }

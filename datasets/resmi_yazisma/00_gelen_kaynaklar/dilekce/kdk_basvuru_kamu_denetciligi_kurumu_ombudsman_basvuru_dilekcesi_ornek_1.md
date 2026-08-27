@@ -8,14 +8,14 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # Kamu Denetçiliği Kurumu (Ombudsman) Başvuru Dilekçesi (Ornek 1)
 
 KAMU DENETÇİLİĞİ KURUMU'NA
 
-Başvuru Sahibi: Mehmet Ozturk
+Başvuru Sahibi: [BAŞVURU SAHİBİ]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Telefon: [TELEFON]
@@ -35,5 +35,5 @@ TALEBİM:
 İlgili idarenin kararının incelenerek düzeltilmesi ve mağduriyetimin giderilmesi hususunda gereğini saygılarımla arz ederim.
 
 08.10.2024
-Mehmet Ozturk
+[İMZA SAHİBİ]
 İmza

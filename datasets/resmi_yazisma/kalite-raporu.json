@@ -1,28 +1,30 @@
 {
   "schema_version": 1,
   "mode": "apply",
-  "source_count": 492,
+  "source_count": 480,
   "source_status": {
-    "candidate": 181,
+    "candidate": 170,
     "reference_only": 2,
-    "rejected": 309
+    "rejected": 308
   },
   "normalized_markdown_count": 1649,
   "normalized_status": {
-    "candidate": 604,
+    "candidate": 550,
     "reference_only": 2,
-    "rejected": 1043
+    "rejected": 1097
   },
   "quarantined_petition_articles": 40,
   "reasons": {
     "aciklayici_makale_tekil_dilekce_degil": 35,
-    "baslik_govde_uyumsuzlugu": 225,
+    "baslik_govde_uyumsuzlugu": 662,
+    "kategori_govde_uyumsuzlugu": 105,
+    "kurum_govde_uyumsuzlugu": 11,
     "mevzuat_referansi": 1,
     "ocr_karakter_bozulmasi": 5,
     "sentetik_simulasyon_yalniz_test": 300,
     "site_sayfasi": 5,
     "tekil_yazisma_ornegi_degil": 1,
-    "tekrar_sentetik_sablon": 512,
+    "tekrar_sentetik_sablon": 13,
     "yetersiz_metin": 1
   },
   "conversion_errors": [],
@@ -5306,138 +5308,6 @@
       "used_ocr": "false",
       "page_count": "49",
       "quality_score": "0.833"
-    },
-    {
-      "source": "datasets/sample/evrak_01.pdf",
-      "target": "datasets/sample/evrak_01.md",
-      "id": "SAMPLE-EVRAK-01",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.829"
-    },
-    {
-      "source": "datasets/sample/evrak_02.pdf",
-      "target": "datasets/sample/evrak_02.md",
-      "id": "SAMPLE-EVRAK-02",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.844"
-    },
-    {
-      "source": "datasets/sample/evrak_03.pdf",
-      "target": "datasets/sample/evrak_03.md",
-      "id": "SAMPLE-EVRAK-03",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.892"
-    },
-    {
-      "source": "datasets/sample/evrak_04.pdf",
-      "target": "datasets/sample/evrak_04.md",
-      "id": "SAMPLE-EVRAK-04",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.865"
-    },
-    {
-      "source": "datasets/sample/evrak_05.pdf",
-      "target": "datasets/sample/evrak_05.md",
-      "id": "SAMPLE-EVRAK-05",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.929"
-    },
-    {
-      "source": "datasets/sample/evrak_06.pdf",
-      "target": "datasets/sample/evrak_06.md",
-      "id": "SAMPLE-EVRAK-06",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.864"
-    },
-    {
-      "source": "datasets/sample/evrak_07.pdf",
-      "target": "datasets/sample/evrak_07.md",
-      "id": "SAMPLE-EVRAK-07",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.909"
-    },
-    {
-      "source": "datasets/sample/evrak_08.pdf",
-      "target": "datasets/sample/evrak_08.md",
-      "id": "SAMPLE-EVRAK-08",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.871"
-    },
-    {
-      "source": "datasets/sample/evrak_09.pdf",
-      "target": "datasets/sample/evrak_09.md",
-      "id": "SAMPLE-EVRAK-09",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.804"
-    },
-    {
-      "source": "datasets/sample/evrak_10.pdf",
-      "target": "datasets/sample/evrak_10.md",
-      "id": "SAMPLE-EVRAK-10",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.857"
-    },
-    {
-      "source": "datasets/sample/evrak_11.pdf",
-      "target": "datasets/sample/evrak_11.md",
-      "id": "SAMPLE-EVRAK-11",
-      "status": "candidate",
-      "reason": "",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.926"
-    },
-    {
-      "source": "datasets/sample/evrak_12.pdf",
-      "target": "datasets/sample/evrak_12.md",
-      "id": "SAMPLE-EVRAK-12",
-      "status": "rejected",
-      "reason": "yetersiz_metin",
-      "extractor": "pdfium",
-      "used_ocr": "false",
-      "page_count": "1",
-      "quality_score": "0.0"
     }
   ]
 }

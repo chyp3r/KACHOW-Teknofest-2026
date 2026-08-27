@@ -4,6 +4,89 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Eklendi
+- (#284) `scripts/generate_yazisma_vaka_pilotu.py`: gerçek anonimleştirilmiş
+  korpus kartlarını few-shot referans alıp Evren (`llm-large`) ile
+  az-temsil-edilen karar türlerinden (yetkisizlik, belirsiz başvuru, çoklu
+  talep, itiraz) kurgusal gelen evrak-karar-cevap vakası üreten betik. Üretim
+  sonrası: (1) LLM'in kendi bildirdiği kurgusal isimler dahil aynı
+  anonimleştirme/denetim hattından geçer, (2) numaralı mevzuat referansları
+  mevzuat.gov.tr MCP'si ile başlık eşleşmesi kontrol edilerek doğrulanır,
+  yanlış çıkan referanslı vaka otomatik olarak yeniden üretilir. Çıktı ayrı
+  bir klasöre (`datasets/resmi_yazisma_vakalar_pilot/`) yazılır, üretim
+  `ornekler.jsonl`'e otomatik karışmaz. Süreç
+  `datasets/resmi_yazisma/VAKA_URETIM_PLAYBOOK.md`'de belgelenmiştir.
+- (#284) `resmi_yazisma` veri kümesi için bağlamsal anonimleştirme denetim
+  manifesti (`anonimlestirme-denetim-manifesti.jsonl`): TCKN checksum
+  doğrulaması, ad-soyad/imza sahibi/vekil, telefon, e-posta (gizlenmiş
+  `[at]` biçimi dahil), IBAN ve abone/sayaç/sicil/başvuru/kayıt/sözleşme/
+  üyelik/öğrenci/pasaport/hesap numaraları için bağlama duyarlı bulgular;
+  her bulgu dosya, kart kimliği, satır, tür, önem, güven skoru, önerilen
+  semantik yer tutucu ve düzeltme durumu taşır, ham hassas değer hiçbir
+  zaman rapora yazılmaz. 130 bulgu tamamı otomatik düzeltildi, 0 kayıt
+  bağlamsal inceleme bekliyor.
+- (#284) `backend/tests/unit/test_prepare_resmi_yazisma_markdown.py` ve
+  `backend/tests/unit/test_curate_yazisma_examples.py`'e kullanıcı tarafından
+  bildirilen 12 sorunlu kart için regresyon testleri, denetim manifestinin
+  hiçbir zaman ham kişisel veri taşımadığını doğrulayan test ve üretilen
+  `ornekler*.jsonl` split'leri arasında `source_group`/`template_family`/
+  `source_sha256`/`source_path`/yakın-kopya sızıntısı olmadığını doğrulayan
+  parametrik regresyon testleri eklendi.
+
+### Değiştirildi
+- (#284) Ham resmi_yazisma kaynakları (492 PDF/HTML/DOC/DOCX + GİB API'nin
+  200 ham JSON anlık görüntüsü, ~43 MB) artık GitHub'a gönderilmiyor
+  (`.gitignore`); dosyalar yerel diskte olduğu yerde değişmeden duruyor,
+  yalnız `git`'e eklenmeleri durduruldu (`git rm --cached`, geçmiş
+  commit'ler bozulmadı). Veri kümesinin asıl teslim edilen içeriği zaten
+  türetilmiş Markdown kartlarıydı; bkz. `datasets/resmi_yazisma/README.md`
+  "Ham kaynaklar" bölümü.
+
+### Düzeltildi
+- (#284) `OS-*` sentetik örneklem kalite kapısı fail-closed hale getirildi.
+  `os_body_kind`, tanımadığı her gövde kalıbını `"genel"` kovasına
+  düşürüyordu ve `os_is_coherent` bu kovayı **koşulsuz** geçiriyordu —
+  yani eşleşme kanıtlanamadığında kart otomatik "tutarlı" sayılıyordu.
+  Üretici betik (`scripts/scrape_open_sources.py`) başlığı, kurumu ve
+  gövdeyi birbirinden bağımsız rastgele havuzlardan çektiği için bu, üç
+  çekimin çeliştiği kartların üretim RAG'ına girmesine yol açtı (ör.
+  "Konu: Bilgi Edinme Başvurusu Cevabı" başlıklı bir kartın gövdesinde
+  bir belediye meclis kararının anlatılması). Kapı artık üç ekseni ayrı
+  ayrı denetliyor ve hangisinin çeliştiğini ayrı `ret_nedeni` ile
+  bildiriyor: `baslik_govde_uyumsuzlugu`, `kategori_govde_uyumsuzlugu`,
+  `kurum_govde_uyumsuzlugu` (yalnız gövde kendi karar organını
+  adlandırdığında) ve `taninmayan_govde_kalibi`. Etki: 800 karttan
+  `candidate` kalan 63 → **9**; üretim `ornekler.jsonl` 438 → **396**,
+  dev 86 → 80, heldout 45 → 39; korpusun gerçek/resmî oranı %79,6 →
+  **%88,0**. Kartlar silinmedi, yalnız doğru şekilde `rejected` işaretlendi.
+- (#284) `_fold_tr()` yardımcısı eklendi: `"İ".casefold()` Türkçede
+  `i` + U+0307 (birleşik nokta) üretiyor, bu yüzden "İmar Planı" ile
+  başlayan **her** başlık kalite kapısının casefold karşılaştırmasında
+  sessizce eşleşmiyordu.
+- (#284) `scripts/prepare_resmi_yazisma_markdown.py`: front matter
+  değerleri `json.dumps` ile kaçışlanıp yazılıyor ama okunurken yalnız dış
+  tırnaklar soyuluyor, iç kaçışlar (`\\`) hiç geri çözülmüyordu. Bu, bir
+  değerde ters eğik çizgi geçtiğinde (`GIB-UY-015` başlığı) her
+  normalize-only çalıştırmasında kaçış sayısını katlıyordu — gerçek bir
+  idempotence ihlali. `split_front_matter` artık çift tırnaklı değerleri
+  `json.loads` ile doğru çözüyor.
+- (#284) `_replace_labelled_name`: `Başkanvekili` (bir mahkeme unvanı)
+  "vekil" alt-dizgisi yüzünden yanlışlıkla `[VEKİL ADI]` (avukat alanı)
+  ile maskeleniyordu; artık `[KİŞİ ADI]` ile maskeleniyor.
+- (#284) `semantic_anonymize`'daki eski/yanlış yer tutucu onarım geçişi,
+  `VEKİLİ:` etiketini satır başına çapalamadan aramıyordu; bu yüzden
+  `Başkanvekili:` alanının (üstteki düzeltmeyle doğru maskelenen)
+  `[KİŞİ ADI]` değerini de `[VEKİL ADI]`'ya geri çeviriyordu. Regex artık
+  yalnız satır başındaki bağımsız `VEKİLİ:` alanına çapalı.
+- (#284) `assess_quality`, `SIMULASYON` içeren kaynaklardan üretilen
+  kartları artık doğrudan `rejected`/`sentetik_simulasyon_yalniz_test`
+  olarak işaretliyor. Önceden bu karar yalnız `_effective_rag_decision`
+  içinde *raporlanıyor*, karta *yazılmıyordu* — `curate_yazisma_examples.py`
+  ise kararını kartın kendi `rag_status`'una dayandırdığından, tam bir
+  `--apply` çalıştırması (yarım kalan bir öncekinde gözlemlendiği gibi) 32
+  okunaklı simülasyon kartını `candidate`'e çevirip üretim `ornekler.jsonl`
+  dosyasına sokabiliyordu. Artık kaynaktan yeniden çıkarım ile normalize
+  arasında tutarlı: 300/300 simülasyon kartı `rejected` kalıyor, üretim
+  RAG çıktısında sıfır sızıntı.
 - `docs/diagrams/` altında sistemin tamamını (backend + frontend) kapsayan 8
   Mermaid diyagramı eklendi: use case, Görev 1 ve Görev 2 sıra diyagramları,
   evrak yaşam döngüsü aktivite diyagramı, dağıtım (deployment) diyagramı,

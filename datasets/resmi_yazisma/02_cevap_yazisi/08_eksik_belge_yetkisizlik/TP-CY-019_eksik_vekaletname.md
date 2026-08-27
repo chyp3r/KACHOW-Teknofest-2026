@@ -15,17 +15,17 @@ dogrulama: "resmi_kaynaktan_indirildi"
 extractor: "pdfium_notice_splitter"
 used_ocr: "false"
 page_count: "1"
-kaynak_sayfa: "6"
 quality_score: "1.0"
 rag_status: "candidate"
 kaynak_kurum: "Türk Patent ve Marka Kurumu"
-kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
-lisans_durumu: "usage_review_required"
 anonimlestirme_durumu: "uygun"
 anonimlestirilen_alan_sayisi: "4"
+kaynak_sayfa: "6"
+kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
+lisans_durumu: "usage_review_required"
 ---
 
-Evrak No: [EVRAK SAYISI]  Başvuru No: [BAŞVURU NUMARASI]
+Evrak No: [EVRAK SAYISI] Başvuru No: [BAŞVURU NUMARASI]
 İlgi: .23.12.2009 tarih ve [İLGİ EVRAK SAYISI] sayılı dilekçeniz
 İlgide kayıtlı dilekçeniz ile 21.01.2009 tarih ve [MARKA ADI] ibareli marka tescil başvurusunuz
 ile ilgili Enstitümüzce verilen 22.07.2009 tarih ve 2009-0-250757 sayılı karara itiraz etmektesiniz.

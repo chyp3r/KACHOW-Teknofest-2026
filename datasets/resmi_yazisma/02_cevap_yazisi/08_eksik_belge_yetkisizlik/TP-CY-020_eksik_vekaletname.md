@@ -15,17 +15,17 @@ dogrulama: "resmi_kaynaktan_indirildi"
 extractor: "pdfium_notice_splitter"
 used_ocr: "false"
 page_count: "1"
-kaynak_sayfa: "6"
 quality_score: "1.0"
 rag_status: "candidate"
 kaynak_kurum: "Türk Patent ve Marka Kurumu"
-kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
-lisans_durumu: "usage_review_required"
 anonimlestirme_durumu: "uygun"
 anonimlestirilen_alan_sayisi: "3"
+kaynak_sayfa: "6"
+kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
+lisans_durumu: "usage_review_required"
 ---
 
-Evrak No: [EVRAK SAYISI]  Başvuru No: [BAŞVURU NUMARASI]
+Evrak No: [EVRAK SAYISI] Başvuru No: [BAŞVURU NUMARASI]
 İlgi: 14/04/2011 tarih ve 201 l-G-97235 sayılı dilekçeniz
 İlgide kayıtlı dilekçeniz ile 30.03.2010 tarih ve [MARKA ADI] ibareli
 marka tescil başvurusuna itiraz etmektesiniz.

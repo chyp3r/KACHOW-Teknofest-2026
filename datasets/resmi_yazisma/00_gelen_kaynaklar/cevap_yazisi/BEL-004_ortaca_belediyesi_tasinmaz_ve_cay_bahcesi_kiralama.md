@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Ortaca Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Ortaca Belediye Meclis Kararı (Karar No: 53)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Karar No:** 53
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 Emlak ve İstimlak Müdürlüğü'nün mülkiyeti belediyemize ait Dalyan Mahallesi 104 ada 1 parselde bulunan büfe ve çay bahçesinin kiralama süresi ve şartlarının tespiti hakkındaki teklifi.

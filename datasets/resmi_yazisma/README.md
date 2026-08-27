@@ -1,16 +1,25 @@
 # KACHOW Türkçe Resmî Yazışma Kaynak Veri Kümesi
 
 Bu klasör KACHOW'un resmî yazı taslağı üreten ajanları için kaynak, referans ve
-few-shot örneklerini içerir. Kaynak dosyalar (PDF, HTML, DOC ve DOCX) değişmeden
-saklanır; RAG yalnız UTF-8 Markdown kartlarından beslenir.
+few-shot örneklerini içerir. RAG yalnız UTF-8 Markdown kartlarından beslenir.
+
+## Ham kaynaklar
+
+Ham kaynak dosyalar (PDF, HTML, DOC, DOCX ve GİB API'nin ham JSON anlık
+görüntüleri; `00_gelen_kaynaklar/` altında 679 dosya) **artık GitHub'a
+gönderilmez** (`.gitignore`). Bu dosyalar diskte olduğu yerde, değişmeden
+kalır — yalnız `git`'e eklenmeleri durduruldu; halihazırda commit edilmiş
+geçmişteki kopyalar geriye dönük silinmedi. Her kaynağın türetilmiş Markdown
+eşi (`kaynak`/`yerel_orijinal` alanlarıyla izlenebilir) izlenmeye devam eder;
+asıl veri kümesi budur. Ham kaynağa yalnız
+`scripts/prepare_resmi_yazisma_markdown.py --apply` (kaynaktan yeniden
+çıkarım yapan tam mod) ihtiyaç duyar — `--apply --normalize-only`, kataloglar
+ve RAG çıktısı yalnız mevcut Markdown kartlarından çalışır.
 
 ## Güncel durum
 
-- Kaynak dosya: **492**
-  - PDF: 366
-  - HTML: 50
-  - DOCX: 57
-  - DOC: 19
+- Kaynak dosya: **492** (PDF 366, HTML 50, DOCX 57, DOC 19) + GİB API ham
+  JSON: **200**
 - Markdown eşi veya açıklamalı ret kaydı bulunan kaynak: **492/492**
 - Belge niteliğindeki toplam Markdown kartı: **1763**
   - aktif korpus: 1723
@@ -18,23 +27,25 @@ saklanır; RAG yalnız UTF-8 Markdown kartlarından beslenir.
 - Tekil kaynak belge: **870**
 - Kaynak kurumu bilinmeyen kart: **0**
 - Normalleştirilmiş aktif Markdown kartı: **1723**
-  - `candidate`: 638
+  - `candidate`: 584
   - `reference_only`: 37
-  - `rejected`: 1048
-- Kalite kapısını geçen, tekil şablon ailesi: **569**
-  - resmî/gerçek kaynaklı: 453 (%79,6)
-  - sentetik: 116 (%20,4)
-- Üretim retrieval çıktısı (`ornekler.jsonl`): **429**
-  - üst yazı: 98
-  - cevap yazısı: 132
-  - bilgilendirme metni: 96
-  - diğer resmî yazışma: 103
-- Ayrı değerlendirme kümeleri: dev 89, heldout 51
+  - `rejected`: 1102
+- Kalite kapısını geçen, tekil şablon ailesi: **515**
+  - resmî/gerçek kaynaklı: 453 (%88,0)
+  - sentetik: 62 (%12,0)
+- Üretim retrieval çıktısı (`ornekler.jsonl`): **396**
+  - üst yazı: 87
+  - cevap yazısı: 129
+  - bilgilendirme metni: 84
+  - diğer resmî yazışma: 96
+- Ayrı değerlendirme kümeleri: dev 80, heldout 39
 - Gerçek/resmî örnek kotası: üst yazı 107, cevap yazısı 131,
   bilgilendirme metni 108, diğer resmî yazışma 107 (**her türde hedef ≥100**)
 - Gerçek eksik-belge/yetkisizlik şablon ailesi: **22**. Aynı bildirim
   şablonunun farklı başvuru değerleri veri sayısını yapay biçimde artırmaz.
 - Yüksek güvenli PII bulgusu: **0**
+- Bağlamsal denetim bulgusu (`anonimlestirme-denetim-manifesti.jsonl`):
+  **130**, tamamı otomatik düzeltildi; inceleme bekleyen kayıt: **0**
 - Agent-destekli kalite ön incelemesi: **100/100** geçti; insan onayı değildir
 
 Ayrıntılı ve makine tarafından okunabilir sonuçlar `KALITE_RAPORU.md` ile
@@ -150,8 +161,22 @@ kanonikleştirilerek korunur.
   kartlar `ocr_karakter_bozulmasi` gerekçesiyle RAG dışında tutulur.
 - PII denetimi fail-closed çalışır: yüksek güvenli bir bulgu taşıyan kayıt
   `ornekler.jsonl` dosyasına hiç yazılmaz ve eleme raporunda gerekçesi görünür.
-- `OS-*` kayıtları gerçek resmî belge değildir; otonom betikle üretilmiş
-  sentetik örneklemdir. Başlık-gövde uyumu ve tekrar kontrolü uygulanır.
+- `OS-*` kayıtları gerçek resmî belge değildir; `scripts/scrape_open_sources.py`
+  ile üretilmiş sentetik örneklemdir. Bu betik başlık, kurum ve gövdeyi
+  **birbirinden bağımsız** rastgele havuzlardan çektiği için üç çekim
+  birbiriyle çelişebiliyor. Kalite kapısı bunu üç eksende ayrı ayrı
+  denetler ve **fail-closed** çalışır: tanımadığı bir gövde kalıbı
+  reddedilir, geçmez.
+  - `baslik_govde_uyumsuzlugu`: gövde, başlığın konusunu cevaplayamıyor
+  - `kategori_govde_uyumsuzlugu`: bir cevap yazısı gövdesi "diğer resmî
+    yazışma" gibi yanlış klasörde dosyalanmış
+  - `kurum_govde_uyumsuzlugu`: gövde kendi karar organını adlandırıyor ama
+    antet uymuyor (ör. "belediye meclis kararı" bir mahkeme antetiyle,
+    "Bakanlığımızca yürütülen projeler" bir üniversite antetiyle)
+  - `taninmayan_govde_kalibi`: gövde bilinen hiçbir havuz kalıbına uymuyor
+  Bu kapının önceki sürümü tanımadığı kalıbı `genel` sayıp **koşulsuz**
+  geçiriyordu; düzeltmeyle 800 karttan `candidate` kalan sayısı 63'ten
+  **9**'a düştü, 54 kart üretim RAG'ından çıktı.
 - Simülasyon PDF'leri OCR ve anonimleştirme regresyonu içindir. Kurum, şehir,
   tarih ve olay değerlerini rastgele birleştirdikleri için **hiçbiri** üretim
   RAG'ına girmez; `sentetik_simulasyon_yalniz_test` gerekçesiyle korunur.

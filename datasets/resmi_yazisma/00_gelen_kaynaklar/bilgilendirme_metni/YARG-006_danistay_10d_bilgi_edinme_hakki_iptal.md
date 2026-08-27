@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Danıştay Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "8"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Danıştay 10. Daire Kararı - E.2021/4890, K.2022/3120
@@ -26,9 +26,9 @@ anonimlestirilen_alan_sayisi: "8"
 **Karar No:** 2022/3120
 **Karar Tarihi:** 18/10/2022
 
-**DAVACI:** [KURUM ADI] Şirketi
+**DAVACI:** [KİŞİ ADI]
 **VEKİLİ:** Av. [VEKİL ADI]
-**DAVALI:** [KİŞİ ADI] Kurulu Başkanlığı / Ankara
+**DAVALI:** [KİŞİ ADI]
 
 **DAVA İSTEMİ:** Davacı şirket tarafından yapılan bilgi edinme başvurusunun, 4982 sayılı Bilgi Edinme Hakkı Kanunu'nun 23. maddesindeki "ticari sır" istisnası gösterilerek reddedilmesine ilişkin idari işlemin iptali talebidir.
 
@@ -42,4 +42,4 @@ Açıklanan nedenlerle;
 2. Yargılama giderleri ile 9.200 TL vekalet ücretinin davalı idareden alınarak davacıya verilmesine OYBİRLİĞİYLE karar verildi.
 
 **Başkan:** [KİŞİ ADI]
-**Üyeler:** [KİŞİ ADI], [KİŞİ ADI], [KİŞİ ADI], [KİŞİ ADI].
+**Üyeler:** [KİŞİ ADI]

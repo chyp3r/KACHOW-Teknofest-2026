@@ -13,10 +13,10 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "3"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
-# Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2021/34521
+# Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: [BAŞVURU NUMARASI]
 
 **ANAYASA MAHKEMESİ**
 **İKİNCİ BÖLÜM**
@@ -25,7 +25,7 @@ anonimlestirilen_alan_sayisi: "3"
 **Başvuru Numarası:** 2021/34521
 **R.G. Tarih-Sayı:** 22/02/2024 - 32468
 
-**BAŞVURAN:** [KİŞİ ADI]
+**BAŞVURAN:** [BAŞVURU SAHİBİ]
 **VEKİLİ:** Av. [VEKİL ADI]
 
 **BAŞVURUNUN KONUSU:** Başvuranın tarafı olduğu tapu iptali ve tescil davasının 9 yıl 4 ay boyunca sonuçlandırılamaması nedeniyle Anayasa'nın 36. maddesinde güvence altına alınan adil yargılanma hakkı kapsamındaki makul sürede yargılanma hakkının ihlal edildiği iddiasına ilişkindir.
@@ -41,5 +41,5 @@ Açıklanan gerekçelerle;
 3. Başvurana net 65.000 TL manevi tazminat ÖDENMESİNE,
 4. Kararın bir örneğinin Adalet Bakanlığına GÖNDERİLMESİNE OYBİRLİĞİYLE karar verildi.
 
-**Başkan:** Kadir ÖZKAYA
-**Üyeler:** Engin YILDIRIM, [KİŞİ ADI], Basri BAĞCI.
+**Başkan:** [KİŞİ ADI]
+**Üyeler:** [KİŞİ ADI]

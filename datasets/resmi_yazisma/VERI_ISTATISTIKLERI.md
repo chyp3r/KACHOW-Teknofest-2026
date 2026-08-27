@@ -10,6 +10,8 @@
 - Tekil kaynak belge: **870**
 - Kaynak kurumu bilinmeyen: **0**
 - Yüksek güvenli PII kalan kayıt: **0**
+- Bağlamsal denetim bulgusu: **130**
+- Bağlamsal inceleme bekleyen kayıt: **0**
 
 ## Kaynak kurum dağılımı (ilk 30)
 
@@ -48,12 +50,12 @@
 
 ## Aktif korpus RAG durumları
 
-- `candidate`: 638
+- `candidate`: 584
 - `reference_only`: 37
-- `rejected`: 1048
+- `rejected`: 1102
 
 ## Tüm kartların RAG durumları (karantina dahil)
 
-- `candidate`: 638
+- `candidate`: 584
 - `reference_only`: 72
-- `rejected`: 1053
+- `rejected`: 1107

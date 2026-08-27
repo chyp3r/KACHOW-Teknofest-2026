@@ -15,17 +15,17 @@ dogrulama: "resmi_kaynaktan_indirildi"
 extractor: "pdfium_notice_splitter"
 used_ocr: "false"
 page_count: "1"
-kaynak_sayfa: "6"
 quality_score: "1.0"
 rag_status: "candidate"
 kaynak_kurum: "Türk Patent ve Marka Kurumu"
-kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
-lisans_durumu: "usage_review_required"
 anonimlestirme_durumu: "uygun"
 anonimlestirilen_alan_sayisi: "4"
+kaynak_sayfa: "6"
+kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
+lisans_durumu: "usage_review_required"
 ---
 
-Evrak No: [EVRAK SAYISI]  Başvuru No: [BAŞVURU NUMARASI]
+Evrak No: [EVRAK SAYISI] Başvuru No: [BAŞVURU NUMARASI]
 İlgi: [BAŞVURU NUMARASI] başvuru numaralı ve [MARKA ADI] ibareli marka tescil başvurunuz
 İlgide kayıtlı dilekçe ve eklerinin incelenmesi sonucunda 10/02/2009 tarih ve 45185 sayılı yazımız ile
 istenilen noksan evraklardan göndermiş olduğunuz 460,00TL'lik tescil harcı dekont aslının mükerrer olduğu

@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "3"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Anayasa Mahkemesi Kararı - Esas Sayısı: 2023/131, Karar Sayısı: 2023/160
@@ -37,6 +37,6 @@ Anayasa Mahkemesi Genel Kurulu tarafından yapılan incelemede;
 **HÜKÜM:**
 14/7/2023 tarihli ve 7456 sayılı Kanun'un 1. maddesinin Anayasa'ya aykırı olmadığına ve iptal talebinin **REDDİNE**, yürürlüğünün durdurulması talebinin **REDDİNE** OYBİRLİĞİYLE karar verildi.
 
-**Başkan:** Kadir ÖZKAYA
-**Başkanvekili:** Hasan Tahsin GÖKCAN
-**Üyeler:** [KİŞİ ADI], [KİŞİ ADI], Engin YILDIRIM, Rıdvan GÜLEÇ, Hicabi DURSUN, Yusuf Şevki HAKYEMEZ, Yıldız SEFERİNOĞLU, Selahaddin MENTEŞ, Basri BAĞCI, İrfan FİDAN, Kenan YAŞAR, Muhterem İNCE.
+**Başkan:** [KİŞİ ADI]
+**Başkanvekili:** [KİŞİ ADI]
+**Üyeler:** [KİŞİ ADI]

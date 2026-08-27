@@ -9,7 +9,7 @@ rag_status: "rejected"
 ret_nedeni: "site_sayfasi"
 kaynak_kurum: "dilekceornegi.net"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "0"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Künye
@@ -27,14 +27,14 @@ Dilekceornegi.net Künye Bilgileri
 Ünvan Sahibi
 Eggo Bilişim Teknolojileri
 İçerik Yöneticileri
-Mehmet Emrah GÜNEŞ
-Ergin AÇAR
+[KİŞİ ADI]
+[KİŞİ ADI]
 Reklam
-Ergin AÇAR
-Yer Sağlayıcı
+[KİŞİ ADI]
+[KİŞİ ADI]
 Veridyen.com
 Yazılım
 WordPress
 İletişim
 E-Posta / E-Mail
-info[at]dilekceornegi.net
+[E-POSTA]

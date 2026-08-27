@@ -8,14 +8,14 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Anlaşmalı Boşanma Dava Dilekçesi (Ornek 2)
 
 Mersin AİLE MAHKEMESİ HAKİMLİĞİ'NE
 
-DAVACI: Selin Gunes (T.C.: [T.C. KİMLİK NO])
+DAVACI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
 Adres: [ADRES]
 
 DAVALI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
@@ -43,5 +43,5 @@ Yukarıda arz edilen nedenlerle anlaşmalı boşanmamıza karar verilmesini sayg
 
 10.12.2024
 Davacı
-Selin Gunes
+[İMZA SAHİBİ]
 İmza

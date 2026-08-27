@@ -4,25 +4,27 @@
 
 ## Özet
 
-- Dönüştürülen kaynak: **492**
+- Dönüştürülen kaynak: **480**
 - Markdown biçiminde normalleştirilen kart: **1649**
 - Aktif korpustan karantinaya alınan dilekçe makalesi/site sayfası: **40**
 - Dönüşüm hatası: **0**
 
 ## Kaynak dönüşümü durumları
 
-- `candidate`: 181
+- `candidate`: 170
 - `reference_only`: 2
-- `rejected`: 309
+- `rejected`: 308
 
 ## Eleme nedenleri
 
 - `aciklayici_makale_tekil_dilekce_degil`: 35
-- `baslik_govde_uyumsuzlugu`: 225
+- `baslik_govde_uyumsuzlugu`: 662
+- `kategori_govde_uyumsuzlugu`: 105
+- `kurum_govde_uyumsuzlugu`: 11
 - `mevzuat_referansi`: 1
 - `ocr_karakter_bozulmasi`: 5
 - `sentetik_simulasyon_yalniz_test`: 300
 - `site_sayfasi`: 5
 - `tekil_yazisma_ornegi_degil`: 1
-- `tekrar_sentetik_sablon`: 512
+- `tekrar_sentetik_sablon`: 13
 - `yetersiz_metin`: 1

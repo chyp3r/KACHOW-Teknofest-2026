@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 1)
@@ -20,9 +20,9 @@ Konu: İşsizlik Ödeneği Başvurusu
 Sahin A.S. işyerinden 06.01.2021 tarihinde işten çıkarılmış bulunmaktayım. 4447 sayılı İşsizlik Sigortası Kanunu kapsamında işsizlik ödeneği almaya hak kazandığımı düşünmekteyim.
 
 Kişisel Bilgilerim:
-- Adı Soyadı: Zeynep Koc
+- Adı Soyadı: [KİŞİ ADI]
 - T.C. Kimlik No: [T.C. KİMLİK NO]
-- SGK Sicil No: 8475984
+- SGK Sicil No: [SİCİL NUMARASI]
 - Son Çalışılan İşyeri: Sahin A.S.
 - İşten Ayrılma Tarihi: 06.01.2021
 - İşten Ayrılma Nedeni: İşveren feshi (Kod: 22)
@@ -31,7 +31,7 @@ Kişisel Bilgilerim:
 İşsizlik ödeneği başvurumun değerlendirilmesini saygılarımla arz ederim.
 
 06.01.2021
-Zeynep Koc
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Tel: [TELEFON]

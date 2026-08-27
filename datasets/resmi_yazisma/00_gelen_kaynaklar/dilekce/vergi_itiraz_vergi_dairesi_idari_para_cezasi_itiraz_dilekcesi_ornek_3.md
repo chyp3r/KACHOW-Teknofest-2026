@@ -33,7 +33,7 @@ Mükellef Bilgileri:
 Yukarıda arz ettiğim nedenlerle, haksız yere kesilen para cezasının iptal edilmesini saygılarımla arz ve talep ederim.
 
 20.05.2025
-[KİŞİ ADI]
+[İMZA SAHİBİ]
 İmza
 
 EKLER:

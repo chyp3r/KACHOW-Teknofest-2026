@@ -38,7 +38,7 @@ Sayı
 
 :
 
-[EVRAK SAYISI]Özelge]-1539454
+[EVRAK SAYISI]
 
 24.11.2025
 

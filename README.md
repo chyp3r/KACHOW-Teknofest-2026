@@ -649,7 +649,7 @@ Testlerin ötesinde, `evaluation/` altında ayrı bir LLM/RAG kalite ölçüm ha
 | Kaynak | İçerik | Boyut |
 | :--- | :--- | ---: |
 | `datasets/mevzuat/` | Mevzuat fallback korpüsü — MCP sunucusu erişilemezse buraya düşülür | 8 dosya, ~1.1 MB |
-| `datasets/resmi_yazisma/00_gelen_kaynaklar/` | Ham/kaynak gelen evrak örnekleri | 1927 dosya |
+| `datasets/resmi_yazisma/00_gelen_kaynaklar/` | Gelen evrak örnekleri (Markdown kartları; ham PDF/HTML/DOC/DOCX + GİB API JSON'ları artık yalnız yerelde tutulur, bkz. `datasets/resmi_yazisma/README.md#ham-kaynaklar`) | 1247 Markdown dosyası |
 | `datasets/resmi_yazisma/01_ust_yazi/` | Üst yazı örnekleri (few-shot + stil kaynağı) | 113 dosya |
 | `datasets/resmi_yazisma/02_cevap_yazisi/` | Cevap yazısı örnekleri | 163 dosya |
 | `datasets/resmi_yazisma/03_bilgilendirme_metni/` | Bilgilendirme metni örnekleri | 83 dosya |

@@ -8,17 +8,17 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Noterden İhtarname Örneği (Ornek 3)
 
 İHTARNAME
 
-İHTAR EDEN: Zeynep Koc (T.C.: [T.C. KİMLİK NO])
+İHTAR EDEN: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
 Adres: [ADRES]
 
-MUHATAP: Zeynep Koc
+MUHATAP: [KİŞİ ADI]
 Adres: [ADRES]
 
 KONU: Kira borcunun ödenmesi ihtarıdır.
@@ -34,5 +34,5 @@ Sayın Muhatap,
 
 10.02.2021
 İhtar Eden
-Zeynep Koc
+[İMZA SAHİBİ]
 İmza

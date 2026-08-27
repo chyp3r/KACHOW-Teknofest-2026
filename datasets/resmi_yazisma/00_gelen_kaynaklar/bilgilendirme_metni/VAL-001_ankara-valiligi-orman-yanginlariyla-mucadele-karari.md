@@ -39,7 +39,7 @@ Ankara il sınırları dâhilinde yer alan ormanlık alanlarda çıkabilecek orm
 [KİŞİ ADI] - Ankara Valisi
 
 **Üyeler:**
-İl Emniyet Müdürü [KİŞİ ADI]
+[KİŞİ ADI]
 İl Jandarma Komutanı [KİŞİ ADI]
 Orman Bölge Müdürü [KİŞİ ADI]
 İl Tarım ve Orman Müdürü [KİŞİ ADI]

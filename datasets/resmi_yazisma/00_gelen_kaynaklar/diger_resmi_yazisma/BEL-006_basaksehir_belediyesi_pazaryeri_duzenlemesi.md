@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Başakşehir Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Başakşehir Belediye Meclis Kararı (Karar No: 2024/42)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Oturum:** 1
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 Zabıta Müdürlüğü'nin Başakşehir Mahallesi kapalı pazar yeri tezgah kullanım alanlarının 5957 sayılı Kanun ve Pazar Yerleri Hakkında Yönetmelik uyarınca yeniden düzenlenmesi ve pazarcı esnafına tahsis esaslarının belirlenmesi hakkındaki teklifi.
