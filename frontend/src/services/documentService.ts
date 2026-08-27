@@ -60,11 +60,14 @@ export const documentService = {
       body: JSON.stringify({ pages }),
     });
   },
-  // Slow on purpose, same reasoning as generateDetailedSummary above: a
-  // full glm-ocr pass, no request timeout to fight client-side.
-  reextractText(storagePath: string): Promise<DocumentAnalysis> {
+  // Slow on purpose, same reasoning as generateDetailedSummary above:
+  // vision OCR (llm-fast, escalating to llm-large once if needed) plus a
+  // full re-run of the analysis graph -- document_type/summary/every
+  // field/compliance/mevzuat references, not just the text. No request
+  // timeout to fight client-side.
+  generateDetailedAnalysis(storagePath: string): Promise<DocumentAnalysis> {
     const safePath = storagePath.split("/").map(encodeURIComponent).join("/");
-    return apiRequest(`/api/v1/documents/${safePath}/re-extract`, {
+    return apiRequest(`/api/v1/documents/${safePath}/detailed-analysis`, {
       method: "POST",
     });
   },

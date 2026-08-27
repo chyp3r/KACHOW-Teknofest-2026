@@ -307,6 +307,62 @@ def test_generate_detailed_summary_surfaces_a_generation_failure_as_502(_unmeter
 
 
 # ==========================================
+# POST /documents/{storage_path}/detailed-analysis
+# ==========================================
+_ANALYSIS_STORAGE_PATH = f"uploads/{'c' * 32}.pdf"
+_DETAILED_ANALYSIS_ENDPOINT = f"/api/v1/documents/{_ANALYSIS_STORAGE_PATH}/detailed-analysis"
+
+
+def test_generate_detailed_analysis_returns_the_recomputed_analysis(_unmetered_rate_limit):
+    service = AsyncMock()
+    updated = ANALYSIS_RESULT.model_copy(
+        update={
+            "extraction": ExtractionInfoSchema(
+                extractor="evren_vision", page_count=1, char_count=200, used_ocr=True
+            )
+        }
+    )
+    service.generate_detailed_analysis.return_value = updated
+    _override(service)
+
+    response = client.post(_DETAILED_ANALYSIS_ENDPOINT)
+
+    assert response.status_code == 200
+    body = response.json()["data"]
+    assert body["extraction"]["extractor"] == "evren_vision"
+    assert service.generate_detailed_analysis.await_args.args == (
+        _ANALYSIS_STORAGE_PATH,
+        "company-1",
+    )
+
+
+def test_generate_detailed_analysis_returns_404_when_nothing_is_cached(_unmetered_rate_limit):
+    service = AsyncMock()
+    service.generate_detailed_analysis.return_value = None
+    _override(service)
+
+    response = client.post(_DETAILED_ANALYSIS_ENDPOINT)
+
+    assert response.status_code == 404
+
+
+def test_generate_detailed_analysis_surfaces_a_generation_failure_as_502(_unmetered_rate_limit):
+    """AIException (vision cascade or analysis workflow timeout/failure --
+    see DocumentService.generate_detailed_analysis's own docstring for why
+    this raises rather than degrading silently) must reach the caller as a
+    clear 502."""
+    service = AsyncMock()
+    service.generate_detailed_analysis.side_effect = AIException(
+        message="Detaylı analiz zaman aşımına uğradı."
+    )
+    _override(service)
+
+    response = client.post(_DETAILED_ANALYSIS_ENDPOINT)
+
+    assert response.status_code == 502
+
+
+# ==========================================
 # GET /documents/graph
 # ==========================================
 _GRAPH_ENDPOINT = "/api/v1/documents/graph"

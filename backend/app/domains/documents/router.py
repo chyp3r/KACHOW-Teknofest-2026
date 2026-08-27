@@ -437,6 +437,67 @@ async def generate_detailed_summary(
     return SuccessResponse(data=result.model_dump(mode="json"))
 
 
+@router.post("/{storage_path:path}/detailed-analysis", response_model=None)
+async def generate_detailed_analysis(
+    storage_path: str,
+    service: DocumentService = Depends(get_document_analysis_service),
+    document_repository: DocumentRepository = Depends(get_document_repository),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+    _: None = Depends(
+        rate_limit(max_requests=2, window_seconds=60, key_prefix="documents:detailed-analysis")
+    ),
+):
+    """Vision OCR ile yeniden çıkarır ve tüm analizi (tür, özet, tüm
+    alanlar, uyum, mevzuat atıfları) baştan yeniden çalıştırır.
+
+    Talep üzerine: vision OCR artık varsayılan yükleme yolunun bir
+    parçası değil (bkz. ``get_document_extractor``'ın kendi docstring'i --
+    otomatik onarım tetiklendiğinde tek bir yükleme ~14sn'den ~34sn'ye
+    çıkıyordu). ``/re-extract``'in aksine (yalnızca metni deterministik
+    olarak yeniden türetir, model çağrısı yok) bu, ``/analyze``'ın
+    ürettiği her şeyi yeniden üretir -- bu yüzden hem daha pahalı hem de
+    aynı sıkılıkta hız sınırlı (2/60sn).
+
+    Args:
+        storage_path: Evrakın depo anahtarı.
+        service: Enjekte edilmiş evrak analiz servisi.
+        document_repository: Üretmeden önce kontrol edilen sahiplik kaydı.
+        current_user: Kimliği doğrulanmış çağıran.
+
+    Returns:
+        ``GET /documents/{storage_path}`` ile aynı biçimde, baştan
+        yeniden üretilmiş tam analiz.
+
+    Raises:
+        HTTPException: storage_path bozuksa 400, onun için önbelleğe
+            alınmış bir analiz yoksa 404.
+        AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya
+            aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini
+            karşılamıyorsa 403.
+        AIException: Vision OCR cascade'i veya analiz iş akışı zaman
+            aşımına uğrarsa ya da başarısız olursa 502 (bkz.
+            ``DocumentService.generate_detailed_analysis``'in kendi
+            docstring'i).
+    """
+    try:
+        validate_storage_path(storage_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    document = await document_repository.get_by_id(storage_path, current_user.company_id)
+    if document is None:
+        raise AuthorizationException(message="Bu evraka erişim izniniz yok.")
+    _authorize_document(current_user, document, Action.DOCUMENT_UPDATE)
+
+    result = await service.generate_detailed_analysis(storage_path, current_user.company_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Bu evrak için bir analiz bulunamadı.")
+
+    assert_clearance(current_user, result.guardrail.sensitivity_level)
+
+    return SuccessResponse(data=result.model_dump(mode="json"))
+
+
 @router.get("/{storage_path:path}/graph", response_model=None)
 async def get_document_graph(
     storage_path: str,

@@ -3,7 +3,46 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Eklendi
+- **"Detaylı Analiz" butonu.** Belge yüklemede artık hiç ağ vision çağrısı
+  yapılmıyor (aşağıya bakın); OCR gereken taranmış/bozuk belgeler için
+  kullanıcı "Temel bilgiler" başlığındaki bu butona basınca `llm-fast`
+  vision ile OCR yapılıyor, sonuç kalite eşiğini geçemezse `llm-large`'a
+  yükseliyor, ardından belge tipi/özet/tüm alanlar/uyum/mevzuat dahil tam
+  analiz grafiği yeniden çalıştırılıyor (`DocumentService.
+  generate_detailed_analysis`, `POST /documents/{storage_path}/detailed-
+  analysis`). Eski "Yeniden OCR"/"Yeniden çıkar" UI tetikleyicilerinin
+  yerini aldı (backend'deki eski re-extract endpoint'i API uyumluluğu için
+  duruyor, sadece arayüzden kaldırıldı).
+
 ### Değiştirildi
+- **Yükleme hızı: OCR artık opt-in.** Kök neden ölçüldü -- varsayılan
+  çıkarım zinciri, kabul edilen her sonuçta koşulsuz bir sayfa-1 vision
+  onarımını tetikliyordu (antetli taramalarda/logolu PDF'lerde), yüklemeyi
+  ~14sn'den ~34sn'ye çıkarıyordu. `get_document_extractor()` artık her
+  modda `[PlainText, OpenDataLoader, Pdfium, Tesseract]` zincirini
+  kuruyor, `header_repair`/`scan_text_layer_probe`/`signature_probe`
+  hiçbiri bağlanmıyor -- varsayılan yükleme yolunda artık hiç ağ vision
+  çağrısı yok. Tesseract (yerel, ağ çağrısı yok) geri getirildi, taranmış
+  belgeler artık "Detaylı Analiz" ile isteğe bağlı vision OCR'a
+  yükseltilebiliyor (yukarıya bakın).
+- **İmza artık bir uyum gerekliliği değil.** `imza_sahibi` kuralı 6 belge
+  tipinin tamamından kaldırıldı; imzanın eksik olması artık belgeyi
+  `INCOMPLETE` yapmıyor (imza tespiti kendisi, "İmza ve mühür" bölümünde
+  bilgilendirme amaçlı hâlâ gösteriliyor). `imza_unvani` (tavsiye
+  niteliğinde) değişmeden kaldı.
+
+### Düzeltildi
+- **İmza durumunda "kontrol edilmedi" ile "bulunamadı" ayrıştırıldı.**
+  Vision opt-in olunca (yukarıya bakın) `detect_marks` çoğu belgede artık
+  çalışmıyor; `ExtractedDocument.detected_marks`'ın varsayılanı boş liste
+  olduğundan bu durum sessizce "kontrol edildi, imza yok"a dönüşüyor,
+  arayüz her belgede "İmza tespit edilmedi" gösteriyordu. Alan artık
+  `None` (varsayılan, "hiç kontrol edilmedi") ile `[]` ("kontrol edildi,
+  bulunamadı") arasında ayrım yapıyor; `SignatureAssessmentSchema.
+  is_signed`/`has_stamp` de `Optional[bool]` oldu. Arayüzde üç durumlu bir
+  rozet var: nötr "İmza kontrol edilmedi", yeşil "İmzalı", turuncu "İmza
+  tespit edilmedi".
 - **İmza tespiti doğruluğu gerçek korpusta ölçüldü ve düzeltildi.**
   `detect_marks`'ın (`marks.py`) imza recall'ı, elle etiketlenmiş 23
   belgelik gerçek korpusta (`datasets/resmi_yazisma/ocr_ground_truth.json`)
