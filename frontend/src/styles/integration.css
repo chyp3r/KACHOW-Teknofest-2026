@@ -378,6 +378,52 @@
   user-select: none;
 }
 
+/* A citation badge the reader can open. Inherits .page-citation's look and
+   adds only the affordance, so a clickable and a plain citation read as the
+   same object. */
+.page-citation-button {
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.page-citation-button:hover,
+.page-citation-button:focus-visible {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  color: var(--text-primary);
+}
+
+/* Source view: the cited page, with the matched passage highlighted. */
+.source-peek-drawer { width: min(46rem, 100vw); padding: var(--space-5); gap: var(--space-3); }
+.source-peek-drawer > div { display: flex; flex-direction: column; gap: var(--space-3); }
+.source-peek-document {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-secondary);
+}
+.source-peek-note { margin: 0; color: var(--text-muted); }
+.source-peek-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  /* The extracted text carries its own line breaks; they are part of what the
+     reader is checking against. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source-peek-page mark {
+  padding: 0.1em 0.15em;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-running) 35%, transparent);
+  color: inherit;
+}
+
 .chat-guardrail-stack {
   display: grid;
   align-content: start;

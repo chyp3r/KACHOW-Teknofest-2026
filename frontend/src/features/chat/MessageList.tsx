@@ -10,6 +10,7 @@ import type {
 import { Button } from "../../components/Button";
 import { Accordion } from "../../components/Accordion";
 import { MarkdownMessage } from "./MarkdownMessage";
+import type { CitationTarget } from "./SourcePeekDrawer";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
@@ -65,6 +66,7 @@ export function MessageList({
   onCancel,
   onRetryFast,
   sessionId,
+  onCitationClick,
 }: {
   messages: ChatMessage[];
   streamingText: string;
@@ -108,6 +110,10 @@ export function MessageList({
   // absent for a caller with no session concept, in which case a vote
   // simply carries no session link.
   sessionId?: string | null;
+  // Opens the cited page of the attached document. Absent for a surface
+  // with no document context, in which case citations render as plain
+  // labels (see MarkdownMessage).
+  onCitationClick?: (target: CitationTarget) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -191,6 +197,7 @@ export function MessageList({
                   text={message.text}
                   animate={message.animate}
                   onProgress={scrollToBottom}
+                  onCitationClick={onCitationClick}
                 />
               )}
               {message.resolvedPrompt && (
@@ -257,7 +264,7 @@ export function MessageList({
           <div>
             <header>KACHOW Asistan</header>
             <div className="markdown-content">
-              <MarkdownMessage text={streamingText} />
+              <MarkdownMessage text={streamingText} onCitationClick={onCitationClick} />
               <span className="streaming-caret" />
             </div>
           </div>
