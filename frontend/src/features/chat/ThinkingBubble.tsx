@@ -3,19 +3,13 @@ import { Bot, Clock3, Loader2, Square } from "lucide-react";
 import { Button } from "../../components/Button";
 import type { ToolCallEvent, WorkflowNodeStatus } from "../../types/chat";
 import { deriveWorkflowStages } from "./DecisionFlow";
+import { formatElapsed } from "../../utils/time";
 
 // A step past this many seconds gets the "taking longer than usual" hint --
 // chosen because the median draft attempt (the slowest single step in a
 // turn) completes well under it; past this the user is very likely staring
 // at a stalled or unusually slow local model call.
 const LONG_STEP_SECONDS = 20;
-
-function formatElapsed(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return minutes > 0 ? `${minutes}:${seconds.toString().padStart(2, "0")}` : `${seconds} sn`;
-}
 
 // Replaces the old static "İstek işleniyor" line with a live view of what
 // useChatWorkflow already tracks (nodeStatus/nodeOrder/nodeMeta/nodeResults)

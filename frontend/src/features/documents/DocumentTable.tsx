@@ -26,6 +26,7 @@ import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
 import { Alert, Card, Spinner } from "../../components/Surface";
 import { Tabs } from "../../components/Tabs";
 import { DocumentListItem } from "./DocumentListItem";
+import { formatElapsed } from "../../utils/time";
 
 type DetailTab = "summary" | "analysis" | "text" | "details";
 type StatusFilter = "all" | "analyzed" | "pending" | "attention";
@@ -228,7 +229,9 @@ export function DocumentTable({
     ),
   );
   const analysisActionLabel = selectedIsAnalyzing
-    ? `${analysisElapsedSeconds} saniyedir analiz ediliyor`
+    ? analysisElapsedSeconds >= 1
+      ? `Analiz ediliyor · ${formatElapsed(analysisElapsedSeconds * 1000)}`
+      : "Analiz ediliyor…"
     : "Analiz et";
   const primaryFields = analysis
     ? (Object.entries(FIELD_LABELS) as Array<[keyof EvrakFields, string]>)
