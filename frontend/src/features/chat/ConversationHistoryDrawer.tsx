@@ -1,6 +1,6 @@
 import { AlertCircle, History, MessageSquare, Plus, RotateCcw, Search } from "lucide-react";
 import { useMemo, useState, type RefObject } from "react";
-import type { ChatMessage, ChatSession } from "../../types/chat";
+import type { ChatSession } from "../../types/chat";
 import { Button } from "../../components/Button";
 import { Input } from "../../components/FormControls";
 import { ListRow } from "../../components/ListRow";
@@ -52,21 +52,9 @@ function compactTimestamp(timestamp: string, now: Date): string {
   );
 }
 
-function previewForSession(
-  session: ChatSession,
-  activeSessionId: string | null,
-  activeMessages: ChatMessage[],
-): string | null {
-  if (session.session_id !== activeSessionId) return null;
-  const preview = activeMessages[activeMessages.length - 1]?.text.trim();
-  if (!preview) return null;
-  return preview.replace(/\s+/g, " ");
-}
-
 export function ConversationHistoryDrawer({
   sessions,
   activeSessionId,
-  activeMessages,
   loading,
   refreshing,
   error,
@@ -78,7 +66,6 @@ export function ConversationHistoryDrawer({
 }: {
   sessions: ChatSession[];
   activeSessionId: string | null;
-  activeMessages: ChatMessage[];
   loading: boolean;
   refreshing: boolean;
   error: string | null;
@@ -102,10 +89,7 @@ export function ConversationHistoryDrawer({
     sessions
       .filter((session) => {
         if (!normalizedQuery) return true;
-        const preview = previewForSession(session, activeSessionId, activeMessages);
-        return `${session.title ?? ""} ${preview ?? ""}`
-          .toLocaleLowerCase("tr-TR")
-          .includes(normalizedQuery);
+        return (session.title ?? "").toLocaleLowerCase("tr-TR").includes(normalizedQuery);
       })
       .sort(
         (left, right) =>
@@ -115,7 +99,7 @@ export function ConversationHistoryDrawer({
         groups[groupForTimestamp(session.updated_at, now)].push(session);
       });
     return groups;
-  }, [activeMessages, activeSessionId, normalizedQuery, now, sessions]);
+  }, [normalizedQuery, now, sessions]);
 
   const filteredCount = Object.values(groupedSessions).reduce(
     (total, group) => total + group.length,
@@ -180,11 +164,6 @@ export function ConversationHistoryDrawer({
                         <div className="chat-sessions">
                           {groupSessions.map((session) => {
                             const selected = session.session_id === activeSessionId;
-                            const preview = previewForSession(
-                              session,
-                              activeSessionId,
-                              activeMessages,
-                            );
                             return (
                               <ListRow
                                 key={session.session_id}
@@ -194,7 +173,6 @@ export function ConversationHistoryDrawer({
                                 selected={selected}
                                 leading={<MessageSquare />}
                                 primary={session.title ? capitalizeFirst(session.title) : "Yeni sohbet"}
-                                secondary={preview}
                                 metadata={<time dateTime={session.updated_at}>{compactTimestamp(session.updated_at, now)}</time>}
                               />
                             );

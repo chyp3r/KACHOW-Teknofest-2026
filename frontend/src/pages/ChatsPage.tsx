@@ -193,7 +193,6 @@ export function ChatsPage({
         <ConversationHistoryDrawer
           sessions={sessions}
           activeSessionId={activeSessionId}
-          activeMessages={messages}
           loading={sessionsLoading}
           refreshing={sessionsRefreshing}
           error={sessionsError}
