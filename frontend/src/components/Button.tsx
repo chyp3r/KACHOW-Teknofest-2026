@@ -65,7 +65,7 @@ export interface IconButtonProps extends Omit<ButtonProps, "children" | "leading
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { icon, tooltip, className = "", variant = "ghost", size = "md", ...props },
+  { icon, tooltip, className = "", variant = "ghost", size = "md", loading = false, ...props },
   ref,
 ) {
   return (
@@ -73,11 +73,18 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       ref={ref}
       variant={variant}
       size={size}
+      loading={loading}
       className={`icon-button ${className}`.trim()}
       title={tooltip}
       {...props}
     >
-      <span className="icon-button-glyph" aria-hidden="true">{icon}</span>
+      {/* Yükleniyorken yalnızca spinner görünür -- ikon yanında ayrıca
+          çizilip düğmeyi sıkıştırmaz. */}
+      {!loading && (
+        <span className="icon-button-glyph" aria-hidden="true">
+          {icon}
+        </span>
+      )}
     </Button>
   );
 });

@@ -23,7 +23,10 @@ describe("ContextUsageRing", () => {
 
   it("exposes the used percentage on the trigger and stays collapsed by default", async () => {
     render(<ContextUsageRing usage={usage} />);
-    expect(await screen.findByRole("button", { name: /%50 dolu/ })).toBeInTheDocument();
+    // Yüzde 0'dan hedefe rAF ile sayar; bol timeout ver ki yük altında flake olmasın.
+    expect(
+      await screen.findByRole("button", { name: /%50 dolu/ }, { timeout: 3000 }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
