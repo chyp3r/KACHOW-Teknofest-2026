@@ -211,5 +211,5 @@ async def test_get_current_user_blacklisted():
     
     with patch("app.api.dependency.get_cache", return_value=mock_cache):
         with pytest.raises(AuthenticationException) as exc:
-            await get_current_user(token=token, db=MagicMock())
+            await get_current_user(token=token)
         assert "sonlandırıldı" in str(exc.value.message)
