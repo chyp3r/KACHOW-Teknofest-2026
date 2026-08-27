@@ -855,18 +855,17 @@ CI şu anda `workflow_dispatch` ile GitHub Actions üzerinden manuel tetiklenir.
 
 # Veri Setleri
 
-| Kaynak | İçerik | Boyut |
-| :--- | :--- | ---: |
-| `datasets/mevzuat/` | Yerel mevzuat fallback korpüsü | 8 dosya · ~1.1 MB |
-| `00_gelen_kaynaklar/` | Ham gelen evraklar | 1927 |
-| `01_ust_yazi/` | Üst yazılar | 113 |
-| `02_cevap_yazisi/` | Cevap yazıları | 163 |
-| `03_bilgilendirme_metni/` | Bilgilendirme metinleri | 83 |
-| `04_diger_resmi_yazisma/` | Diğer resmî yazışmalar | 129 |
-| `99_reddedilenler/` | Negatif / reddedilen örnekler | 41 |
-| `00_yonetmelik_ve_kurallar/` | Yazışma kuralları | 3 |
-| `evaluation/datasets/` | LLM ve retrieval evaluation setleri | 12 dosya |
-| `evaluation/datasets/retrieval_corpus/` | Retrieval evaluation korpüsü | 6 dosya |
+`datasets/resmi_yazisma/` — Türkçe resmî yazışma korpusu, 1.763 belge. [HuggingFace'te yayında](https://huggingface.co/datasets/Ygthn/Teknofest_2026_KACHOW).
+
+```mermaid
+pie showData
+    title Kategori Dağılımı
+    "Diğer resmî yazışma" : 531
+    "Bilgilendirme metni" : 418
+    "Cevap yazısı" : 370
+    "Üst yazı" : 330
+    "Dilekçe" : 114
+```
 
 ---
 
