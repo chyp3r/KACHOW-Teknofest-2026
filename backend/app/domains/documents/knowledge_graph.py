@@ -282,8 +282,14 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
     entity_accumulators: dict[str, _NamedGroupAccumulator] = {}
     konu_accumulators: dict[str, _NamedGroupAccumulator] = {}
 
-    def ensure_entity(raw: str) -> str:
-        resolved = resolved_entities[raw]
+    def ensure_entity(raw: str) -> Optional[str]:
+        # `resolve_entities` deliberately omits raw strings that canonicalize
+        # to nothing (a bare 4+ digit number, pure markdown/whitespace noise)
+        # -- such a `raw` here means this particular mention isn't a real
+        # entity, not a bug, so it's skipped rather than looked up.
+        resolved = resolved_entities.get(raw)
+        if resolved is None:
+            return None
         entity_id = f"entity:{resolved.key}"
         if entity_id not in entity_accumulators:
             entity_accumulators[entity_id] = _NamedGroupAccumulator(
@@ -291,8 +297,10 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
             )
         return entity_id
 
-    def ensure_konu(raw: str) -> str:
-        resolved = resolved_konu[raw]
+    def ensure_konu(raw: str) -> Optional[str]:
+        resolved = resolved_konu.get(raw)
+        if resolved is None:
+            return None
         konu_id = f"konu:{resolved.key}"
         if konu_id not in konu_accumulators:
             konu_accumulators[konu_id] = _NamedGroupAccumulator(label=resolved.label)
@@ -325,15 +333,17 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
 
         if entry.muhatap:
             entity_id = ensure_entity(entry.muhatap)
-            entity_accumulators[entity_id].document_ids.add(doc_id)
-            edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="muhatap", source_kind="rule"))
-            rule_edge_count += 1
+            if entity_id is not None:
+                entity_accumulators[entity_id].document_ids.add(doc_id)
+                edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="muhatap", source_kind="rule"))
+                rule_edge_count += 1
 
         if entry.gonderen_kurum:
             entity_id = ensure_entity(entry.gonderen_kurum)
-            entity_accumulators[entity_id].document_ids.add(doc_id)
-            edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="gonderen", source_kind="rule"))
-            rule_edge_count += 1
+            if entity_id is not None:
+                entity_accumulators[entity_id].document_ids.add(doc_id)
+                edges.append(GraphEdge(source=doc_id, target=entity_id, edge_type="gonderen", source_kind="rule"))
+                rule_edge_count += 1
 
         # `entities[]` bir evrak içinde aynı bahsi tekrar edebilir (modelden
         # tekilleştirme yapması istenmiyor); evrak başına çözülmüş entity
@@ -345,7 +355,7 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
             if not raw_entity:
                 continue
             entity_id = ensure_entity(raw_entity)
-            if entity_id in seen_entity_ids:
+            if entity_id is None or entity_id in seen_entity_ids:
                 continue
             seen_entity_ids.add(entity_id)
             entity_accumulators[entity_id].document_ids.add(doc_id)
@@ -354,9 +364,10 @@ def build_knowledge_graph(entries: list[DocumentGraphInput]) -> KnowledgeGraph:
 
         if entry.konu:
             konu_id = ensure_konu(entry.konu)
-            konu_accumulators[konu_id].document_ids.add(doc_id)
-            edges.append(GraphEdge(source=doc_id, target=konu_id, edge_type="konu", source_kind="rule"))
-            rule_edge_count += 1
+            if konu_id is not None:
+                konu_accumulators[konu_id].document_ids.add(doc_id)
+                edges.append(GraphEdge(source=doc_id, target=konu_id, edge_type="konu", source_kind="rule"))
+                rule_edge_count += 1
 
         for missing_field in entry.missing_fields:
             citation = resolve_citation(missing_field.mevzuat)
