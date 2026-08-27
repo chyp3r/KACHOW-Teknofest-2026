@@ -127,11 +127,12 @@ def _looks_like_narration(text: Optional[str]) -> bool:
 #: eklenen kapanış yönergesi (bkz. ``run_stream``).
 _FINAL_ANSWER_INSTRUCTION = (
     _NUDGE_PREFIX
-    + "Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: "
-    "bulduğun cevabı (varsa sayfa atfıyla) ya da tek cümlelik 'yüklü evrakta "
-    "bu bilgiye ulaşılamadı' ifadesini. Hangi aramaları yaptığını, hangi "
-    "terimleri denediğini veya sırada ne yapacağını ANLATMA; kullanıcı arama "
-    "sürecini görmemeli."
+    + "Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: bulduğun "
+    "cevabı ya da tek cümlelik 'yüklü evrakta bu bilgiye ulaşılamadı' "
+    "ifadesini. Araç sonuçlarındaki `[s. N]` sayfa atıflarını, ilgili "
+    "bilgiyi yazdığın cümlenin sonuna aynen taşı. Hangi aramaları "
+    "yaptığını, hangi terimleri denediğini veya sırada ne yapacağını "
+    "ANLATMA; kullanıcı arama sürecini görmemeli."
 )
 
 #: Bir belge ekliyken, model araç çağırmayı bırakıp bu kalıplardan birini
