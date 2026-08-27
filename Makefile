@@ -1,4 +1,4 @@
-.PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
+.PHONY: setup-db bootstrap up down logs test test-e2e test-corpus test-all eval eval-baseline eval-llm eval-retrieval \
 	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document latency-report \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset-evren-qdrant reset
@@ -68,6 +68,12 @@ test:
 # kapsar; kapsam yüzdesi anlamlı değil (asıl kapı `test` hedefinde).
 test-e2e:
 	docker compose run --rm backend pytest -q -m e2e --no-cov
+
+# Gerçek, hand-labelled korpusa (datasets/resmi_yazisma/) karşı doğruluk
+# pinning testleri (bkz. tests/performance/test_marks_accuracy.py). --no-cov
+# gerekçesi test-e2e ile aynı -- bu küçük alt küme için kapsam anlamlı değil.
+test-corpus:
+	docker compose run --rm backend pytest -q -m real_corpus --no-cov
 
 # Her şey: integration + e2e + performance. `test-e2e` gibi tam yığın ister.
 # --no-cov gerekçesi test-e2e ile aynı.

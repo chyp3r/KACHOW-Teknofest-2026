@@ -3,6 +3,22 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Değiştirildi
+- **İmza tespiti doğruluğu gerçek korpusta ölçüldü ve düzeltildi.**
+  `detect_marks`'ın (`marks.py`) imza recall'ı, elle etiketlenmiş 23
+  belgelik gerçek korpusta (`datasets/resmi_yazisma/ocr_ground_truth.json`)
+  %50 çıktı (16 gerçek imzadan 8'i kaçırılıyordu) -- kök neden,
+  `_MAX_STROKE_RUN_DENSITY=1.5` eşiğinin, 3 farklı imza sahibinin gerçek
+  imzalarını (ölçülen run_density 1.62-2.33) sistematik olarak
+  dışlamasıydı. 2.3'e yükseltildi: recall %94'e çıktı (15/16), kesinlik
+  1.00'de sabit kaldı (yeni yanlış pozitif yok). Ayrıca `scripts/
+  evaluate_marks.py`'nin kendi ölçüm korpusu 5 "Class A" belgeyi (sahte OCR
+  metin katmanlı taramalar) sessizce atlıyordu -- düzeltildi
+  (`is_scanned_text_layer` de kontrol edilir oldu), gerçek 23 belgenin
+  tamamı artık ölçülüyor. Ölçülen sayı yeni bir `real_corpus` pytest
+  marker'ıyla (`make test-corpus`) sabitlendi, bir daha sessizce
+  gerilemeyecek.
+
 ### Eklendi
 - **NER PoC script'i (`scripts/ner_poc.py`).** `entities[]` alanı için ayrı bir
   dedicated NER modelinin (Türkçe BERT tabanlı) mevcut LLM çıktısına karşı
