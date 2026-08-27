@@ -257,17 +257,22 @@ export function ChatsPage({
                     {summary.length > 0 && (
                       <p>{summary.map(formatGuardrailReason).join(" · ")}</p>
                     )}
+                    {/* Collapsed by default. Listing the removed sentences
+                        inline made the alert taller than the space above the
+                        chat, so it was clipped and had to be scrolled -- the
+                        summary is what matters at a glance, the sentences are
+                        for whoever wants them. */}
                     {removed.length > 0 && (
-                      <div className="chat-guardrail-removed">
-                        <span className="chat-guardrail-removed-label">
-                          Doğrulanamadığı için kaldırılan cümle{removed.length > 1 ? "ler" : ""}
-                        </span>
+                      <details className="chat-guardrail-removed">
+                        <summary>
+                          Kaldırılan {removed.length} cümleyi göster
+                        </summary>
                         <ul>
                           {removed.map((sentence, i) => (
                             <li key={i}>{sentence}</li>
                           ))}
                         </ul>
-                      </div>
+                      </details>
                     )}
                   </div>
                 </Alert>

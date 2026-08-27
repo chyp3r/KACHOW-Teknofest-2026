@@ -442,13 +442,15 @@
   color: inherit;
 }
 
+/* Compact by design: the detail is behind a <details>, so the stack sizes to
+   its content and never needs its own scrollbar. The cap is a last resort for
+   an unusual pile-up of events, not the normal case. */
 .chat-guardrail-stack {
   display: grid;
   align-content: start;
   gap: var(--space-2);
-  flex: 0 1 auto;
-  min-height: 0;
-  max-height: min(45dvh, 360px);
+  flex: 0 0 auto;
+  max-height: 40dvh;
   overflow-y: auto;
 }
 /* Long, unbroken model text (a stray URL, a run-on token) must wrap instead
@@ -457,14 +459,16 @@
 .chat-guardrail-reasons { display: grid; gap: var(--space-2); }
 .chat-guardrail-reasons > p { margin: 0; }
 .chat-guardrail-removed {
-  display: grid;
-  gap: var(--space-1);
   padding: var(--space-2) var(--space-3);
   border-left: 2px solid color-mix(in srgb, var(--status-failed) 55%, transparent);
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--status-failed) 8%, transparent);
 }
-.chat-guardrail-removed-label { color: var(--text-secondary); }
+.chat-guardrail-removed > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.chat-guardrail-removed[open] > summary { margin-bottom: var(--space-2); }
 .chat-guardrail-removed ul { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
 .chat-guardrail-removed li { font-style: italic; color: var(--text-secondary); }
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }

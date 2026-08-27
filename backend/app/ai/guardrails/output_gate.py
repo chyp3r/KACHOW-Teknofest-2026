@@ -83,6 +83,34 @@ _UNGROUNDED_MARKER = "[Bu bilgi doğrulanamadığı için kaldırıldı]"
 #: edilebilir bir biçim kaybı.
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?…])\s+|\n+")
 
+#: Yanıtın sonundaki KAYNAKLAR bloğunun başlığı (bkz. ``assistant.md`` ve
+#: frontend'in ``citations.ts``'i). Bloğun satırları evraktan BİREBİR
+#: alıntılardır ve yapısı makine tarafından ayrıştırılır.
+_SOURCES_HEADER_PATTERN = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?[ \t]*KAYNAKLAR[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _split_sources_block(text: str) -> tuple[str, str]:
+    """Yanıtı, modelin kendi düzyazısı ve KAYNAKLAR bloğu olarak ayırır.
+
+    Cümle bazlı kırpma bloğun içinde çalıştırılamaz. Blok satırları
+    ``[2] (s. 4) ...`` biçiminde yapılandırılmıştır ve cümle sınırlarına göre
+    bölmek onları ortasından kesiyordu -- üretimde görülen sonuç:
+    ``[2] (s. [Bu bilgi doğrulanamadığı için kaldırıldı]``. Ayrıca blok
+    zaten kaynağın kendi cümlesidir: tanım gereği dayanaklıdır, kırpılacak
+    bir iddia değildir.
+
+    Returns:
+        ``(düzyazı, blok)``. Blok yoksa ikincisi boş string'tir ve
+        ``düzyazı + blok`` her zaman girdiye eşittir.
+    """
+    header = _SOURCES_HEADER_PATTERN.search(text)
+    if not header:
+        return text, ""
+    return text[: header.start()], text[header.start() :]
+
 GateAction = Literal["pass", "redact", "block"]
 
 
@@ -265,7 +293,11 @@ def evaluate_response(
         return GateVerdict(action="block", text=FALLBACK_REPLY, reasons=["prompt_leak_or_injection_echo"])
 
     reasons: list[str] = []
-    redacted = reply
+    # Dayanaklılık kontrolü ve cümle bazlı kırpma yalnızca modelin kendi
+    # düzyazısında çalışır; KAYNAKLAR bloğu dokunulmadan sona eklenir (bkz.
+    # _split_sources_block).
+    prose, sources_block = _split_sources_block(reply)
+    redacted = prose
 
     # Dayanaklılık: yanıttan çıkarılan somut iddiaların (sayı/tarih/mevzuat/
     # kurum/tutar) getirilen kaynak materyale kadar izlenebilen payı, çözülmüş
@@ -277,7 +309,7 @@ def evaluate_response(
     # birkaç ifade yüzünden, büyük ölçüde kaynaklı bir yanıtın cümlelerinin
     # `[Bu bilgi doğrulanamadığı için kaldırıldı]` ile değiştirilmesini önler.
     unsupported, total_claims = groundedness_report(
-        reply, source_materials=source_materials
+        prose, source_materials=source_materials
     )
     grounded_share = 1.0 if total_claims == 0 else 1.0 - len(unsupported) / total_claims
     if unsupported and grounded_share < active_policy.output_groundedness_threshold:
@@ -315,15 +347,17 @@ def evaluate_response(
             )
             for sentence in judged_removed:
                 reasons.append(f'Kaldırılan cümle: "{sentence}"')
-        elif redacted == reply:
+        elif redacted == prose:
             # Hakem "dayanaksız" dedi, konumlandırılabilir bir cümle veremedi
             # VE yukarıdaki kalıp-bazlı kontrol de bir şey kırpmadı -- yani
             # elde targeted olarak çıkarılacak bir şey yok. Semantic-leak
-            # yolundaki gibi tüm yanıtı güvenli bir nota indir.
+            # yolundaki gibi tüm yanıtı güvenli bir nota indir; yanıt gittiği
+            # için kaynak bloğu da düşer.
             redacted = (
                 "Bu yanıt, yüklü evrakla doğrulanamayan bilgiler içerdiği için kaldırıldı. "
                 "Lütfen sorunuzu evraka atıfla yeniden sorar mısınız?"
             )
+            sources_block = ""
             reasons.append(
                 "model değerlendirmesi: doğrulanamayan evrak bilgisi "
                 f"({groundedness_verdict.reason})"
@@ -331,6 +365,11 @@ def evaluate_response(
         # else: kalıp-bazlı kontrol zaten bir cümle kırpmış ve hakem büyük
         # olasılıkla aynı cümleyi işaret ediyor -- ikinci kez kırpacak bir
         # şey yok, tüm yanıtı da indirmeye gerek yok.
+
+    # Blok yerine konur. Bundan sonraki tek işlem PII maskelemesidir: o,
+    # cümle silmek yerine metin parçası maskelediği için blok yapısını
+    # bozmaz, ve bir alıntıda geçen PII de maskelenmelidir.
+    redacted += sources_block
 
     # PII işleme yalnızca bu turda gerçekten bir belge eklendiğinde devreye
     # girer (`sensitivity is not None`). Belge yoksa, tespit edilen

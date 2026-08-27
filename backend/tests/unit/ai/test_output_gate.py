@@ -432,3 +432,54 @@ def test_classify_reason_kind_picks_injection():
 
 def test_classify_reason_kind_falls_back_to_output_gate():
     assert classify_reason_kind([]) == "output_gate"
+
+
+# ==========================================
+# The KAYNAKLAR sources block must survive redaction intact
+# ==========================================
+_WITH_SOURCES = (
+    "Mesleği Yeminli Mali Müşavir'dir [1]. Görev süresi 12.03.2029'a kadardır [2].\n\n"
+    "KAYNAKLAR:\n"
+    "[1] (s. 1) Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır.\n"
+    "[2] (s. 4) Görev bitiş tarihi belirtilmemiştir."
+)
+
+
+def test_the_sources_block_is_never_chopped_by_sentence_redaction():
+    """Observed in production: sentence-level removal cut through the block's
+    own structured lines, producing `[2] (s. [Bu bilgi doğrulanamadığı için
+    kaldırıldı]`. The block is verbatim source text -- grounded by
+    construction -- and machine-parsed, so redaction must not enter it."""
+    verdict = evaluate_response(_WITH_SOURCES, source_materials="Konu: İzin talebi.")
+
+    assert "KAYNAKLAR:" in verdict.text
+    assert "[1] (s. 1) Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır." in verdict.text
+    assert "[2] (s. 4) Görev bitiş tarihi belirtilmemiştir." in verdict.text
+    # Whatever happened above it, no marker landed inside the block.
+    block = verdict.text[verdict.text.index("KAYNAKLAR:") :]
+    assert "[Bu bilgi doğrulanamadığı için kaldırıldı]" not in block
+
+
+def test_redaction_still_applies_to_the_prose_above_the_block():
+    verdict = evaluate_response(_WITH_SOURCES, source_materials="Konu: İzin talebi.")
+
+    assert verdict.action == "redact"
+    prose = verdict.text[: verdict.text.index("KAYNAKLAR:")]
+    assert "12.03.2029" not in prose
+
+
+def test_a_fully_grounded_reply_with_a_block_passes_untouched():
+    source = (
+        "Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır. "
+        "Görev bitiş tarihi belirtilmemiştir."
+    )
+    reply = (
+        "Mesleği Yeminli Mali Müşavir'dir [1].\n\n"
+        "KAYNAKLAR:\n"
+        "[1] (s. 1) Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır."
+    )
+
+    verdict = evaluate_response(reply, source_materials=source)
+
+    assert verdict.action == "pass"
+    assert verdict.text == reply
