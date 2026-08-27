@@ -83,6 +83,7 @@ from app.ai.revision.instruction import (
 from app.ai.revision.retrieval import maybe_extend_context
 from app.ai.session.focus import DraftVersion
 from app.ai.workflows.attempt_tracking import best_of, snapshot_attempt
+from app.ai.workflows.dates import extract_draft_date
 from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
@@ -132,12 +133,14 @@ class ReviseState(TypedDict, total=False):
     #: `adapter_provider`). Yok/boş, yapılandırılmış bir adaptör yokmuş gibi
     #: davranır, asla hata vermez.
     company_id: str
-    #: Bugünün tarihi (bkz. app.ai.workflows.dates.today_tr),
-    #: `verify_node`'un tarih-yer tutucu yedek mekanizması tarafından okunur
-    #: -- bir revizyon, yapısı gereği orijinal taslağın tarihini değiştirmeden
-    #: korur (bkz. bu modülün kendi tarih-değiştirme-karşıtı kuralı), bu
-    #: yüzden bu yalnızca bir yeniden yazım geçişi bir "Tarih:" yer tutucusunu
-    #: yeniden getirdiğinde devreye girer.
+    #: Bugünün tarihi (bkz. app.ai.workflows.dates.today_tr). `verify_node`'un
+    #: tarih-yer tutucu yedek mekanizması, bunu YALNIZCA son çare olarak
+    #: okur -- asıl yedek değer, `extract_draft_date` ile revize edilmekte
+    #: olan `active_draft.text`'in kendi "Tarih:" satırından çıkarılır (bir
+    #: revizyon, yapısı gereği orijinal taslağın tarihini değiştirmeden korur,
+    #: bkz. bu modülün kendi tarih-değiştirme-karşıtı kuralı). Bu alan yalnızca
+    #: o çıkarım hiçbir şey bulamazsa (orijinal taslağın kendisinde bile
+    #: ayrıştırılabilir bir "Tarih:" satırı yoksa) devreye girer.
     today: str
     #: Taslak turundaki eksik-bilgi gate'inde çözülmüş / "Sen karar ver" ile
     #: ertelenmiş yer tutucu cevapları (`InfoQuestion.key` -> değer veya
@@ -869,7 +872,14 @@ def create_revise_graph(
         # "bulunamadı"/"yok" işaretini bırakabilir, ve revize zaten hiçbir
         # zaman orijinal yazarın prompt'unu yeniden çalıştırmaz.
         draft_text, _ = normalize_unfilled_markers(state.get("draft", ""))
-        draft_text, _ = fill_date_placeholders(draft_text, state.get("today", ""))
+        # A rewrite/repair pass that drops the original "Tarih:" line and
+        # leaves a placeholder must be backfilled with THAT original date,
+        # never today's -- a revision must never silently change a field
+        # the user didn't touch (see extract_draft_date's own docstring).
+        # state["today"] is only the last-resort fallback, for the rare
+        # case the original draft itself has no parseable date line.
+        date_fallback = extract_draft_date(active_draft.text) or state.get("today", "")
+        draft_text, _ = fill_date_placeholders(draft_text, date_fallback)
         correspondence_type = state.get("correspondence_type") or active_draft.correspondence_type
         sub_genre = state.get("correspondence_sub_genre") or getattr(
             active_draft, "correspondence_sub_genre", ""
