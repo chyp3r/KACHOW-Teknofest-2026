@@ -71,6 +71,21 @@ LLM_TOKENS = Counter(
     ["agent", "kind"],
 )
 
+#: `MCPManager.call_tool`'un tek boğaz noktası (bkz. app/mcp/manager.py) --
+#: kod tabanında bugüne kadar hiç MCP-özgü gözlemlenebilirlik yoktu.
+#: `MCPClient.connect()` her çağrıda yeni bir stdio subprocess açtığı için
+#: (bağlantı havuzlaması yok) bu, `LOCAL_MODE=false` iken her aşamada
+#: (analiz, taslak, chat) tetiklenen canlı mevzuat-mcp çağrılarının gerçek
+#: gecikme maliyetini üretimde ölçmenin tek yolu -- bağlantı havuzlamasının
+#: ertelenip ertelenmeyeceği kararı bu sayılara dayanmalı, tahmine değil
+#: (bkz. scripts/measure_mevzuat_mcp_latency.py'nin çevrimdışı eşdeğeri).
+MCP_CALL_DURATION = Histogram(
+    "kachow_mcp_call_duration_seconds",
+    "Wall-clock duration of a single MCPManager.call_tool invocation, "
+    "including its per-call stdio subprocess spawn.",
+    ["server", "tool", "status"],
+)
+
 DRAFT_SCORE = Histogram(
     "kachow_draft_confidence_score",
     "Draft quality score at verification time.",

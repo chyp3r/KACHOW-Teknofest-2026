@@ -2,8 +2,7 @@
 # stage that bakes in the test suite, evaluation/, and build tooling because
 # `docker compose run backend pytest ...` needs all of that inside the
 # container. None of it belongs on the critical path of a request -- this
-# file trims it down to runtime-only, non-root, and without the mevzuat-mcp
-# Chromium install unless explicitly opted into.
+# file trims it down to runtime-only and non-root.
 
 # ---------------------------------------------------------------------------
 # Stage 1: builder -- compile the Python dependency wheels/venv. Only
@@ -27,18 +26,19 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # ---------------------------------------------------------------------------
 # Stage 2: mcp -- mevzuat-mcp's own venv plus a full headless Chromium (its
-# own transitive dependency, used to query mevzuat.gov.tr live). Opt-in only:
-# ARG WITH_MEVZUAT_MCP=0 by default. Chromium + the ~20 system libraries
-# `playwright install --with-deps` pulls in are a few hundred MB, and a live
-# scrape of mevzuat.gov.tr is not on this project's production critical path
-# -- a commit-committed legislation corpus already exists
-# (datasets/mevzuat_corpus/) and FallbackMevzuatRetriever serves from it
-# automatically when the live source is unavailable. Run production with
-# MEVZUAT_SOURCE=local to skip MCP entirely; operators who want live lookups
-# opt in with `--build-arg WITH_MEVZUAT_MCP=1`, at the cost of this stage's
-# image size (see docs/deployment/configuration.md for the measured delta).
+# own transitive dependency, used to query mevzuat.gov.tr live). ARG
+# WITH_MEVZUAT_MCP=1 by default: LOCAL_MODE=false (configmap.yaml's own
+# documented default) uses live mevzuat-mcp at every stage -- chat, evrak
+# analizi, taslak -- so a fresh build needs it present, not opted into.
+# Chromium + the ~20 system libraries `playwright install --with-deps`
+# pulls in are a few hundred MB (see docs/deployment/configuration.md for
+# the measured delta); operators who genuinely never need live legislation
+# (LOCAL_MODE stays "true", MEVZUAT_SOURCE=local) can skip the weight with
+# `--build-arg WITH_MEVZUAT_MCP=0` -- the boot-time curated-legislation
+# warm-up and the committed corpus (datasets/mevzuat_corpus/) both keep
+# working without this stage either way.
 FROM python:3.12-slim AS mcp
-ARG WITH_MEVZUAT_MCP=0
+ARG WITH_MEVZUAT_MCP=1
 
 RUN if [ "$WITH_MEVZUAT_MCP" = "1" ]; then \
         apt-get update && apt-get install -y --no-install-recommends git \

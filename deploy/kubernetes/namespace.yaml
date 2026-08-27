@@ -29,7 +29,7 @@ spec:
 ---
 # Default-deny: every pod in this namespace starts with zero ingress and
 # zero egress once any NetworkPolicy selects it -- Kubernetes' own
-# behaviour once at least one policy exists for a pod. The three policies
+# behaviour once at least one policy exists for a pod. The four policies
 # below are the exceptions carved back in; a pod matching none of them
 # (there shouldn't be any) is fully isolated.
 apiVersion: networking.k8s.io/v1
@@ -129,3 +129,34 @@ spec:
     - ports:
         - protocol: TCP
           port: 11434
+---
+# `backend` (only) needs egress to the public internet over HTTPS when
+# LOCAL_MODE=false (configmap.yaml): Evren's LLM/embedding API,
+# EVREN_QDRANT_URL, and -- the reason this policy exists at all -- the
+# mevzuat-mcp subprocess (app/mcp/client.py spawns it per call) reaching
+# mevzuat.gov.tr / bedesten.adalet.gov.tr live. Without this, default-
+# deny-all above blocks that subprocess from the network entirely and
+# every "canlı" mevzuat call times out -- flipping LOCAL_MODE, MEVZUAT_
+# SOURCE, and the image's WITH_MEVZUAT_MCP build arg alone is not enough.
+#
+# Ships permissive-but-port-scoped (all destinations, TCP 443 only -- same
+# shape as allow-backend-ollama-egress above) so a fresh `kubectl apply`
+# doesn't need every destination host pre-listed. TIGHTEN THIS for a real
+# deployment the same way that policy's own comment describes: an
+# `ipBlock` list scoped to the actual Evren/mevzuat.gov.tr hosts once
+# they're known, rather than "the whole internet on 443".
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-https-egress
+  namespace: kachow
+spec:
+  podSelector:
+    matchLabels:
+      app: kachow-backend
+  policyTypes:
+    - Egress
+  egress:
+    - ports:
+        - protocol: TCP
+          port: 443

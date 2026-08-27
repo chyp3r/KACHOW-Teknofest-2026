@@ -526,6 +526,17 @@ class Settings(BaseSettings):
     #: Bir arama üzerinde tavan. Devlet sitesi hiçbir hız sınırı yayınlamaz
     #: ve asistan onu bekleyerek bir sohbet turunu durduramaz.
     MEVZUAT_MCP_TIMEOUT_SECONDS: float = 25.0
+    #: `MEVZUAT_MCP_TIMEOUT_SECONDS`'tan bilinçli olarak daha küçük.
+    #: Asistanın canlı aracı 25s'lik kendi tam bütçesine sahip tek bir
+    #: sohbet turu adımı iken, evrak analizindeki canlı eskalasyon
+    #: (`retrieve_mevzuat_node`) mevcut `mevzuat_retriever.retrieve(...)`
+    #: çağrısıyla aynı düğüm bütçesini paylaşıyor -- ve o bütçe `fast`
+    #: seviyesinde yalnızca 15s'ye kadar iniyor (`BudgetPolicy.node_seconds`
+    #: `retrieve_mevzuat` × reasoning_levels.py'nin `fast` çarpanı). Bu
+    #: bütçeyi aşmak `NodeBudgetExceeded` fırlatıp düğümü zarifçe değil,
+    #: doğrudan iptal ediyor (bkz. app.ai.workflows.resilience.node_timeout),
+    #: bu yüzden ayrı ve daha dar bir tavan gerekiyor.
+    MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS: float = 10.0
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"

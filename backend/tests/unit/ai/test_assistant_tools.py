@@ -8,7 +8,7 @@ document other than the one attached -- and the tool loop always terminates
 in a plain-text answer, whether or not a tool converged.
 """
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import BaseModel
@@ -18,10 +18,13 @@ from app.ai.llms.base import ToolCallResponse
 from app.ai.tools.document_tools import (
     GetDocumentDetailsArgs,
     ToolResult,
+    WEAK_SCORE_THRESHOLD,
     build_assistant_tools,
 )
 from app.ai.tools.registry import ToolSpec
 from app.core.enums.sensitivity_level import SensitivityLevel
+from app.mcp.manager import mcp_manager
+from app.mcp.registry import MEVZUAT_SERVER
 
 
 def _kwargs(**overrides):
@@ -758,3 +761,183 @@ async def test_an_unknown_tool_name_does_not_crash_the_loop(fake_llm):
     ]
 
     assert "".join(chunks) == "yine de cevap verdim"
+
+
+# ==========================================
+# Dinamik mevzuat-mcp eskalasyonu (chat) -- LOCAL_MODE
+# ==========================================
+#: Bir belgeye karşılık gelen Qdrant Document nesnesi taklidi -- yalnızca
+#: guard'ın okuduğu tek alanı (`metadata["score"]`) taşır.
+class _FakeDoc:
+    def __init__(self, score: float):
+        self.metadata = {"score": score}
+
+
+def _live_registered():
+    """Canlı aracın göründüğü üç şart: LOCAL_MODE kapalı, MEVZUAT_MCP_ENABLED
+    açık, sunucu gerçekten kayıtlı -- ikisi de build_live_legislation_tools()'un
+    gerektirdiği şey (bkz. test_registry.py'nin aynı desenli `_enabled()`'ı)."""
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+    return patch.multiple(
+        "app.core.config.settings", LOCAL_MODE=False, MEVZUAT_MCP_ENABLED=True
+    )
+
+
+@pytest.fixture(autouse=True)
+def _clean_mcp_registry():
+    mcp_manager.clients.clear()
+    yield
+    mcp_manager.clients.clear()
+
+
+def test_live_legislation_tool_absent_when_local_mode_is_true():
+    """LOCAL_MODE açıkken canlı araç hiç görünmemeli -- diğer iki şart
+    (MEVZUAT_MCP_ENABLED, kayıt) tutsa bile. mevzuat-mcp bu modda yalnızca
+    boot'taki curated 7 kanunu çekmek için kullanılır, istek başına değil."""
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+    with patch.multiple(
+        "app.core.config.settings", LOCAL_MODE=True, MEVZUAT_MCP_ENABLED=True
+    ):
+        tools = build_assistant_tools(**_kwargs(rag_graph=AsyncMock()))
+    names = {tool.name for tool in tools}
+    assert "search_legislation_live" not in names
+
+
+def test_live_legislation_tool_absent_when_global_flag_is_off():
+    """LOCAL_MODE=false tek başına yetmez -- MEVZUAT_MCP_ENABLED kapalıyken
+    build_live_legislation_tools() zaten boş liste döner."""
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+    with patch.multiple(
+        "app.core.config.settings", LOCAL_MODE=False, MEVZUAT_MCP_ENABLED=False
+    ):
+        tools = build_assistant_tools(**_kwargs(rag_graph=AsyncMock()))
+    names = {tool.name for tool in tools}
+    assert "search_legislation_live" not in names
+
+
+def test_live_legislation_tool_present_when_local_mode_false_and_global_switch_on():
+    with _live_registered():
+        tools = build_assistant_tools(**_kwargs(rag_graph=AsyncMock()))
+    names = {tool.name for tool in tools}
+    assert "search_legislation_live" in names
+
+
+@pytest.mark.asyncio
+async def test_live_search_declines_without_hitting_mcp_when_called_before_local():
+    """Model, search_legislation'ı hiç denemeden search_legislation_live'ı
+    çağırırsa (ya da aynı yanıtta ikisini birden isteyip live'ı önce
+    işletirse), guard ağa hiç çıkmamalı."""
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {"context": "", "documents": []}
+
+    with _live_registered(), patch(
+        "app.ai.tools.mevzuat_tools._lookup", new_callable=AsyncMock
+    ) as lookup:
+        tools = build_assistant_tools(**_kwargs(rag_graph=rag_graph))
+        live = next(tool for tool in tools if tool.name == "search_legislation_live")
+
+        result = await live.handler(query="657")
+
+        lookup.assert_not_called()
+    assert "search_legislation" in result
+
+
+@pytest.mark.asyncio
+async def test_live_search_declines_when_local_result_is_strong():
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {
+        "context": "ilgili mevzuat metni",
+        "documents": [_FakeDoc(score=WEAK_SCORE_THRESHOLD + 1.0)],
+    }
+
+    with _live_registered(), patch(
+        "app.ai.tools.mevzuat_tools._lookup", new_callable=AsyncMock
+    ) as lookup:
+        tools = build_assistant_tools(**_kwargs(rag_graph=rag_graph))
+        search = next(tool for tool in tools if tool.name == "search_legislation")
+        live = next(tool for tool in tools if tool.name == "search_legislation_live")
+
+        await search.handler(query="izin hakkı")
+        await live.handler(query="izin hakkı")
+
+        lookup.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_live_search_escalates_when_local_result_is_weak_and_reports_a_tool_result():
+    """Bu, aynı zamanda gerçek keşifte bulunan groundedness hatasının
+    regresyon testi: search_legislation_live'ın canlı sonucu, on_tool_result
+    aracılığıyla raporlanmalı -- yoksa output_gate'in dayanaklılık kontrolü
+    onu hiç göremez ve içindeki her somut iddiayı karartır."""
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {
+        "context": "zayıf eşleşme",
+        "documents": [_FakeDoc(score=0.0)],
+    }
+    reported: list[ToolResult] = []
+
+    with _live_registered(), patch(
+        "app.ai.tools.mevzuat_tools._lookup", new_callable=AsyncMock
+    ) as lookup:
+        lookup.return_value = "(Kaynak: mevzuat.gov.tr, mevzuat_id=102924)\n\nMadde 1..."
+        tools = build_assistant_tools(
+            **_kwargs(rag_graph=rag_graph, on_tool_result=reported.append)
+        )
+        search = next(tool for tool in tools if tool.name == "search_legislation")
+        live = next(tool for tool in tools if tool.name == "search_legislation_live")
+
+        await search.handler(query="657")
+        result = await live.handler(query="657")
+
+        lookup.assert_called_once()
+
+    assert "mevzuat_id=102924" in result
+    live_results = [r for r in reported if r.tool == "search_legislation_live"]
+    assert len(live_results) == 1
+    assert live_results[0].sensitivity_level is SensitivityLevel.UNMARKED
+
+
+@pytest.mark.asyncio
+async def test_live_search_escalates_when_local_returns_no_documents_at_all():
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {"context": "", "documents": []}
+
+    with _live_registered(), patch(
+        "app.ai.tools.mevzuat_tools._lookup", new_callable=AsyncMock
+    ) as lookup:
+        lookup.return_value = "(Kaynak: mevzuat.gov.tr, mevzuat_id=1)\n\nMetin"
+        tools = build_assistant_tools(**_kwargs(rag_graph=rag_graph))
+        search = next(tool for tool in tools if tool.name == "search_legislation")
+        live = next(tool for tool in tools if tool.name == "search_legislation_live")
+
+        await search.handler(query="olmayan bir mevzuat")
+        await live.handler(query="olmayan bir mevzuat")
+
+        lookup.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_live_search_not_found_result_is_not_reported_as_a_tool_result():
+    """mevzuat_tools.NOT_FOUND, gerçek bir bulgu değildir -- diğer her
+    başarısız handler gibi (bkz. test_search_legislation_reports_nothing_
+    when_no_context_is_found), rapor edilmemeli."""
+    from app.ai.tools.mevzuat_tools import NOT_FOUND
+
+    rag_graph = AsyncMock()
+    rag_graph.ainvoke.return_value = {"context": "", "documents": []}
+    reported: list[ToolResult] = []
+
+    with _live_registered(), patch(
+        "app.ai.tools.mevzuat_tools._lookup", new_callable=AsyncMock
+    ) as lookup:
+        lookup.return_value = NOT_FOUND
+        tools = build_assistant_tools(
+            **_kwargs(rag_graph=rag_graph, on_tool_result=reported.append)
+        )
+        search = next(tool for tool in tools if tool.name == "search_legislation")
+        live = next(tool for tool in tools if tool.name == "search_legislation_live")
+
+        await search.handler(query="bulunamayacak")
+        await live.handler(query="bulunamayacak")
+
+    assert reported == []

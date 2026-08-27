@@ -33,10 +33,16 @@ Depolama mekanizması iki şekilde konfigüre edilebilir:
 
 ---
 
-## Mevzuat Kaynağı (`MEVZUAT_SOURCE`)
+## Mevzuat Kaynağı (`MEVZUAT_SOURCE`, `LOCAL_MODE`)
 
-Canlı (`mcp`) veya Yerel (`local`). 
-Eğer prodüksiyon imajınız `WITH_MEVZUAT_MCP=0` ile build edildiyse, bu değişkeni mutlaka `local` yapınız. Aksi halde her sorguda önce MCP denemesi yapılıp başarısız olunacak, gecikmeli olarak (Fallback) yerel korpusa düşülecektir.
+Mevzuat-mcp'nin (mevzuat.gov.tr) istek başına ne zaman kullanılacağını asıl belirleyen `LOCAL_MODE`'dur (bkz. `app.core.config.Settings.LOCAL_MODE`), tek başına `MEVZUAT_SOURCE` değil:
+
+- **`LOCAL_MODE=true` (varsayılan geliştirme değeri):** mevzuat-mcp yalnızca boot açılışında `CURATED_LEGISLATION`'daki 7 kanunu ısıtmak için kullanılır. Analiz, taslak ve chat aşamalarının hiçbiri istek başına ağa çıkmaz -- ölçüm: local modda mevzuat aramasının kullanıcı deneyimini bozacak kadar yavaş olması.
+- **`LOCAL_MODE=false`:** evrak analizi, taslak oluşturma ve chat'in hepsi, yerel korpüs zayıf/boş kaldığında canlı MCP'ye eskale eder (`MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS` ile sınırlı). Ayrıca `MEVZUAT_MCP_ENABLED=true` ve sunucunun kayıtlı olması gerekir (`MEVZUAT_SOURCE=mcp` veya `MEVZUAT_MCP_ENABLED` -- ikisinden biri sunucuyu kaydeder).
+
+`MEVZUAT_SOURCE` (`mcp` veya `local`) yalnızca **evrak analizinin boot-warm indeksinin** hangi kaynaktan besleneceğini seçer (canlı MCP ile ısıtılmış mı, yoksa committed korpüs mü) -- `LOCAL_MODE`'dan bağımsız, ayrı bir anahtardır.
+
+Prodüksiyon imajınız `WITH_MEVZUAT_MCP=0` ile build edildiyse (bkz. `backend.prod.Dockerfile`), `LOCAL_MODE=false` ayarlasanız bile mevzuat-mcp imajda bulunmaz ve her arama başarısız bir MCP denemesinden sonra yerel korpusa düşer -- `LOCAL_MODE=false` kullanan her dağıtım imajı `--build-arg WITH_MEVZUAT_MCP=1` ile yeniden kurmalı, `deploy/kubernetes/namespace.yaml`'daki `allow-backend-https-egress` NetworkPolicy'sini uygulamalı, ve `secrets.yaml`'daki `EVREN_API_KEY`/`EVREN_QDRANT_API_KEY` placeholder'larını gerçek değerlerle doldurmalıdır (bkz. `deploy/kubernetes/configmap.yaml`'ın `LOCAL_MODE` yorumu).
 
 ---
 
@@ -50,7 +56,8 @@ Aşağıdaki değerler saniye cinsindendir. Yerel (CPU) modeller kullanılıyors
 | `EXTRACTION_TIMEOUT_SECONDS` | 300 | PDF OCR / Metin okuma |
 | `DETAILED_SUMMARY_TIMEOUT_SECONDS` | 400 | Model özetleme süresi |
 | `DRAFT_JUDGE_TIMEOUT_SECONDS` | 30 | LLM Yargıç onayı |
-| `MEVZUAT_MCP_TIMEOUT_SECONDS` | 25 | Canlı mevzuat araması |
+| `MEVZUAT_MCP_TIMEOUT_SECONDS` | 25 | Canlı mevzuat araması (chat'in `search_legislation_live` aracı) |
+| `MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS` | 10 | Evrak analizindeki canlı mevzuat eskalasyonu -- `retrieve_mevzuat` düğüm bütçesini paylaştığı için bilinçli olarak daha dar |
 
 ---
 

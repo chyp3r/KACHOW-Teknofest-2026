@@ -2,6 +2,13 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [Unreleased]
+### Eklendi
+- Canlı mevzuat sorguları (mevzuat.gov.tr) için MCP entegrasyonu, dayanıklılık/önbellek mekanizması ve gecikme metrikleri.
+- Belge analiz grafiğinde (`document_analysis_graph.py`) canlı mevzuat zenginleştirmesi.
+- Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
+- Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
+
 ## [3.56]
 ### Düzeltildi
 - **DB bağlantı havuzu tükenmesi kaynaklı çökme (#288).** Belirli bir yükten

@@ -21,6 +21,8 @@ from app.ai.workflows.document_analysis_graph import (
 )
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
+from app.mcp.manager import mcp_manager
+from app.mcp.registry import MEVZUAT_SERVER
 
 OFFICIAL_LETTER_TEXT = (
     "T.C.\nÖRNEK BAKANLIĞI\nSayı: E-123-456\nTarih: 30.07.2026\n"
@@ -643,6 +645,182 @@ async def test_graph_survives_retriever_failure(mock_classify):
     assert result["mevzuat_documents"] == []
     assert result["mevzuat_suggestions"] == []
     assert result["compliance_status"] == ComplianceStatus.COMPLIANT.value
+
+
+# ==========================================
+# LOCAL_MODE ile canlı mevzuat eskalasyonu
+# ==========================================
+@pytest.fixture(autouse=True)
+def _clean_mcp_registry_for_live_mevzuat_tests():
+    mcp_manager.clients.clear()
+    yield
+    mcp_manager.clients.clear()
+
+
+def _local_only_retriever() -> AsyncMock:
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11-", metadata={"mevzuat": "RYUEHY"})
+    ]
+    return retriever
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_is_never_attempted_in_local_mode(
+    mock_classify, mock_suggest
+):
+    """LOCAL_MODE=true'da mevzuat-mcp yalnızca boot'taki curated 7 kanunu
+    ısıtmak için kullanılır -- diğer iki şart (MEVZUAT_MCP_ENABLED, kayıt)
+    tutsa bile evrak analizi hiç ağa çıkmamalı."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=True,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_not_called()
+    assert [d.metadata["mevzuat"] for d in result["mevzuat_documents"]] == ["RYUEHY"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_is_never_attempted_when_the_global_switch_is_off(
+    mock_classify, mock_suggest
+):
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=False,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_is_never_attempted_when_the_server_is_not_registered(
+    mock_classify, mock_suggest
+):
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    # mcp_manager.clients deliberately left empty -- server never registered.
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_prepends_its_result_ahead_of_the_local_excerpt(
+    mock_classify, mock_suggest
+):
+    """LOCAL_MODE=false + MEVZUAT_MCP_ENABLED=true + kayıtlı sunucu: canlı
+    arama tetiklenmeli ve sonucu, yerel korpustan gelen alıntının önüne
+    eklenmeli (en alakalı -- taze -- kaynak önce)."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        live_search.return_value = ("55555", "[Madde 4] canlı eşleşen pasaj")
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_called_once()
+    query = live_search.call_args.args[0]
+    assert "İzin Talebi" in query or "Resmî Yazı" in query  # _build_mevzuat_query'nin çıktısı
+    documents = result["mevzuat_documents"]
+    assert documents[0].page_content == "[Madde 4] canlı eşleşen pasaj"
+    assert "mevzuat_id=55555" in documents[0].metadata["mevzuat"]
+    assert documents[1].metadata["mevzuat"] == "RYUEHY"
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_failure_leaves_the_local_result_untouched(
+    mock_classify, mock_suggest
+):
+    """Canlı arama patlarsa (ağ hatası, zaman aşımı, ...) düğüm zaten sahip
+    olduğu yerel sonuçla temiz döner -- ne düğüm başarısız olur ne de
+    NodeBudgetExceeded fırlar."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        live_search.side_effect = ConnectionError("mevzuat.gov.tr unreachable")
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert [d.metadata["mevzuat"] for d in result["mevzuat_documents"]] == ["RYUEHY"]
 
 
 # ==========================================
