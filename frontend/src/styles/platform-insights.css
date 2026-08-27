@@ -1,0 +1,72 @@
+/* Platform Yönetimi -> "Kullanıcı İstatistikleri" sekmesi. Charts are
+   hand-rolled SVG/CSS (no charting library in this project). */
+
+.platform-insights { display: grid; gap: var(--space-5); }
+
+.platform-kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-3);
+}
+.platform-kpi { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-4); }
+.platform-kpi > span {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-lg);
+  color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 12%, transparent);
+}
+.platform-kpi > span svg { width: 1.15rem; height: 1.15rem; }
+.platform-kpi > div { display: grid; gap: 2px; min-width: 0; }
+.platform-kpi small { color: var(--text-secondary); font-size: 0.75rem; }
+.platform-kpi strong { font-size: 1.4rem; line-height: 1.6rem; }
+.platform-kpi em { color: var(--text-muted); font-style: normal; font-size: 0.72rem; }
+
+.platform-two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: var(--space-4); }
+.platform-three-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: var(--space-4); }
+
+.platform-subhead { margin: 0 0 var(--space-2); color: var(--text-secondary); font-size: 0.8rem; font-weight: var(--weight-medium); }
+
+/* Activity timeline ------------------------------------------------------- */
+.platform-timeline { display: grid; gap: var(--space-2); }
+.platform-timeline svg { width: 100%; height: 160px; overflow: visible; }
+.platform-timeline-bar { fill: color-mix(in srgb, var(--accent-blue) 55%, transparent); }
+.platform-timeline-bar:hover { fill: var(--accent-blue); }
+.platform-timeline-line { stroke: var(--accent-amber); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.platform-timeline-legend { display: flex; flex-wrap: wrap; gap: var(--space-4); color: var(--text-muted); font-size: 0.75rem; }
+.platform-timeline-legend span { display: inline-flex; align-items: center; gap: var(--space-2); }
+.platform-timeline-legend span::before { content: ""; width: 0.7rem; height: 0.7rem; border-radius: 3px; }
+.platform-timeline-legend .is-runs::before { background: color-mix(in srgb, var(--accent-blue) 55%, transparent); }
+.platform-timeline-legend .is-users::before { background: var(--accent-amber); }
+
+/* Role donut ------------------------------------------------------------- */
+.platform-donut { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-5); }
+.platform-donut svg { width: 132px; height: 132px; flex: 0 0 auto; }
+.platform-donut-track { stroke: var(--surface-subtle); stroke-width: 14; }
+.platform-donut-total { fill: var(--text-primary); font-size: 1.3rem; font-weight: var(--weight-semibold); }
+.platform-donut-caption { fill: var(--text-muted); font-size: 0.7rem; }
+.platform-donut-legend { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; min-width: 8rem; }
+.platform-donut-legend li { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--space-2); color: var(--text-secondary); font-size: 0.85rem; }
+.platform-donut-legend strong { color: var(--text-primary); }
+.platform-swatch { width: 0.75rem; height: 0.75rem; border-radius: 3px; }
+
+/* Distribution bars ---------------------------------------------------------- */
+.platform-dist { display: grid; gap: var(--space-2); margin: 0; padding: 0; list-style: none; }
+.platform-dist li { display: grid; grid-template-columns: minmax(6rem, 9rem) 1fr auto; align-items: center; gap: var(--space-3); }
+.platform-dist-label { color: var(--text-secondary); font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.platform-dist-track { height: 0.6rem; border-radius: var(--radius-full); background: var(--surface-subtle); overflow: hidden; }
+.platform-dist-fill { display: block; height: 100%; border-radius: var(--radius-full); min-width: 2px; transition: width 0.3s ease; }
+.platform-dist strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+
+/* Top users table --------------------------------------------------------- */
+.platform-table-wrap { overflow-x: auto; }
+.platform-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+.platform-table th, .platform-table td { padding: var(--space-2) var(--space-3); text-align: left; white-space: nowrap; }
+.platform-table thead th { color: var(--text-muted); font-weight: var(--weight-medium); border-bottom: 1px solid var(--border-default); }
+.platform-table tbody tr { border-bottom: 1px solid color-mix(in srgb, var(--border-default) 55%, transparent); }
+.platform-table tbody tr:last-child { border-bottom: 0; }
+.platform-table td:first-child { font-weight: var(--weight-medium); color: var(--text-primary); }
+.platform-table td:nth-child(n+4) { font-variant-numeric: tabular-nums; color: var(--text-secondary); }
