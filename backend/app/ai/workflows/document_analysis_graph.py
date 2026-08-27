@@ -19,6 +19,7 @@ from app.ai.compliance import (
     detect_structural_signal,
     format_parsed_fields,
     format_structural_signal,
+    is_blank,
     merge_parsed_over_model,
     normalize_value,
     parse_labelled_fields,
@@ -225,6 +226,77 @@ def _trim_for_extraction(text: str) -> str:
     )
 
 
+def _build_analysis_prompt(input_text: str, is_ocr_text: bool) -> tuple[str, dict[str, Any]]:
+    """`analyze_node`'un sınıflandır+çıkar çağrısı için kullandığı prompt'u kur.
+
+    Ayrı bir fonksiyon olarak var olmasının nedeni: hem `analyze_node` hem de
+    `scripts/evaluate_analysis_cascade.py` (fast/quality katman kıyaslaması)
+    AYNI prompt'u görmeli -- benchmark script'inin kendi prompt'unu elle
+    yeniden yazması, ölçtüğü şeyin üretimdekiyle sessizce ıraksamasına yol
+    açardı.
+
+    Args:
+        input_text: Belgenin tam, kısaltılmamış metni.
+        is_ocr_text: Metnin OCR ile mi okunduğu (uyarı notu eklemek için).
+
+    Returns:
+        `(prompt, parsed)` -- kurulan prompt ve deterministik olarak
+        ayrıştırılan etiketli alanlar (`merge_parsed_over_model` için de
+        gereklidir, bu yüzden ayrıca döner).
+    """
+    text = _trim_for_extraction(input_text)
+
+    # Yönetmelik başlık düzenini belirlediği için etiketli alanlar model
+    # yerine düzenli ifadelerle okunur. Ayrıştırıcı, örnek korpusta
+    # hiç uydurma değer üretmeden 60/60 puan alır.
+    parsed = parse_labelled_fields(text)
+    logger.info("Parsed %d labelled field(s) deterministically.", len(parsed))
+
+    prompt = (
+        "Aşağıdaki evrakın türünü belirle, kısa bir özetini çıkar ve üstveri "
+        "alanlarını doldur.\n\n"
+        "Tür ayrımında şu ölçütleri kullan:\n"
+        "- official_letter: 'T.C.' başlığı, kurum antedi, Sayı/Tarih/Konu "
+        "alanları ve kurum yetkilisinin unvanlı imzası bulunan yazı. "
+        "Kurumlar arası yazışmaların varsayılan türüdür.\n"
+        "- petition: bir vatandaşın kendi adına talep veya şikayet ilettiği, "
+        "kurum antedi bulunmayan başvuru.\n"
+        "- information_request: yalnızca 4982 sayılı Kanun kapsamında bilgi "
+        "veya belge talebi açıkça istendiğinde.\n"
+        # circular için açık ayırt edici kriterler gerekir. Bunlar olmadan
+        # model, yukarıdaki paragrafın kurumlar arası yazışma için varsayılan
+        # olarak adlandırdığı official_letter'a geri düşer -- ve bir genelge
+        # yapısal olarak zaten resmî bir yazı*dır*, dolayısıyla onları yalnızca
+        # muhatap ve kural koyucu dil ayırır. detect_structural_signal DAĞITIM'ı
+        # zaten bildiriyordu, yani gözlem mevcuttu, eksik olan yalnızca ona göre
+        # hareket edecek kriterdi. qwen3.5:9b üzerinde örnek korpusta ölçüldü:
+        # tür doğruluğu 11/12 -> 12/12, üç tekrar boyunca kararlı (36/36).
+        "- circular: tek bir muhataba değil 'DAĞITIM YERLERİNE' / 'Dağıtım' "
+        "listesine gönderilen, tek bir olayı değil genel uygulama usul ve "
+        "esaslarını düzenleyen yazı (genelge). Muhatabı dağıtım listesi olan ve "
+        "'usul ve esaslar', 'tüm birimler' gibi genel düzenleme ifadeleri "
+        "taşıyan yazıyı official_letter değil circular say.\n"
+        "- directive: belirli bir birime verilen, uyulması zorunlu somut iş "
+        "talimatı.\n"
+        "- complaint: şikayet bildirimi. report: rapor. minutes: tutanak.\n"
+        "- leave_request: izin talebi.\n"
+        "- other: yalnızca yukarıdakilerin hiçbiri uymuyorsa.\n\n"
+        "Kurum antetli ve unvanlı imza taşıyan bir yazıyı vatandaş başvurusu "
+        "olarak sınıflandırma.\n"
+        "Alan çıkarımında belgede gerçekten bulunmayan alanları null bırak; "
+        "tahmin etme, örnek değer üretme.\n\n"
+        f'EVRAK:\n"""\n{text}\n"""'
+        # Deterministik regex gözlemleri, talimat olarak değil olgu olarak
+        # enjekte edilir. qwen3:8b üzerinde ölçüldüğünde bunlar, zararlı
+        # official_letter -> petition karışıklığını azaltır; bu önemlidir
+        # çünkü belge türü, gerekli-alan kural tablosunu seçer.
+        f"{format_structural_signal(detect_structural_signal(input_text))}"
+        f"{format_parsed_fields(parsed)}"
+        f"{ocr_warning(is_ocr_text)}"
+    )
+    return prompt, parsed
+
+
 def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
     """Mevzuat arama sorgusunu deterministik biçimde oluştur.
 
@@ -404,6 +476,80 @@ def _flatten_fields_for_grounding(fields: dict[str, Any]) -> str:
     return " ".join(str(value) for value in fields.values() if value)
 
 
+async def _extract_with_gap_fill_cascade(
+    classifier_agent: ClassifierAgent,
+    escalation_agent: ClassifierAgent,
+    prompt: str,
+    parsed: dict[str, Any],
+    document_text: str,
+) -> tuple[DocumentType, str, dict[str, Any], bool]:
+    """Önce hızlı katmanı dener; sonucu kendi sınıflandırdığı `document_type`
+    için zorunlu bir alanı eksik bırakırsa kalite katmanına yükseltir.
+
+    Bugünün `analyze_node` düşüş merdiveninden (yalnızca *exception*'da
+    yükselen, hep kalite katmanıyla başlayan) farkı: bu, *başarılı ama eksik*
+    bir sonuçta da yükselir ve öncelik sırası tersinedir (önce ucuz/hızlı).
+    Escalation gerçekleşirse iki sonucun alan-seviyeli birleşimi döner --
+    hızlı katmanın doğru okuduğu bir alan, kalite katmanının olası yanlış
+    okumasıyla ezilmesin diye (bkz. `merge_parsed_over_model`'daki aynı
+    gerekçe).
+
+    Tamlık kontrolü modelin HAM çıktısı üzerinde değil, `merge_parsed_over_model`
+    ile birleştirilmiş alanlar üzerinde yapılır -- `prompt`'un kendisi
+    (`format_parsed_fields`) modele zaten deterministik olarak ayrıştırılmış
+    alanları "bunlarla ilgilenme" diye açıkça atlatıyor, bu yüzden ham model
+    çıktısını kontrol etmek her belgeyi yapay olarak eksik gösterir. Aynı
+    nedenle dönen `model_fields` de zaten birleştirilmiş halidir -- çağıranın
+    ayrıca `merge_parsed_over_model` çağırmasına gerek yoktur.
+
+    Args:
+        classifier_agent: Hızlı katmana bağlı ajan (birincil deneme).
+        escalation_agent: Kalite katmanına bağlı ajan (yalnızca eksik
+            zorunlu alan varsa çağrılır).
+        prompt: `analyze_node`'un kurduğu aynı sınıflandırma+çıkarım prompt'u
+            -- her iki katman da aynı girdiyi görür.
+        parsed: `parse_labelled_fields`'in çıktısı -- `merge_parsed_over_model`
+            için gerekli.
+        document_text: Kısaltılmamış tam belge metni -- kanıt temelli
+            kurtarma için `merge_parsed_over_model`'e geçirilir.
+
+    Returns:
+        `(document_type, summary, model_fields, escalated)` -- `escalated`,
+        çağıranın (ör. bir benchmark script'inin) iki yolu ayırt edebilmesi
+        için kalite katmanına gerçekten başvurulup başvurulmadığını taşır.
+    """
+    fast_result = await classifier_agent.run_structured(
+        messages=prompt,
+        response_model=DocumentAnalysisOutput,
+        temperature=0.0,
+        max_tokens=ANALYSIS_MAX_TOKENS,
+    )
+    payload = fast_result.model_dump()
+    document_type = DocumentType(payload["document_type"])
+    raw_fast_fields = {key: payload.get(key) for key in EVRAK_FIELD_KEYS}
+    fast_fields = merge_parsed_over_model(raw_fast_fields, parsed, document_text=document_text)
+
+    report = check_required_fields(document_type, EvrakField(**fast_fields))
+    if report.status is not ComplianceStatus.INCOMPLETE:
+        return document_type, payload["summary"], fast_fields, False
+
+    quality_result = await escalation_agent.run_structured(
+        messages=prompt,
+        response_model=DocumentAnalysisOutput,
+        temperature=0.0,
+        max_tokens=ANALYSIS_MAX_TOKENS,
+    )
+    q_payload = quality_result.model_dump()
+    q_document_type = DocumentType(q_payload["document_type"])
+    raw_quality_fields = {key: q_payload.get(key) for key in EVRAK_FIELD_KEYS}
+    quality_fields = merge_parsed_over_model(raw_quality_fields, parsed, document_text=document_text)
+    merged_fields = {
+        key: quality_fields[key] if not is_blank(quality_fields.get(key)) else fast_fields.get(key)
+        for key in EVRAK_FIELD_KEYS
+    }
+    return q_document_type, q_payload["summary"], merged_fields, True
+
+
 def create_document_analysis_graph(
     llm_client: BaseLLMClient,
     mevzuat_retriever: Optional[Any] = None,
@@ -483,68 +629,42 @@ def create_document_analysis_graph(
             "Belge sınıflandırılıyor ve üst veriler çıkarılıyor...",
         )
 
-        text = _trim_for_extraction(state["input_text"])
-
-        # Yönetmelik başlık düzenini belirlediği için etiketli alanlar model
-        # yerine düzenli ifadelerle okunur. Ayrıştırıcı, örnek korpusta
-        # hiç uydurma değer üretmeden 60/60 puan alır.
-        parsed = parse_labelled_fields(text)
-        logger.info("Parsed %d labelled field(s) deterministically.", len(parsed))
-
-        prompt = (
-            "Aşağıdaki evrakın türünü belirle, kısa bir özetini çıkar ve üstveri "
-            "alanlarını doldur.\n\n"
-            "Tür ayrımında şu ölçütleri kullan:\n"
-            "- official_letter: 'T.C.' başlığı, kurum antedi, Sayı/Tarih/Konu "
-            "alanları ve kurum yetkilisinin unvanlı imzası bulunan yazı. "
-            "Kurumlar arası yazışmaların varsayılan türüdür.\n"
-            "- petition: bir vatandaşın kendi adına talep veya şikayet ilettiği, "
-            "kurum antedi bulunmayan başvuru.\n"
-            "- information_request: yalnızca 4982 sayılı Kanun kapsamında bilgi "
-            "veya belge talebi açıkça istendiğinde.\n"
-            # circular için açık ayırt edici kriterler gerekir. Bunlar olmadan
-            # model, yukarıdaki paragrafın kurumlar arası yazışma için varsayılan
-            # olarak adlandırdığı official_letter'a geri düşer -- ve bir genelge
-            # yapısal olarak zaten resmî bir yazı*dır*, dolayısıyla onları yalnızca
-            # muhatap ve kural koyucu dil ayırır. detect_structural_signal DAĞITIM'ı
-            # zaten bildiriyordu, yani gözlem mevcuttu, eksik olan yalnızca ona göre
-            # hareket edecek kriterdi. qwen3.5:9b üzerinde örnek korpusta ölçüldü:
-            # tür doğruluğu 11/12 -> 12/12, üç tekrar boyunca kararlı (36/36).
-            "- circular: tek bir muhataba değil 'DAĞITIM YERLERİNE' / 'Dağıtım' "
-            "listesine gönderilen, tek bir olayı değil genel uygulama usul ve "
-            "esaslarını düzenleyen yazı (genelge). Muhatabı dağıtım listesi olan ve "
-            "'usul ve esaslar', 'tüm birimler' gibi genel düzenleme ifadeleri "
-            "taşıyan yazıyı official_letter değil circular say.\n"
-            "- directive: belirli bir birime verilen, uyulması zorunlu somut iş "
-            "talimatı.\n"
-            "- complaint: şikayet bildirimi. report: rapor. minutes: tutanak.\n"
-            "- leave_request: izin talebi.\n"
-            "- other: yalnızca yukarıdakilerin hiçbiri uymuyorsa.\n\n"
-            "Kurum antetli ve unvanlı imza taşıyan bir yazıyı vatandaş başvurusu "
-            "olarak sınıflandırma.\n"
-            "Alan çıkarımında belgede gerçekten bulunmayan alanları null bırak; "
-            "tahmin etme, örnek değer üretme.\n\n"
-            f'EVRAK:\n"""\n{text}\n"""'
-            # Deterministik regex gözlemleri, talimat olarak değil olgu olarak
-            # enjekte edilir. qwen3:8b üzerinde ölçüldüğünde bunlar, zararlı
-            # official_letter -> petition karışıklığını azaltır; bu önemlidir
-            # çünkü belge türü, gerekli-alan kural tablosunu seçer.
-            f"{format_structural_signal(detect_structural_signal(state['input_text']))}"
-            f"{format_parsed_fields(parsed)}"
-            f"{ocr_warning(state.get('is_ocr_text', False))}"
+        prompt, parsed = _build_analysis_prompt(
+            state["input_text"], state.get("is_ocr_text", False)
         )
 
         try:
-            res = await classifier_agent.run_structured(
-                messages=prompt,
-                response_model=DocumentAnalysisOutput,
-                temperature=0.0,
-                max_tokens=ANALYSIS_MAX_TOKENS,
-            )
-            payload = res.model_dump()
-            document_type = DocumentType(payload["document_type"])
-            summary = payload["summary"]
-            model_fields = {key: payload.get(key) for key in EVRAK_FIELD_KEYS}
+            if not settings.LOCAL_MODE and fallback_classifier_agent is not None:
+                # Evren'in hızlı katmanı (llm-fast) her zaman erişilebilir ve
+                # ölçülen 12 örnek belge üzerinde (bkz.
+                # scripts/evaluate_analysis_cascade.py) llm-large-önce
+                # merdivenine karşı doğrulukta hiçbir kayıp, hızda ölçülebilir
+                # bir fark yaratmadan aynı sonucu üretti (%67 belgede kalite
+                # katmanına yükseltme gerekti, geri kalanında hızlı katman tek
+                # başına yeterliydi) -- bu yüzden LOCAL_MODE=false'ta birincil
+                # yol bu. Ollama'da (LOCAL_MODE=true) bu deney hiç koşulmadı,
+                # bu yüzden bugünkü kalite-katmanı-önce davranışı değişmeden
+                # kalır.
+                document_type, summary, model_fields, _escalated = (
+                    await _extract_with_gap_fill_cascade(
+                        fallback_classifier_agent,
+                        classifier_agent,
+                        prompt,
+                        parsed,
+                        state["input_text"],
+                    )
+                )
+            else:
+                res = await classifier_agent.run_structured(
+                    messages=prompt,
+                    response_model=DocumentAnalysisOutput,
+                    temperature=0.0,
+                    max_tokens=ANALYSIS_MAX_TOKENS,
+                )
+                payload = res.model_dump()
+                document_type = DocumentType(payload["document_type"])
+                summary = payload["summary"]
+                model_fields = {key: payload.get(key) for key in EVRAK_FIELD_KEYS}
         except TRANSIENT_ERRORS:
             # Kopan bir bağlantı bu merdivenin her katmanını eşit şekilde
             # etkiler (hepsi aynı Ollama örneğiyle konuşur), bu yüzden bağlantı
