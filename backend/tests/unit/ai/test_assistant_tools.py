@@ -52,6 +52,7 @@ def test_document_tools_are_built_only_when_a_document_is_attached():
     names = {tool.name for tool in tools}
     assert names == {
         "search_document",
+        "search_document_regex",
         "get_document_details",
         "get_document_outline",
         "get_document_section",
@@ -343,6 +344,85 @@ async def test_get_document_section_rejects_an_out_of_range_page():
     result = await section.handler(page=5)
 
     assert "yok" in result
+
+
+# ==========================================
+# search_document_regex (RAG dışı, birebir/regex satır araması)
+# ==========================================
+_DEFAULT_REGEX_DOC = {"pages": ["Sayı: E-12345\nGövde", "İkinci sayfa: 15/08/2024"]}
+
+
+def _regex_tools(reported=None, cached_document=None):
+    return build_assistant_tools(
+        **_kwargs(
+            document_id="uploads/doc.pdf",
+            cached_document=cached_document or _DEFAULT_REGEX_DOC,
+            on_tool_result=(reported.append if reported is not None else None),
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_document_regex_finds_a_literal_string_with_page_anchor():
+    tool = next(t for t in _regex_tools() if t.name == "search_document_regex")
+
+    result = await tool.handler(pattern="E-12345")
+
+    assert "[s. 1] Sayı: E-12345" in result
+
+
+@pytest.mark.asyncio
+async def test_search_document_regex_supports_actual_regex_syntax():
+    tool = next(t for t in _regex_tools() if t.name == "search_document_regex")
+
+    result = await tool.handler(pattern=r"\d{2}/\d{2}/\d{4}")
+
+    assert "[s. 2]" in result
+    assert "15/08/2024" in result
+
+
+@pytest.mark.asyncio
+async def test_search_document_regex_reports_no_match_without_crashing():
+    tool = next(t for t in _regex_tools() if t.name == "search_document_regex")
+
+    result = await tool.handler(pattern="bulunmayan-dizge")
+
+    assert "eşleşen satır bulunamadı" in result
+
+
+@pytest.mark.asyncio
+async def test_search_document_regex_rejects_an_invalid_pattern():
+    tool = next(t for t in _regex_tools() if t.name == "search_document_regex")
+
+    result = await tool.handler(pattern="([unclosed")
+
+    assert result.startswith("Geçersiz düzenli ifade")
+
+
+@pytest.mark.asyncio
+async def test_search_document_regex_reports_a_tool_result_with_the_document_as_source():
+    reported: list[ToolResult] = []
+    tool = next(t for t in _regex_tools(reported) if t.name == "search_document_regex")
+
+    await tool.handler(pattern="Sayı")
+
+    assert len(reported) == 1
+    assert reported[0].tool == "search_document_regex"
+    assert reported[0].source_ids == ["uploads/doc.pdf"]
+
+
+@pytest.mark.asyncio
+async def test_search_document_regex_truncates_and_notes_the_total():
+    pages = ["\n".join(f"satır {i} numara" for i in range(120))]
+    tool = next(
+        t
+        for t in _regex_tools(cached_document={"pages": pages})
+        if t.name == "search_document_regex"
+    )
+
+    result = await tool.handler(pattern="numara")
+
+    assert "toplam 120 eşleşmenin ilk 40" in result
 
 
 class _NoArgs(BaseModel):
