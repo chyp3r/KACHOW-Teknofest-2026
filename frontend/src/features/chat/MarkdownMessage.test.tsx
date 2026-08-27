@@ -2,6 +2,13 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { MarkdownMessage } from "./MarkdownMessage";
 
+/** Badges in the answer itself, excluding the sources list at the end. */
+function proseBadges(container: HTMLElement): (string | null)[] {
+  return [...container.querySelectorAll(".page-citation")]
+    .filter((node) => !node.closest(".citation-list"))
+    .map((node) => node.textContent);
+}
+
 const CITED = [
   "Not ortalaması 3.83'tür [1].",
   "",
@@ -13,17 +20,20 @@ describe("MarkdownMessage", () => {
   it("renders a numbered citation as a badge and hides the sources block", () => {
     const { container } = render(<MarkdownMessage text={CITED} />);
 
-    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
-    expect(container.textContent).not.toContain("KAYNAKLAR");
-    expect(container.textContent).not.toContain("Genel not ortalaması");
+    expect(proseBadges(container)).toEqual(["1"]);
+    expect(container.textContent).not.toContain("KAYNAKLAR:");
     expect(container.textContent).toContain("Not ortalaması 3.83'tür");
+    // The quote belongs to the sources list, never to the prose.
+    expect(container.querySelector("p")?.textContent).not.toContain("Genel not ortalaması");
   });
 
   it("hands over the quoted source sentence when a badge is clicked", () => {
     const onCitationClick = vi.fn();
     render(<MarkdownMessage text={CITED} onCitationClick={onCitationClick} />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
+    // The inline badge specifically -- the sources-list row for the same
+    // citation carries its own, differently-worded label.
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1\. Bu bilginin/ }));
 
     expect(onCitationClick).toHaveBeenCalledWith({
       index: 1,
@@ -39,10 +49,7 @@ describe("MarkdownMessage", () => {
       />,
     );
 
-    expect([...container.querySelectorAll(".page-citation")].map((n) => n.textContent)).toEqual([
-      "1",
-      "2",
-    ]);
+    expect(proseBadges(container)).toEqual(["1", "2"]);
   });
 
   it("leaves a bracketed number alone when the sources block does not define it", () => {
@@ -66,20 +73,16 @@ describe("MarkdownMessage", () => {
       <MarkdownMessage text={"Eski [s. 3] biçim.\n\nKAYNAKLAR:\n[3] (s. 9) Alakasız."} />,
     );
 
-    // Scoped to the prose: citation 3 is genuinely unreferenced there (the
-    // legacy anchor is `[s. 3]`, not `[3]`), so it legitimately shows up in
-    // the unreferenced-sources footer below.
-    const inProse = [...container.querySelectorAll("p:not(.citation-footer) .page-citation")].map(
-      (n) => n.textContent,
-    );
-    expect(inProse).toEqual(["Sayfa 3"]);
+    // The legacy anchor is `[s. 3]`, not `[3]`, so citation 3 is never read
+    // as a marker in the prose -- it only appears in the sources list.
+    expect(proseBadges(container)).toEqual(["Sayfa 3"]);
   });
 
   it("stays a plain label when no click handler is given", () => {
     const { container } = render(<MarkdownMessage text={CITED} />);
 
     expect(container.querySelector("button")).toBeNull();
-    expect(container.querySelector(".page-citation")?.tagName).toBe("SPAN");
+    expect(container.querySelector("p .page-citation")?.tagName).toBe("SPAN");
   });
 
   it("catches a citation nested inside inline formatting", () => {
@@ -105,62 +108,72 @@ describe("MarkdownMessage", () => {
   });
 });
 
-describe("MarkdownMessage citation fallback", () => {
-  // Observed on a real reply: the model wrote the sources block but never
-  // placed [1] in its prose, so there was nothing to badge and the citation
-  // vanished entirely.
-  const NO_MARKERS = [
-    "Ortalama notu 3.83 olarak belirtilmiştir.",
+describe("MarkdownMessage sources list", () => {
+  const TWO = [
+    "Staj yapmıştır [1]. Mezuniyeti 2027'dir [2].",
     "",
     "KAYNAKLAR:",
-    "[1] (s. 1) GPA: 3.83 - Ranked 2nd out of 144 students",
+    "[1] (s. 1) ASELSAN, Turkcell, OBSS Technology",
+    "[2] (s. 2) June 2027 (Expected)",
   ].join("\n");
 
-  it("offers a source the model listed but never referenced inline", () => {
-    const { container } = render(<MarkdownMessage text={NO_MARKERS} />);
+  it("lists every source at the end, not only the unreferenced ones", () => {
+    const { container } = render(<MarkdownMessage text={TWO} />);
 
-    const footer = container.querySelector(".citation-footer");
-    expect(footer).not.toBeNull();
-    expect(footer?.querySelector(".page-citation")?.textContent).toBe("1");
-    // The block itself still never reaches the reader as raw text.
+    const rows = [...container.querySelectorAll(".citation-list li")];
+    expect(rows).toHaveLength(2);
+    expect(rows[0].textContent).toContain("ASELSAN");
+    expect(rows[1].textContent).toContain("June 2027");
+  });
+
+  it("shows each source's number and page alongside its quote", () => {
+    const { container } = render(<MarkdownMessage text={TWO} />);
+
+    const first = container.querySelector(".citation-list li");
+    expect(first?.querySelector(".page-citation")?.textContent).toBe("1");
+    expect(first?.querySelector(".citation-list-page")?.textContent).toBe("s. 1");
+    expect(first?.querySelector(".citation-list-quote")?.textContent).toBe(
+      "ASELSAN, Turkcell, OBSS Technology",
+    );
+  });
+
+  it("orders the list by citation number even when the block does not", () => {
+    const { container } = render(
+      <MarkdownMessage text={"A [2] B [1].\n\nKAYNAKLAR:\n[2] (s. 9) İkinci.\n[1] (s. 1) Birinci."} />,
+    );
+
+    const quotes = [...container.querySelectorAll(".citation-list-quote")].map(
+      (n) => n.textContent,
+    );
+    expect(quotes).toEqual(["Birinci.", "İkinci."]);
+  });
+
+  it("opens the source when a row is clicked", () => {
+    const onCitationClick = vi.fn();
+    render(<MarkdownMessage text={TWO} onCitationClick={onCitationClick} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 2, s\. 2/ }));
+
+    expect(onCitationClick).toHaveBeenCalledWith({
+      index: 2,
+      page: 2,
+      quote: "June 2027 (Expected)",
+    });
+  });
+
+  it("still lists a source the model never referenced inline", () => {
+    const { container } = render(
+      <MarkdownMessage
+        text={"Ortalama 3.83.\n\nKAYNAKLAR:\n[1] (s. 1) GPA: 3.83"} />,
+    );
+
+    expect(container.querySelector(".citation-list-quote")?.textContent).toBe("GPA: 3.83");
     expect(container.textContent).not.toContain("KAYNAKLAR:");
   });
 
-  it("keeps the unreferenced source clickable", () => {
-    const onCitationClick = vi.fn();
-    render(<MarkdownMessage text={NO_MARKERS} onCitationClick={onCitationClick} />);
-
-    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
-
-    expect(onCitationClick).toHaveBeenCalledWith(
-      expect.objectContaining({ index: 1, page: 1 }),
-    );
-  });
-
-  it("does not repeat a source that is already referenced inline", () => {
-    const { container } = render(
-      <MarkdownMessage text={"Cevap [1].\n\nKAYNAKLAR:\n[1] (s. 1) Kaynak."} />,
-    );
-
-    expect(container.querySelector(".citation-footer")).toBeNull();
-  });
-
-  it("lists only the sources that were missed", () => {
-    const { container } = render(
-      <MarkdownMessage
-        text={"Yalnızca ilki [1].\n\nKAYNAKLAR:\n[1] (s. 1) Bir.\n[2] (s. 2) İki."}
-      />,
-    );
-
-    const footerBadges = [
-      ...(container.querySelector(".citation-footer")?.querySelectorAll(".page-citation") ?? []),
-    ].map((node) => node.textContent);
-    expect(footerBadges).toEqual(["2"]);
-  });
-
-  it("shows no footer for a reply with no citations at all", () => {
+  it("renders no list for a reply with no citations", () => {
     const { container } = render(<MarkdownMessage text="Merhaba." />);
 
-    expect(container.querySelector(".citation-footer")).toBeNull();
+    expect(container.querySelector(".citation-list")).toBeNull();
   });
 });

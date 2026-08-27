@@ -171,49 +171,60 @@ export function MarkdownMessage({
     [citations, onCitationClick],
   );
 
-  // A model that writes the sources block but forgets to place the markers in
-  // its prose is common enough that dropping those sources on the floor would
-  // make the whole feature look broken -- observed on a real reply that listed
-  // [1] under KAYNAKLAR and never referenced it. Anything unreferenced is
-  // offered below the answer instead, so a source is never silently lost.
-  const orphans = useMemo(() => {
-    const referenced = new Set(
-      [...body.matchAll(MARKER_PATTERN)].map((match) => Number(match[1])),
-    );
-    return [...citations.values()].filter((citation) => !referenced.has(citation.index));
-  }, [body, citations]);
+  // Every source, listed once at the end. Showing only the ones the model
+  // forgot to reference inline read as arbitrary -- an answer with `1` beside
+  // a sentence and a bare "KAYNAKLAR 2 3" underneath looks like the last two
+  // belong to something else. A complete list is a bibliography; a partial
+  // one is a puzzle.
+  const sources = useMemo(
+    () => [...citations.values()].sort((left, right) => left.index - right.index),
+    [citations],
+  );
 
   return (
     <>
       <ReactMarkdown components={components}>{body}</ReactMarkdown>
-      {orphans.length > 0 && (
-        <p className="citation-footer">
-          <span className="citation-footer-label">Kaynaklar</span>
-          {orphans.map((citation) => {
-            const target: CitationTarget = {
-              page: citation.page,
-              quote: citation.quote,
-              index: citation.index,
-            };
-            const label = String(citation.index);
-            return onCitationClick ? (
-              <button
-                type="button"
-                className="page-citation page-citation-button"
-                key={citation.index}
-                onClick={() => onCitationClick(target)}
-                title={`Kaynağı göster: ${citation.quote}`}
-                aria-label={`Kaynak ${label}. Bu bilginin evraktaki kaynağını göster.`}
-              >
-                {label}
-              </button>
-            ) : (
-              <span className="page-citation" key={citation.index}>
-                {label}
-              </span>
-            );
-          })}
-        </p>
+      {sources.length > 0 && (
+        <section className="citation-list" aria-label="Kaynaklar">
+          <h4 className="citation-list-title">Kaynaklar</h4>
+          <ol>
+            {sources.map((citation) => {
+              const label = String(citation.index);
+              const page = citation.page ? `s. ${citation.page}` : null;
+              const content = (
+                <>
+                  <span className="page-citation" aria-hidden="true">
+                    {label}
+                  </span>
+                  {page && <span className="citation-list-page">{page}</span>}
+                  <span className="citation-list-quote">{citation.quote}</span>
+                </>
+              );
+              return (
+                <li key={citation.index}>
+                  {onCitationClick ? (
+                    <button
+                      type="button"
+                      className="citation-list-row citation-list-row-button"
+                      onClick={() =>
+                        onCitationClick({
+                          page: citation.page,
+                          quote: citation.quote,
+                          index: citation.index,
+                        })
+                      }
+                      aria-label={`Kaynak ${label}${page ? `, ${page}` : ""}. Evraktaki yerini göster.`}
+                    >
+                      {content}
+                    </button>
+                  ) : (
+                    <span className="citation-list-row">{content}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
       )}
     </>
   );

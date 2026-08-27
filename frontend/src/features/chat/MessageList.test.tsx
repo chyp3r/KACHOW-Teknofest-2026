@@ -267,7 +267,8 @@ describe("MessageList page citations", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
+    // The inline badge, not the sources-list row for the same citation.
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1\. Bu bilginin/ }));
 
     expect(onCitationClick).toHaveBeenCalledWith(
       expect.objectContaining({ page: 1, quote: "Genel not ortalaması 3.83." }),

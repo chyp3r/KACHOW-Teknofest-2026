@@ -719,12 +719,14 @@ th {
   font-weight: var(--weight-semibold);
 }
 .chat-guardrail-removed-label,
-.citation-footer-label {
+.citation-list-title {
   font-size: var(--text-overline);
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
   letter-spacing: 0.03em;
 }
+
+.citation-list-row { font-size: var(--text-caption); }
 
 @media (max-width: 47.5rem) {
   .sidebar-compact .nav-item,
