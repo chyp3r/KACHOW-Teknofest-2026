@@ -9,6 +9,16 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
 - Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
 
+### Düzeltildi
+- `datasets/sample_benchmark/` dizini gerçekte `datasets/sample/` adıyla
+  bekleniyordu (`test_compliance.py`, `field_parser.py`, altı
+  `scripts/evaluate_*`/`build_evrak_eval_set.py` betiği ve dizinin kendi 12
+  `.md` dosyasının YAML frontmatter'ı dahil ~15 referans) -- 43cd268a'da
+  külliyat `sample_benchmark` adıyla eklendiğinde, ondan önce var olup artık
+  hiçbir dal ucunda bulunmayan eski `datasets/sample/` (d9e0e237) hiç
+  güncellenmemişti. Dizin `datasets/sample/` olarak yeniden adlandırıldı
+  (`git mv`), başka hiçbir dosya değişmedi (#291).
+
 ### Değiştirildi
 - `LOCAL_MODE=false` (Evren/bulut) iken niyet (intent) yönlendirmesinde LLM
   tie-break'i artık yalnızca belirsizken değil, füzyon zaten kararlı bir
