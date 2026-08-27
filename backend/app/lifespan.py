@@ -24,6 +24,45 @@ logger = logging.getLogger(__name__)
 #: ve kalan kısmı ilk isteğe ödettirmelidir.
 WARMUP_TIMEOUT_SECONDS = 120
 
+#: Havuz doygunluğu bu oranı geçtiğinde INFO yerine WARNING loglanır.
+_POOL_WARN_RATIO = 0.8
+
+
+async def _monitor_db_pool() -> None:
+    """DB bağlantı havuzunun doygunluğunu periyodik loglar.
+
+    ``settings.DB_POOL_MONITOR_INTERVAL_SECONDS`` saniyede bir çalışır (0
+    ise hiç başlatılmaz -- bkz. ``lifespan``). Kullanılan bağlantı oranı
+    ``_POOL_WARN_RATIO``'yu geçtiğinde WARNING loglar; #288'deki gibi bir
+    tükenme, sessizce zaman aşımlarına dönüşmeden önce burada görünür.
+    """
+    from app.infrastructure.database.session import pool_status
+
+    interval = settings.DB_POOL_MONITOR_INTERVAL_SECONDS
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            stats = pool_status()
+            in_use = stats["checkedout"]
+            capacity = stats["capacity"] or 1
+            ratio = in_use / capacity
+            level = logging.WARNING if ratio >= _POOL_WARN_RATIO else logging.INFO
+            logger.log(
+                level,
+                "db_pool_status checkedout=%d capacity=%d ratio=%.2f "
+                "size=%d checkedin=%d overflow=%d",
+                in_use,
+                stats["capacity"],
+                ratio,
+                stats["size"],
+                stats["checkedin"],
+                stats["overflow"],
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.debug("db_pool_status probe failed", exc_info=True)
+
 
 async def _warm_up_models() -> None:
     """Yapılandırılmış modelleri Ollama'nın belleğine yükler."""
@@ -213,11 +252,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await seed_default_units(demo_company_id)
 
     await _startup()
+
+    pool_monitor_task: "asyncio.Task | None" = None
+    if settings.DB_POOL_MONITOR_INTERVAL_SECONDS > 0:
+        pool_monitor_task = asyncio.create_task(_monitor_db_pool())
+
     logger.info("Startup complete; accepting requests.")
     try:
         yield
     finally:
         logger.info("Shutting down %s.", settings.PROJECT_NAME)
+        if pool_monitor_task is not None:
+            pool_monitor_task.cancel()
+            try:
+                await pool_monitor_task
+            except (asyncio.CancelledError, Exception):
+                pass
         from app.infrastructure.checkpointing import close_checkpointer
 
         await close_checkpointer()

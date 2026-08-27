@@ -25,7 +25,7 @@ from app.ai.workflows.planning_graph import create_planning_graph
 from app.core.config import settings
 from app.core.enums.user_role import UserRole
 from app.core.security import decode_token
-from app.infrastructure.database.session import get_db
+from app.infrastructure.database.session import get_db, request_tenant_session
 from app.infrastructure.extractors import get_document_extractor
 from app.infrastructure.extractors.vision import EvrenVisionExtractor, OllamaVisionExtractor
 from app.infrastructure.storage import get_storage_client
@@ -59,9 +59,17 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/auth/login", auto_error=Fa
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db)
 ) -> UserModel:
-    """JWT erişim token'ından şu anda oturum açmış kullanıcıyı alıp kimliğini doğrulayan bağımlılık."""
+    """JWT erişim token'ından şu anda oturum açmış kullanıcıyı alıp kimliğini doğrulayan bağımlılık.
+
+    DB işini bilinçli olarak ``Depends(get_db)`` yerine kısa ömürlü bir
+    ``request_tenant_session()`` içinde yapar: ``get_db`` bir
+    ``yield``-bağımlılığı olduğu için tuttuğu bağlantı yalnızca HTTP yanıtı
+    tümüyle gönderildikten sonra iade edilir, ve auth neredeyse her istekte
+    çalıştığından bu, her uzun/streaming istekte bir bağlantının tüm o
+    süre boyunca ``idle in transaction`` beklemesi demekti (bkz. #288).
+    Burada bağlantı, kullanıcı araması biter bitmez bırakılır.
+    """
     if not token:
         raise AuthenticationException(message="Authentication token is missing.")
 
@@ -75,31 +83,32 @@ async def get_current_user(
     if not user_id:
         raise AuthenticationException(message="Invalid token identity.")
 
-    user_repository = UserRepository(db)
-    user_service = UserService(user_repository)
+    async with request_tenant_session() as db:
+        user_repository = UserRepository(db)
+        user_service = UserService(user_repository)
 
-    try:
-        user = await user_service.get_user_by_id(user_id)
-        if not user.is_active:
-            raise AuthenticationException(message="User account is not active.")
-    except Exception as exc:
-        raise AuthenticationException(message="User not found.") from exc
+        try:
+            user = await user_service.get_user_by_id(user_id)
+            if not user.is_active:
+                raise AuthenticationException(message="User account is not active.")
+        except Exception as exc:
+            raise AuthenticationException(message="User not found.") from exc
 
-    # En iyi çaba (best-effort) ve toplamda ucuz: `company_metrics.cached_slug`
-    # kalıcı bir süreç-içi önbellektir (bir şirketin slug'ı asla değişmez), bu
-    # yüzden bu işlem süreç ömrü boyunca şirket başına bir ek sorgu yapar,
-    # istek başına değil. ROOT'un isteği ilişkilendirebileceği bir şirketi
-    # olmadığından atlanır.
-    from app.observability import company_metrics
+        # En iyi çaba (best-effort) ve toplamda ucuz: `company_metrics.cached_slug`
+        # kalıcı bir süreç-içi önbellektir (bir şirketin slug'ı asla değişmez), bu
+        # yüzden bu işlem süreç ömrü boyunca şirket başına bir ek sorgu yapar,
+        # istek başına değil. ROOT'un isteği ilişkilendirebileceği bir şirketi
+        # olmadığından atlanır.
+        from app.observability import company_metrics
 
-    if user.company_id is not None:
-        if company_metrics.cached_slug(user.company_id) is None:
-            from app.domains.companies.repository import CompanyRepository
+        if user.company_id is not None:
+            if company_metrics.cached_slug(user.company_id) is None:
+                from app.domains.companies.repository import CompanyRepository
 
-            company = await CompanyRepository(db).get_by_id(user.company_id)
-            if company is not None:
-                company_metrics.cache_slug(user.company_id, company.slug)
-        company_metrics.note_request(user.company_id)
+                company = await CompanyRepository(db).get_by_id(user.company_id)
+                if company is not None:
+                    company_metrics.cache_slug(user.company_id, company.slug)
+            company_metrics.note_request(user.company_id)
 
     return user
 
@@ -130,7 +139,6 @@ def require_roles(*allowed_roles: UserRole):
 
 async def require_auth_if_enabled(
     token: str = Depends(oauth2_scheme),
-    db: AsyncSession = Depends(get_db),
 ) -> UserModel:
     """Kimliği doğrulanmış, tenant'a bağlı bir kullanıcı gerektirir.
 
@@ -147,7 +155,7 @@ async def require_auth_if_enabled(
     Returns:
         Kimliği doğrulanmış, aktif kullanıcı.
     """
-    return await get_current_user(token=token, db=db)
+    return await get_current_user(token=token)
 
 
 # ---------------------------------------------------------------------------

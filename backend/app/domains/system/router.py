@@ -116,6 +116,16 @@ async def build_health_payload(deep: bool) -> tuple[dict, bool]:
         data["checkpointer"] = _probe_checkpointer()
         data["router_semantic"] = _probe_router_semantic()
 
+        # Bilgilendirme amaçlı (durumu asla 503'e çevirmez): SQLAlchemy
+        # bağlantı havuzunun anlık doygunluğu -- #288'deki gibi bir
+        # tükenmeyi teşhis etmeyi kolaylaştırır.
+        from app.infrastructure.database.session import pool_status
+
+        try:
+            data["db_pool"] = pool_status()
+        except Exception:
+            data["db_pool"] = None
+
         if any(status == "fail" for status in dependencies.values()):
             data["status"] = "degraded"
             degraded = True

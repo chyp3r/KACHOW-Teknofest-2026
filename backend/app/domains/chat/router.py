@@ -9,8 +9,6 @@ from app.api.dependency import (
     get_chat_message_repository,
     get_chat_service,
     get_chat_session_repository,
-    get_document_repository,
-    get_draft_repository,
     require_auth_if_enabled,
 )
 from app.api.exceptions.authorization import AuthorizationException
@@ -28,6 +26,7 @@ from app.domains.documents.repository import DocumentRepository
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.repository import DraftRepository
 from app.domains.users.model.user_model import UserModel
+from app.infrastructure.database.session import request_tenant_session
 from app.shared.dto.pagination import PaginatedResponse, PaginationParam
 
 logger = logging.getLogger(__name__)
@@ -185,8 +184,6 @@ def _sse_response(
 async def send_chat_message(
     request: ChatMessageRequest,
     service: ChatService = Depends(get_chat_service),
-    document_repository: DocumentRepository = Depends(get_document_repository),
-    draft_repository: DraftRepository = Depends(get_draft_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
 ):
     """Bir sohbet etkileşimini düzenler ve tamamlanmış sonucu döndürür.
@@ -196,11 +193,18 @@ async def send_chat_message(
     yönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir
     ``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile
     devam ettirin.
+
+    Kısa preflight DB işi (evrak erişimi + revizyon taslağı çözümü) ayrı
+    bir kısa ömürlü oturumda yapılır ve bağlantı, dakikalarca sürebilen
+    planlama grafiği çalışmadan önce iade edilir (bkz. #288).
     """
-    await _verify_document_access(request.document_id, current_user, document_repository)
-    revision_draft = await _resolve_revision_draft(
-        request.draft_id, current_user, draft_repository
-    )
+    async with request_tenant_session() as db:
+        await _verify_document_access(
+            request.document_id, current_user, DocumentRepository(db)
+        )
+        revision_draft = await _resolve_revision_draft(
+            request.draft_id, current_user, DraftRepository(db)
+        )
     clearance = clearance_for(current_user)
     result = await service.handle_message(
         request,
@@ -218,8 +222,6 @@ async def stream_chat_message(
     request: ChatMessageRequest,
     http_request: Request,
     service: ChatService = Depends(get_chat_service),
-    document_repository: DocumentRepository = Depends(get_document_repository),
-    draft_repository: DraftRepository = Depends(get_draft_repository),
     current_user: UserModel = Depends(require_auth_if_enabled),
     _: None = Depends(rate_limit(max_requests=20, window_seconds=60, key_prefix="chat:stream")),
 ):
@@ -235,11 +237,17 @@ async def stream_chat_message(
     """
     # SSE yanıtına girmeden önce, üretici içinde değil, kontrol edilir; böylece
     # reddedilen bir istek, açılıp hemen genel bir hata bildiren bir akış
-    # yerine normal bir 403 alır.
-    await _verify_document_access(request.document_id, current_user, document_repository)
-    revision_draft = await _resolve_revision_draft(
-        request.draft_id, current_user, draft_repository
-    )
+    # yerine normal bir 403 alır. Preflight'ın kısa ömürlü oturumu, SSE akışı
+    # (dakikalarca sürebilir) başlamadan önce bağlantıyı iade eder -- aksi
+    # halde `Depends(get_db)` onu tüm akış boyunca `idle in transaction`
+    # tutardı (bkz. #288).
+    async with request_tenant_session() as db:
+        await _verify_document_access(
+            request.document_id, current_user, DocumentRepository(db)
+        )
+        revision_draft = await _resolve_revision_draft(
+            request.draft_id, current_user, DraftRepository(db)
+        )
     user_id = current_user.id
     clearance = clearance_for(current_user)
     return _sse_response(
