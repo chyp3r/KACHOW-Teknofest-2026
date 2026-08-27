@@ -5,6 +5,7 @@
 // disappearing.
 const TOOL_LABELS: Record<string, string> = {
   search_document: "Belgede arama",
+  search_document_regex: "Belgede metin araması",
   get_document_details: "Belge özeti ve üst verisi",
   get_document_outline: "Belge sayfa dökümü",
   get_document_section: "Belge sayfası okuma",

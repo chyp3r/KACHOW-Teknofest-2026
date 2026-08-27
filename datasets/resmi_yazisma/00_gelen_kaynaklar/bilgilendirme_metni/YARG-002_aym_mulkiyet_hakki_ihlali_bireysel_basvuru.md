@@ -13,10 +13,10 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
-# Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2020/18234
+# Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: [BAŞVURU NUMARASI]
 
 **ANAYASA MAHKEMESİ**
 **BİRİNCİ BÖLÜM**
@@ -25,7 +25,7 @@ anonimlestirilen_alan_sayisi: "4"
 **Başvuru Numarası:** 2020/18234
 **R.G. Tarih-Sayı:** 18/01/2024 - 32433
 
-**BAŞVURAN:** [KİŞİ ADI]
+**BAŞVURAN:** [BAŞVURU SAHİBİ]
 **VEKİLİ:** Av. [VEKİL ADI]
 
 **BAŞVURUNUN KONUSU:** Başvuranın maliki olduğu taşınmazın imar planında uzun yıllar kamu hizmet alanı (yeşil alan/okul alanı) olarak ayrılmasına karşın kamulaştırılmaması ve inşaat izni verilmemesi nedeniyle mülkiyet hakkının ihlal edildiği iddiasına ilişkindir.
@@ -41,5 +41,5 @@ Açıklanan gerekçelerle;
 3. İhlalin sonuçlarının ortadan kaldırılması için yeniden yargılama yapılmak üzere dosyanın ilgili İdare Mahkemesine GÖNDERİLMESİNE,
 4. Başvurana 50.000 TL manevi tazminat ve 9.900 TL yargılama giderinin ÖDENMESİNE OYBİRLİĞİYLE karar verildi.
 
-**Başkan:** Hasan Tahsin GÖKCAN
-**Üyeler:** [KİŞİ ADI], [KİŞİ ADI], İrfan FİDAN.
+**Başkan:** [KİŞİ ADI]
+**Üyeler:** [KİŞİ ADI]

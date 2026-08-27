@@ -31,7 +31,7 @@ TALEBİM:
 Ürün bedelinin iadesi / ürünün değiştirilmesi / ücretsiz onarım yapılması hususunda gereğinin yapılmasını arz ederim.
 
 02.12.2023
-[KİŞİ ADI]
+[İMZA SAHİBİ]
 İmza
 
 EKLER:

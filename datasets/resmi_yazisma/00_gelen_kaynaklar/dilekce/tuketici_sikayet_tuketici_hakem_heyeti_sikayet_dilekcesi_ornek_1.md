@@ -8,14 +8,14 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # Tüketici Hakem Heyeti Şikayet Dilekçesi (Ornek 1)
 
 Izmir İL TÜKETİCİ HAKEM HEYETİ BAŞKANLIĞI'NA
 
-ŞİKAYETÇİ: Ayse Demir (T.C.: [T.C. KİMLİK NO])
+ŞİKAYETÇİ: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
 Adres: [ADRES]
 Tel: [TELEFON]
 
@@ -31,7 +31,7 @@ TALEBİM:
 Ürün bedelinin iadesi / ürünün değiştirilmesi / ücretsiz onarım yapılması hususunda gereğinin yapılmasını arz ederim.
 
 02.03.2025
-Ayse Demir
+[İMZA SAHİBİ]
 İmza
 
 EKLER:

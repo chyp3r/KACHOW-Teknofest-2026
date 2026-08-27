@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Ortaca Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Ortaca Belediye Meclis Kararı (Karar No: 63)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Karar No:** 63
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 Plan ve Bütçe Komisyonu'nun 2026 Mali Yılı Evsel Katı Atık Tarifelerinin su aboneliği bulunmayan sözleşmesiz katı atık üreticilerine uygulanması ve tahsilat usulü hakkındaki raporu.

@@ -37,6 +37,38 @@ describe("ChatComposer", () => {
     render(<MemoryRouter><ChatComposer {...baseProps} loading={false} /></MemoryRouter>);
 
     expect(screen.getByRole("button", { name: "Evrak veya taslak ekle" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Çalışma modu" })).toHaveValue("balanced");
+    expect(screen.getByRole("combobox", { name: "Çalışma modu" })).toHaveAttribute("aria-valuetext", "Dengeli");
+  });
+
+  it("opens the working mode choices above the composer", () => {
+    render(<MemoryRouter><ChatComposer {...baseProps} loading={false} /></MemoryRouter>);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Çalışma modu" }));
+
+    expect(screen.getByRole("listbox")).toHaveStyle({ top: "8px" });
+  });
+
+  it("keeps context compaction available beside the working mode", () => {
+    const onCompact = vi.fn();
+    render(
+      <MemoryRouter>
+        <ChatComposer
+          {...baseProps}
+          loading={false}
+          onCompact={onCompact}
+          contextUsage={{
+            used: 4_096,
+            total: 8_192,
+            free: 4_096,
+            segments: [{ key: "history", label: "Sohbet geçmişi", tokens: 4_096 }],
+          }}
+        />
+      </MemoryRouter>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Bağlam penceresi/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Bağlamı sıkıştır" }));
+
+    expect(onCompact).toHaveBeenCalledTimes(1);
   });
 });

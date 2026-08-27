@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "3"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # Belediye İmar Planı İtiraz Dilekçesi (Ornek 3)
@@ -29,7 +29,7 @@ Söz konusu plan değişikliği ile taşınmazımın bulunduğu alanın yapıla�
 Gereğini arz ederim.
 
 01.06.2020
-Ayse Demir
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Tel: [TELEFON]

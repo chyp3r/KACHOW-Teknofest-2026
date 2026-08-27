@@ -656,6 +656,60 @@ describe("useChatWorkflow", () => {
     ).toBe(true);
   });
 
+  it("keeps the live animation flag when server history refreshes the same final reply", async () => {
+    const draftDetails = {
+      draft: {
+        draft: "Taslak hazır.",
+        status: "COMPLETED",
+        combined_score: 92,
+      },
+    };
+    mocks.messages.mockResolvedValue({
+      items: [
+        {
+          id: "message-user",
+          role: "user",
+          content: "taslak hazırla",
+          workflow_status: null,
+          details: null,
+          created_at: "2026-08-27T10:00:00Z",
+        },
+        {
+          id: "message-assistant",
+          role: "assistant",
+          content: "Taslak hazır.",
+          workflow_status: "COMPLETED",
+          details: draftDetails,
+          created_at: "2026-08-27T10:00:01Z",
+        },
+      ],
+      total: 2,
+      page: 1,
+      page_size: 50,
+    });
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:thread" });
+      onEvent({
+        event: "final_result",
+        reply: "Taslak hazır.",
+        workflow_status: "COMPLETED",
+        details: draftDetails,
+      });
+    });
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+
+    await act(() => result.current.send("taslak hazırla", "balanced", false));
+    await waitFor(() => expect(mocks.messages).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(result.current.messages[result.current.messages.length - 1]).toMatchObject({
+        id: "message-assistant",
+        sender: "assistant",
+        text: "Taslak hazır.",
+        animate: true,
+      }),
+    );
+  });
+
   it("keeps transport chunks out of UI state until the final reply is ready", async () => {
     let emitToken: (() => void) | undefined;
     mocks.send.mockImplementationOnce(async (_request, onEvent) => {

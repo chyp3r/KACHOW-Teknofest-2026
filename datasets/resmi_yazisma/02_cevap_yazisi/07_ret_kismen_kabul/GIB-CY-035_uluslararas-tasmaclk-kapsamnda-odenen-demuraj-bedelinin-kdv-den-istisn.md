@@ -38,7 +38,7 @@ Sayı
 
 :
 
-[EVRAK SAYISI]Özelge]-3473
+[EVRAK SAYISI]
 
 02.01.2026
 

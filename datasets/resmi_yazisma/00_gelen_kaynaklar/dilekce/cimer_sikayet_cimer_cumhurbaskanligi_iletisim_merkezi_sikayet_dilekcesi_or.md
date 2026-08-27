@@ -15,7 +15,7 @@ anonimlestirilen_alan_sayisi: "5"
 
 CUMHURBAŞKANLIĞI İLETİŞİM MERKEZİ'NE (CİMER)
 
-Başvuru Sahibi: [KİŞİ ADI]
+Başvuru Sahibi: [BAŞVURU SAHİBİ]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Telefon: [TELEFON]
@@ -31,7 +31,7 @@ Bu konuda ilgili kuruma (Belediye Baskanligi) defalarca başvuruda bulunmama ra�
 Mağduriyetimin giderilmesi ve ilgili kamu kurumunun denetlenmesi hususunda gereğini saygılarımla arz ederim.
 
 24.06.2022
-[KİŞİ ADI]
+[İMZA SAHİBİ]
 İmza
 
 EKLER:

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChatMessage, InterruptState } from "../../types/chat";
 import { MessageList } from "./MessageList";
 
@@ -21,6 +21,10 @@ function renderWithQueryClient(ui: ReactNode) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe("MessageList", () => {
   it("offers general conversation starters when no document or draft is selected", () => {
@@ -223,6 +227,54 @@ describe("MessageList", () => {
     expect(screen.queryByRole("button", { name: "Beğendim" })).not.toBeInTheDocument();
   });
 
+  it("shows draft confidence only after the live message animation completes", () => {
+    vi.useFakeTimers();
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={[{
+          sender: "assistant",
+          text: "Hazırlanan resmî yazı taslağı burada gösterilir.",
+          animate: true,
+          details: {
+            draft: {
+              draft: "Hazırlanan resmî yazı taslağı burada gösterilir.",
+              status: "COMPLETED",
+              combined_score: 92,
+            },
+          },
+        }]}
+      />,
+    );
+
+    expect(screen.queryByText("Güven skoru: 92/100")).not.toBeInTheDocument();
+
+    act(() => vi.advanceTimersByTime(10_000));
+
+    expect(screen.getByText("Güven skoru: 92/100")).toBeInTheDocument();
+  });
+
+  it("does not replay a completed live reply after returning to the chat", () => {
+    vi.useFakeTimers();
+    const reply: ChatMessage = {
+      id: "reply-1",
+      sender: "assistant",
+      text: "Bu yanıt yalnızca ilk gelişinde animasyonlu olmalı.",
+      animate: true,
+    };
+    const firstVisit = renderWithQueryClient(
+      <MessageList {...baseProps} sessionId="session-1" messages={[reply]} />,
+    );
+
+    act(() => vi.advanceTimersByTime(10_000));
+    firstVisit.unmount();
+    const secondVisit = renderWithQueryClient(
+      <MessageList {...baseProps} sessionId="session-1" messages={[reply]} />,
+    );
+
+    expect(secondVisit.container.querySelector(".streaming-caret")).toBeNull();
+  });
+
   it("shows document analysis as a compact message in the conversation", () => {
     const { container } = renderWithQueryClient(
       <MessageList {...baseProps} uploadingDocumentName="Başvuru.pdf" />,
@@ -233,5 +285,56 @@ describe("MessageList", () => {
     expect(screen.getByText("Evrak yükleniyor")).toBeInTheDocument();
     expect(screen.getByText("Başvuru.pdf")).toBeInTheDocument();
     expect(screen.queryByText("Nasıl yardımcı olabilirim?")).not.toBeInTheDocument();
+  });
+});
+
+// ==========================================
+// Page citations reaching the rendered message
+// ==========================================
+describe("MessageList page citations", () => {
+  const citedMessage: ChatMessage[] = [
+    {
+      id: "m1",
+      sender: "assistant",
+      text: "Not ortalaması 3.83'tür [1].\n\nKAYNAKLAR:\n[1] (s. 1) Genel not ortalaması 3.83.",
+    } as ChatMessage,
+  ];
+
+  it("renders a citation in a finished message as a badge, hiding the block", () => {
+    const { container } = renderWithQueryClient(
+      <MessageList {...baseProps} messages={citedMessage} />,
+    );
+
+    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
+    expect(container.textContent).not.toContain("KAYNAKLAR");
+  });
+
+  it("makes the badge clickable once a citation handler is wired through", () => {
+    const onCitationClick = vi.fn();
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={citedMessage}
+        onCitationClick={onCitationClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
+
+    expect(onCitationClick).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, quote: "Genel not ortalaması 3.83." }),
+    );
+  });
+
+  it("badges a citation in the streaming preview too", () => {
+    const { container } = renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        loading
+        streamingText={"Sonuç şudur [1].\n\nKAYNAKLAR:\n[1] (s. 2) Kaynak cümlesi."}
+      />,
+    );
+
+    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
   });
 });

@@ -8,17 +8,17 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Noterden İhtarname Örneği (Ornek 1)
 
 İHTARNAME
 
-İHTAR EDEN: Mustafa Celik (T.C.: [T.C. KİMLİK NO])
+İHTAR EDEN: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
 Adres: [ADRES]
 
-MUHATAP: Selin Gunes
+MUHATAP: [KİŞİ ADI]
 Adres: [ADRES]
 
 KONU: Kira borcunun ödenmesi ihtarıdır.
@@ -34,5 +34,5 @@ Sayın Muhatap,
 
 08.09.2024
 İhtar Eden
-Mustafa Celik
+[İMZA SAHİBİ]
 İmza

@@ -16,7 +16,7 @@ anonimlestirilen_alan_sayisi: "5"
 Il Saglik Mudurlugu
 BİLGİ EDİNME BİRİMİ'NE
 
-Başvuru Sahibi: [KİŞİ ADI]
+Başvuru Sahibi: [BAŞVURU SAHİBİ]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Telefon: [TELEFON]
@@ -34,5 +34,5 @@ Kanun'un 11. maddesi gereğince başvuruma 15 iş günü içinde cevap verilmesi
 Gereğini saygılarımla arz ederim.
 
 09.08.2022
-[KİŞİ ADI]
+[İMZA SAHİBİ]
 İmza

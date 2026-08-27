@@ -38,7 +38,7 @@ Sayı
 
 :
 
-[EVRAK SAYISI]:13-1]-64962
+[EVRAK SAYISI]
 
 18.12.2025
 

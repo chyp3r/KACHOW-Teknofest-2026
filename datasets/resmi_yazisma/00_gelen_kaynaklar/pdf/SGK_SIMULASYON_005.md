@@ -15,7 +15,7 @@ rag_status: "rejected"
 ret_nedeni: "sentetik_simulasyon_yalniz_test"
 kaynak_kurum: "Sosyal Güvenlik Kurumu"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # İş Kazası Bildirim Tutanağı - Belge No 5
@@ -27,7 +27,7 @@ Tarih: 25.01.2022
 Konu: İş Kazası Bildirim Tutanağı - Belge No 5
 İLGİLİ MAKAMA
 İlgi: 5510 sayılı Kanun Madde 13 ve İş Kazası ve Meslek Hastalığı Bildirim Tebliği
-25.05.2021 tarihinde Kayseri ili Ortahisar ilçesinde faaliyet gösteren işyerinde (Sicil No: 250) meydana gelen
+25.05.2021 tarihinde Kayseri ili Ortahisar ilçesinde faaliyet gösteren işyerinde (Sicil No: [SİCİL NUMARASI]) meydana gelen
 iş kazası İl Müdürlüğümüze bildirilmiştir. [KİŞİ ADI] (TCKN: [T.C. KİMLİK NO]) adlı sigortalı
 yaralanmış olup, Kayseri Devlet Hastanesi'nde tedavi altına alınmıştır. SGK müfettişlerince yapılan
 incelemede iş güvenliği mevzuatına aykırılıklar tespit edilmiş olup, işverene idari para cezası uygulanması ve

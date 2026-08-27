@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "İstanbul Su ve Kanalizasyon İdaresi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "9"
 ---
 
 # İSKİ/ASKİ Su Aboneliği İptal Dilekçesi (Ornek 1)
@@ -20,9 +20,9 @@ Konu: Su Aboneliği İptal Talebi
 Aşağıda bilgileri yazılı olan su aboneliğimin, taşınmazımı satmam/taşınmam nedeniyle iptal edilmesini talep ediyorum.
 
 Abonelik Bilgileri:
-- Abone No: 562964
-- Sayaç No: 27649458
-- Abone Adı: Burak Sahin
+- Abone No: [ABONE NUMARASI]
+- Sayaç No: [SAYAÇ NUMARASI]
+- Abone Adı: [KİŞİ ADI]
 - T.C. Kimlik No: [T.C. KİMLİK NO]
 [KURUM ADRESİ]
 
@@ -33,7 +33,7 @@ Son sayaç endeksi okunarak, varsa bakiye borcumun hesaplanmasını ve iade edil
 IBAN: [IBAN]
 
 13.01.2022
-Burak Sahin
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Tel: [TELEFON]
 

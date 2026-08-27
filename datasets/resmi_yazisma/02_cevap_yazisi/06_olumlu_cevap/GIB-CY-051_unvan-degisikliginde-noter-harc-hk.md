@@ -32,7 +32,7 @@ Bursa Defterdarlığı
 Gelir Kanunları Grup Müdürlüğü
 Sayı
 :
-[EVRAK SAYISI]Ç-26-410]-184214
+[EVRAK SAYISI]
 06.05.2026
 Konu
 :

@@ -82,6 +82,20 @@ def test_bold_number_and_subject_on_one_line_are_preserved_as_two_fields():
     assert anonymized == "**Sayı:** [EVRAK SAYISI]\n**Konu:** Bütçe Ödeneği Aktarımı"
 
 
+def test_public_official_document_and_decision_numbers_are_not_blindly_removed():
+    text = "**Sayı:** E-12345678-2026/42\n**Esas Sayısı:** 2023/131\n**Karar Sayısı:** 2023/160"
+
+    assert prepare.semantic_anonymize(text) == text
+
+
+def test_corrupted_masked_document_number_tail_is_collapsed_without_touching_prose():
+    text = "[EVRAK SAYISI]ük. 20/B-2024/13]-25650\nMetin [EVRAK SAYISI] ile ilgilidir."
+
+    assert prepare.semantic_anonymize(text) == (
+        "[EVRAK SAYISI]\nMetin [EVRAK SAYISI] ile ilgilidir."
+    )
+
+
 def test_semantic_anonymization_masks_generated_personal_data():
     text = "Ahmet Yılmaz (TCKN: 12345678901) adlı kişinin adresi.\nAdres: Test Mah. No: 3"
 
@@ -149,11 +163,182 @@ def test_role_specific_names_and_identifiers_use_semantic_placeholders():
     anonymized = prepare.semantic_anonymize(text)
 
     assert "Başvuran: [BAŞVURU SAHİBİ]" in anonymized
-    assert "Vekili: [VEKİL ADI]" in anonymized
+    assert "Vekili: Av. [VEKİL ADI]" in anonymized
     assert "İmza Sahibi: [İMZA SAHİBİ]" in anonymized
-    assert "Personel Sicil No: [KAYIT NUMARASI]" in anonymized
+    assert "Personel Sicil No: [SİCİL NUMARASI]" in anonymized
     assert "IBAN: [IBAN]" in anonymized
     assert not any(name in anonymized for name in ("Ayşe", "Mehmet", "Fatma"))
+
+
+def test_turkish_circumflex_vowels_are_not_truncated_mid_word():
+    """``Millî``/``resmî``/``kâğıt`` use letters (â/î/û) formal Turkish
+    correspondence relies on. A name/institution regex's capitalized-word
+    character class silently missed them, so it stopped matching one letter
+    short and left a dangling circumflex vowel glued to the untouched
+    remainder (e.g. ``[KİŞİ ADI]î Eğitim Müdürü``) instead of covering the
+    whole honorific+title run.
+    """
+    text = "Sayın İl Millî Eğitim Müdürü, başvurunuz incelenmiştir."
+
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert anonymized == "Sayın [KİŞİ ADI], başvurunuz incelenmiştir."
+    assert "î" not in anonymized.split("]")[1].split(",")[0]
+
+
+def test_bench_title_is_not_masked_as_a_legal_representative():
+    """``Başkanvekili`` is a court title, not an attorney."""
+    text = (
+        "**Başkanvekili:** Hasan Tahsin Gokcan\n"
+        "**VEKİLİ:** Av. Mehmet Ozturk"
+    )
+
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert "**Başkanvekili:** [KİŞİ ADI]" in anonymized
+    assert "**VEKİLİ:** Av. [VEKİL ADI]" in anonymized
+    # Older runs stored the wrong placeholder; the pass must converge on rerun.
+    assert prepare.semantic_anonymize("**Başkanvekili:** [VEKİL ADI]") == (
+        "**Başkanvekili:** [KİŞİ ADI]"
+    )
+    assert prepare.semantic_anonymize(anonymized) == anonymized
+
+
+def test_markdown_role_lists_ascii_names_and_context_identifiers_are_masked():
+    text = (
+        "**Başkan:** Kadir Ozkaya\n"
+        "**Üyeler:** Basri Bagci, Kenan Yasar\n"
+        "- Abone No: 397420\n"
+        "- Sayaç No: 80470643\n"
+        "- SGK Sicil No: 123456\n"
+        "E-posta: bilgi[at]example.org\n"
+        "Selin Gunes\nİmza"
+    )
+
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert "**Başkan:** [KİŞİ ADI]" in anonymized
+    assert "**Üyeler:** [KİŞİ ADI]" in anonymized
+    assert "- Abone No: [ABONE NUMARASI]" in anonymized
+    assert "- Sayaç No: [SAYAÇ NUMARASI]" in anonymized
+    assert "- SGK Sicil No: [SİCİL NUMARASI]" in anonymized
+    assert "E-posta: [E-POSTA]" in anonymized
+    assert "[İMZA SAHİBİ]\nİmza" in anonymized
+    assert not any(
+        value in anonymized
+        for value in ("Kadir", "Basri", "Kenan", "397420", "80470643", "123456", "Selin")
+    )
+
+
+def test_contextual_audit_never_copies_sensitive_value_and_is_idempotent():
+    text = "Başvuran: Ayse Demir\nAbone No: 397420\nE-posta: kisi[at]example.org"
+
+    findings = prepare._audit_privacy_findings(text)
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert findings
+    assert {finding["bulgu_turu"] for finding in findings} >= {
+        "rol_etiketli_kisi_adi",
+        "abone_numarasi",
+        "obfuscated_e_posta",
+    }
+    serialized = json.dumps(findings, ensure_ascii=False)
+    assert "Ayse Demir" not in serialized
+    assert "397420" not in serialized
+    assert "kisi[at]example.org" not in serialized
+    assert all(finding["satir"] >= 1 and finding["bolum"] for finding in findings)
+    assert prepare.semantic_anonymize(anonymized) == anonymized
+
+
+def test_unlabelled_tckn_requires_checksum_but_labelled_value_is_always_protected():
+    invalid_bare = "Belge referansı 12345678901 olarak kaydedildi."
+    labelled = "TCKN: 12345678901"
+
+    assert "12345678901" in prepare.semantic_anonymize(invalid_bare)
+    assert prepare.semantic_anonymize(labelled) == "TCKN: [T.C. KİMLİK NO]"
+    assert prepare._valid_tckn("10000000146")
+    assert prepare.semantic_anonymize("10000000146") == "[T.C. KİMLİK NO]"
+
+
+def test_reported_regression_cards_have_no_automatically_fixable_privacy_finding_after_pass():
+    stems = (
+        "YARG-001_aym_ek_mtv_iptal_isteminin_reddi",
+        "YARG-002_aym_mulkiyet_hakki_ihlali_bireysel_basvuru",
+        "YARG-003_aym_makul_surede_yargilanma_hakki",
+        "YARG-004_aym_iyuk_parasal_sinirlar_iptal_karari",
+        "YARG-007_aym_ifade_ozgurllugu_ve_erisim_engeli",
+        "bosanma_dava_anlasmali_bosanma_dava_dilekcesi_ornek_2",
+        "dilekceornegi_kunye",
+        "iski_abone_iptal_iskiaski_su_aboneligi_iptal_dilekcesi_ornek_2",
+        "iskur_ise_kayit_iskur_issizlik_maasi_basvuru_dilekcesi_ornek_2",
+        "iskur_ise_kayit_iskur_issizlik_maasi_basvuru_dilekcesi_ornek_3",
+        "kdk_basvuru_kamu_denetciligi_kurumu_ombudsman_basvuru_dilekcesi_ornek_1",
+        "kdk_basvuru_kamu_denetciligi_kurumu_ombudsman_basvuru_dilekcesi_ornek_2",
+    )
+
+    for stem in stems:
+        paths = list(prepare.CORPUS_ROOT.rglob(f"{stem}.md"))
+        assert paths, f"Regression card not found: {stem}"
+        for path in paths:
+            _meta, body = prepare.split_front_matter(path.read_text(encoding="utf-8"))
+            sanitized = prepare.semantic_anonymize(prepare.normalize_markdown(body))
+            findings = prepare._audit_privacy_findings(sanitized)
+            assert not [
+                finding for finding in findings if finding["otomatik_duzeltilebilir"]
+            ], path.as_posix()
+
+
+def test_committed_audit_manifest_never_republishes_a_raw_personal_value():
+    """The shipped audit manifest must stay a structural report, not a leak."""
+    manifest = prepare.ANONYMIZATION_AUDIT_MANIFEST
+    if not manifest.exists():
+        return
+
+    allowed_keys = {
+        "bolum",
+        "bulgu_id",
+        "bulgu_turu",
+        "dosya",
+        "duzeltme_durumu",
+        "guven",
+        "insan_incelemesi_gerekli",
+        "kart_id",
+        "maskeli_onizleme",
+        "onem",
+        "onerilen_yer_tutucu",
+        "otomatik_duzeltilebilir",
+        "satir",
+    }
+    for line in manifest.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        finding = json.loads(line)
+        assert set(finding) <= allowed_keys, sorted(set(finding) - allowed_keys)
+        assert finding["maskeli_onizleme"] == (
+            f"[MASKELİ ÖNİZLEME: {finding['bulgu_turu']}]"
+        )
+        # ``bolum`` is the nearest heading and is the only free-text field, so
+        # it is the one place a value could accidentally travel through.
+        assert not prepare._EMAIL.search(finding["bolum"])
+        assert not prepare._IBAN.search(finding["bolum"])
+        assert not prepare._PHONE.search(finding["bolum"])
+        assert not prepare._TCKN.search(finding["bolum"])
+
+
+def test_parenthetical_role_qualified_label_still_masks_the_name():
+    """A petition can qualify its lead label with a role synonym in
+    parentheses (e.g. ``İTİRAZ EDEN (DAVACI):``). This surfaced from the
+    pilot vaka generator's own output: the plain ``DAVACI:`` label was
+    already masked, but the compound form left the name untouched because
+    the line didn't start with a recognised label.
+    """
+    text = "İTİRAZ EDEN (DAVACI): Mehmet Özdemir\nADRES: Test Mah. No:5"
+
+    anonymized = prepare.semantic_anonymize(text)
+
+    assert "İTİRAZ EDEN (DAVACI): [KİŞİ ADI]" in anonymized
+    assert "Mehmet" not in anonymized
+    assert "Özdemir" not in anonymized
 
 
 def test_source_institution_prefers_provenance_and_preserves_institutions(tmp_path):
@@ -263,6 +448,34 @@ def test_simulation_card_is_kept_for_tests_but_never_enters_production_rag(tmp_p
 
     assert status == "rejected"
     assert reason == "sentetik_simulasyon_yalniz_test"
+
+
+def test_quality_gate_writes_the_simulation_verdict_into_the_card(tmp_path):
+    """`curate` gates on the card's own rag_status, so the card must carry it.
+
+    Reporting the verdict only through `_effective_rag_decision` is not
+    enough: a full `--apply` rewrites the card from the raw PDF and would
+    otherwise stamp a readable simulation as `candidate`, letting randomised
+    synthetic letterheads into the production retrieval corpus.
+    """
+    body = "# Simülasyon Kararı\n\n" + ("Yeterince uzun gövde metni. " * 20)
+
+    status, reason = prepare.assess_quality(
+        body,
+        source=tmp_path / "ANKARA_BSB_SIMULASYON_001.pdf",
+        page_count=1,
+        quality_score=0.99,
+        title="Simülasyon Kararı",
+    )
+
+    assert (status, reason) == ("rejected", "sentetik_simulasyon_yalniz_test")
+    assert prepare.assess_quality(
+        body,
+        source=tmp_path / "GERCEK_BELGE_001.pdf",
+        page_count=1,
+        quality_score=0.99,
+        title="Gerçek Belge",
+    ) == ("candidate", "")
 
 
 def test_qa_sample_prefers_clean_quarantine_derivative_over_raw_petition():
@@ -442,20 +655,125 @@ def test_front_matter_completion_adds_every_required_field(tmp_path, monkeypatch
     assert completed["baslik"] == "Proje Teklifi"
 
 
-def test_os_coherence_gate_rejects_the_reported_budget_health_mismatch():
-    body = (
-        "İl Umumi Hıfzıssıhha Kurulu, Vali başkanlığında toplanmıştır. "
-        "İl genelinde halk sağlığını tehdit eden unsurlara karşı denetimler artırılacaktır."
-    )
+_OS_MECLIS_BODY = (
+    "Söz konusu meclis kararı, 5393 sayılı Belediye Kanununun ilgili maddeleri "
+    "uyarınca oy birliği ile kabul edilmiştir."
+)
+_OS_HIFZISSIHHA_BODY = (
+    "İl Umumi Hıfzıssıhha Kurulu, Vali başkanlığında toplanarak aşağıdaki "
+    "kararları almıştır: İl genelinde halk sağlığını tehdit eden unsurlara "
+    "karşı denetimler artırılacaktır."
+)
+_OS_UYGUNLUK_BODY = (
+    "İlgi kayıtlı yazınız incelenmiş olup, talep edilen hususlar mevzuat "
+    "çerçevesinde değerlendirilmiştir. Kurumumuzca yapılan inceleme neticesinde "
+    "belirtilen işlemlerin uygun olduğu mütalaa edilmiştir."
+)
+_OS_BILGI_EDINME_BODY = (
+    "Başvurunuz, 4982 sayılı Bilgi Edinme Hakkı Kanunu kapsamında incelenmiştir."
+)
 
-    assert prepare.os_is_coherent("Bütçe Ödeneği Aktarımı Hakkında", body) == (
-        False,
-        "hifzissihha",
+
+def test_os_coherence_gate_rejects_the_reported_budget_health_mismatch():
+    assert prepare.os_is_coherent(
+        "Bütçe Ödeneği Aktarımı Hakkında",
+        _OS_HIFZISSIHHA_BODY,
+        kategori="03_bilgilendirme_metni",
+        kurum="T.C. İzmir Valiliği",
+    ) == (False, "hifzissihha_karari", "baslik_govde_uyumsuzlugu")
+
+    assert prepare.os_is_coherent(
+        "Halk Sağlığı Tedbirleri Hakkında",
+        _OS_HIFZISSIHHA_BODY,
+        kategori="03_bilgilendirme_metni",
+        kurum="T.C. İzmir Valiliği",
+    ) == (True, "hifzissihha_karari", "")
+
+
+def test_os_coherence_gate_is_fail_closed_for_unknown_bodies():
+    """The old gate funnelled unrecognised bodies into a "genel" bucket that
+    returned True unconditionally, so any body pattern the matcher did not
+    literally know about was waved straight through to ``candidate``."""
+    assert prepare.os_body_kind("Tamamen tanınmayan bir gövde metni.") == "taninmayan"
+    assert prepare.os_is_coherent(
+        "İmar Planı Değişikliği Hakkında",
+        "Tamamen tanınmayan bir gövde metni.",
+        kategori="04_diger_resmi_yazisma",
+        kurum="T.C. Ankara Büyükşehir Belediye Başkanlığı",
+    ) == (False, "taninmayan", "taninmayan_govde_kalibi")
+
+
+def test_os_gate_rejects_each_reported_mismatch_class():
+    """The three cards the data owner flagged, each failing a different one
+    of the generator's three independent random draws."""
+    # OS-02-011: a municipal council vote filed under a Sayıştay-report title.
+    assert prepare.os_is_coherent(
+        "Sayıştay Denetim Raporu Hakkında",
+        _OS_MECLIS_BODY,
+        kategori="02_cevap_yazisi itiraz_cevabi",
+        kurum="T.C. Karşıyaka Kaymakamlığı",
+    ) == (False, "belediye_meclis_karari", "baslik_govde_uyumsuzlugu")
+
+    # OS-01-010: a generic "found appropriate" opinion answering an objection.
+    assert prepare.os_is_coherent(
+        "Kamu İhale Kurumu İtirazı Hakkında",
+        _OS_UYGUNLUK_BODY,
+        kategori="01_ust_yazi ust_yazi",
+        kurum="T.C. Millî Eğitim Bakanlığı",
+    ) == (False, "genel_uygunluk_gorusu", "baslik_govde_uyumsuzlugu")
+
+    # OS-04-032: title and body agree, but a bilgi-edinme *reply* is filed
+    # under "diğer resmî yazışma" rather than "cevap yazısı".
+    assert prepare.os_is_coherent(
+        "Bilgi Edinme Başvurusu Cevabı Hakkında",
+        _OS_BILGI_EDINME_BODY,
+        kategori="04_diger_resmi_yazisma diger_resmi_yazisma",
+        kurum="T.C. Sosyal Güvenlik Kurumu Başkanlığı",
+    ) == (False, "bilgi_edinme_cevabi", "kategori_govde_uyumsuzlugu")
+
+
+def test_os_gate_rejects_a_body_whose_deciding_organ_contradicts_the_letterhead():
+    """Only a municipality passes a "belediye meclis kararı" -- the title and
+    category can both line up and the card still be nonsense."""
+    assert prepare.os_is_coherent(
+        "İmar Planı Değişikliği Hakkında",
+        _OS_MECLIS_BODY,
+        kategori="04_diger_resmi_yazisma meclis_karari",
+        kurum="T.C. Anayasa Mahkemesi",
+    ) == (False, "belediye_meclis_karari", "kurum_govde_uyumsuzlugu")
+
+    assert prepare.os_is_coherent(
+        "İmar Planı Değişikliği Hakkında",
+        _OS_MECLIS_BODY,
+        kategori="04_diger_resmi_yazisma meclis_karari",
+        kurum="T.C. Ankara Büyükşehir Belediye Başkanlığı",
+    ) == (True, "belediye_meclis_karari", "")
+
+    # OS-01-133: the body says "Bakanlığımızca yürütülen projeler", which a
+    # constitutional court never writes about itself.
+    proje_body = (
+        "Bakanlığımızca yürütülen projeler kapsamında, ekte sunulan raporların "
+        "ivedilikle incelenerek sonucundan tarafımıza bilgi verilmesi hususunda "
+        "gereğini rica ederim."
     )
-    assert prepare.os_is_coherent("Halk Sağlığı Denetimleri Hakkında", body) == (
-        True,
-        "hifzissihha",
-    )
+    assert prepare.os_is_coherent(
+        "Kentsel Dönüşüm Projesi Hakkında",
+        proje_body,
+        kategori="01_ust_yazi ust_yazi",
+        kurum="T.C. Anayasa Mahkemesi",
+    ) == (False, "proje_rapor_iletimi", "kurum_govde_uyumsuzlugu")
+
+
+def test_os_gate_matches_titles_with_turkish_dotted_capitals():
+    """``"İ".casefold()`` expands to ``i`` plus a combining dot, so a plain
+    casefold comparison silently misses every title starting with İ."""
+    assert prepare._fold_tr("İmar Planı") == "imar planı"
+    assert prepare.os_is_coherent(
+        "İmar Planı Değişikliği Hakkında",
+        _OS_UYGUNLUK_BODY,
+        kategori="02_cevap_yazisi cevap_yazisi",
+        kurum="T.C. İzmir Valiliği",
+    ) == (True, "genel_uygunluk_gorusu", "")
 
 
 def test_existing_same_stem_card_is_preferred_over_creating_a_second_card(tmp_path):
@@ -488,6 +806,11 @@ def test_source_institution_prefers_curated_metadata_over_ocr_unit_heading(tmp_p
 def test_analysis_outputs_write_statistics_manifest_and_balanced_qa(tmp_path, monkeypatch):
     corpus_root = tmp_path / "datasets" / "resmi_yazisma"
     monkeypatch.setattr(prepare, "ANONYMIZATION_MANIFEST", corpus_root / "manifest.jsonl")
+    monkeypatch.setattr(
+        prepare,
+        "ANONYMIZATION_AUDIT_MANIFEST",
+        corpus_root / "audit-manifest.jsonl",
+    )
     monkeypatch.setattr(prepare, "STATISTICS_JSON", corpus_root / "statistics.json")
     monkeypatch.setattr(prepare, "STATISTICS_MD", corpus_root / "statistics.md")
     monkeypatch.setattr(prepare, "QA_MANIFEST", corpus_root / "qa.csv")
@@ -513,6 +836,8 @@ def test_analysis_outputs_write_statistics_manifest_and_balanced_qa(tmp_path, mo
                 "anonimlestirilmis": True,
                 "anonimlestirilen_alanlar": {"KİŞİ ADI": 1},
                 "kalan_pii_turleri": [],
+                "denetim_bulgulari": [],
+                "kalan_baglamsal_bulgu_turleri": [],
             }
         )
 
@@ -524,6 +849,7 @@ def test_analysis_outputs_write_statistics_manifest_and_balanced_qa(tmp_path, mo
     assert statistics["ham_kaynak_turu_dagilimi"] == {"html": 1, "pdf": 1}
     assert json.loads(prepare.STATISTICS_JSON.read_text(encoding="utf-8"))["tekil_belge"] == 105
     assert len(prepare.ANONYMIZATION_MANIFEST.read_text(encoding="utf-8").splitlines()) == 105
+    assert prepare.ANONYMIZATION_AUDIT_MANIFEST.read_text(encoding="utf-8") == ""
     with prepare.QA_MANIFEST.open(encoding="utf-8", newline="") as handle:
         qa_rows = list(csv.DictReader(handle))
     assert len(qa_rows) == 100

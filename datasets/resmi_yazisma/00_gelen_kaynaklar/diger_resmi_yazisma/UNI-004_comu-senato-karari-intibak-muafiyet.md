@@ -29,5 +29,5 @@ anonimlestirilen_alan_sayisi: "1"
 
 *Değiştirilen Madde:* "Muafiyet talebinde bulunacak öğrencilerin, kayıt yaptırdıkları yarıyılın ilk iki haftası içerisinde ilgili birime dilekçe ve onaylı transkript ile başvurmaları zorunludur."
 
-**Başkan:** Prof. Dr. [KİŞİ ADI]
+**Başkan:** [KİŞİ ADI]
 **Katılan Üyeler:** Senato Üyeleri

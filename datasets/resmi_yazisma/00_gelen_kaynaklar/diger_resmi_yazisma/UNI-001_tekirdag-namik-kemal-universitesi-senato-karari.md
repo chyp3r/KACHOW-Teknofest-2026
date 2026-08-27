@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Tekirdağ Namık Kemal Üniversitesi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "6"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 # T.C. TEKİRDAĞ NAMIK KEMAL ÜNİVERSİTESİ SENATO KARARI
@@ -27,6 +27,6 @@ anonimlestirilen_alan_sayisi: "6"
 
 Yapılan görüşmeler neticesinde; Üniversitemiz yerleşkelerinde meydana gelebilecek afet ve acil durumlara hazırlık, müdahale ve iyileştirme süreçlerini düzenleyen "Tekirdağ Namık Kemal Üniversitesi Afet ve Acil Durum Çalışma Yönergesi"nin kabul edilmesine ve Rektörlük makam onayına sunulmasına oy birliği ile karar verilmiştir.
 
-**Başkan:** Prof. Dr. [KİŞİ ADI] (Rektör)
-**Üyeler:** Prof. Dr. [KİŞİ ADI], Prof. Dr. [KİŞİ ADI], Doç. Dr. [KİŞİ ADI], Dr. Öğr. Üyesi [KİŞİ ADI]
+**Başkan:** [KİŞİ ADI]
+**Üyeler:** [KİŞİ ADI]
 **Raportör:** [KİŞİ ADI] (Genel Sekreter V.)

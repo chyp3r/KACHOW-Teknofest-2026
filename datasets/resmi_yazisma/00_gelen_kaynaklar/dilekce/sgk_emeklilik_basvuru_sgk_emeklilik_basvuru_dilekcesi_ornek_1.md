@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sosyal Güvenlik Kurumu"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # SGK Emeklilik Başvuru Dilekçesi (Ornek 1)
@@ -21,7 +21,7 @@ Kurumunuz Adana İl Müdürlüğü'nde 1590249 sicil numarası ile kayıtlı sig
 
 Sigortalılık Bilgilerim:
 - T.C. Kimlik Numarası: [T.C. KİMLİK NO]
-- Sigorta Sicil Numarası: 1590249
+- Sigorta Sicil Numarası: [SİCİL NUMARASI]
 - İlk Sigortalılık Başlangıç Tarihi: 23.01.2002
 - Toplam Prim Gün Sayısı: 5330 gün
 - Son Çalışılan İşyeri: Koc A.S.
@@ -29,7 +29,7 @@ Sigortalılık Bilgilerim:
 Yaşlılık aylığı tahsis talebimin değerlendirilmesini ve aylık bağlanmasını saygılarımla arz ederim.
 
 03.11.2022
-Ali Erdogan
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Tel: [TELEFON]

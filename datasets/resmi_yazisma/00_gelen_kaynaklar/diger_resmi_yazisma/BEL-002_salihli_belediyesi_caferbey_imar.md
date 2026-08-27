@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Salihli Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/27)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Oturum:** 2
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 İmar Komisyonu'nun Salihli İlçesi Caferbey Mahallesi sınırları içerisinde bulunan alanda kamu hizmet alanı ve trafo alanı ayrılmasına ilişkin 1/1000 ölçekli Uygulama İmar Planı Değişikliği teklifi.

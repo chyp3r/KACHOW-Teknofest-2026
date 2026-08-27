@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Adalar Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Adalar Belediye Meclis Kararı (Karar No: 2026/01)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Oturum:** 1
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 Yazı İşleri Müdürlüğü'nün 5393 sayılı Belediye Kanunu'nun 20 nci maddesi gereğince Adalar Belediye Meclisi'nin 2026 yılı bir aylık tatil ayının belirlenmesine ilişkin teklifi.

@@ -225,7 +225,7 @@
   color: var(--text-secondary);
   }
 .draft-create-grid label > small { position: absolute; top: 0; right: 0; color: var(--text-muted); }
-.draft-create-grid select { min-width: 0; min-height: 38px; padding-block: var(--space-2); }
+.draft-create-grid .dropdown { min-width: 0; min-height: 38px; }
 .draft-instructions-field { grid-column: 1 / -2; }
 .draft-instructions-field textarea { min-height: 66px; max-height: 120px; padding: var(--space-2) var(--space-3); resize: vertical; }
 .draft-create-submit { grid-column: -2; min-width: 138px; min-height: var(--control-md); }
@@ -301,7 +301,7 @@
 .document-list-heading { margin: 0; padding: var(--space-4) var(--space-5) var(--space-3); }
 .document-list-toolbar { margin: 0; padding: 0 var(--space-5) var(--space-4); }
 .document-list-toolbar .search-field { flex: 1; }
-.document-list-toolbar select { min-width: 200px; }
+.document-list-toolbar .dropdown { min-width: 0; }
 .document-list-card > .empty-state { padding: var(--space-12) var(--space-5); border-top: 1px solid var(--border-default); }
 .document-accordion-list { margin: 0; padding: 0; border-top: 1px solid var(--border-default); list-style: none; }
 .document-accordion-list > li + li { border-top: 1px solid var(--border-default); }
@@ -360,7 +360,117 @@
 }
 .chat-layout { display: block; min-height: 0; }
 .messages-area { width: 100%; padding: var(--space-3) var(--space-1) var(--space-6); }
-.chat-guardrail-stack { display: grid; gap: var(--space-2); flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
+/* Page-citation badge: the backend's `[s. N]` anchor (format_anchor), shown
+   as a labelled chip so the provenance reads as provenance instead of as
+   stray punctuation in the sentence. See features/chat/MarkdownMessage.tsx. */
+.page-citation {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.15em;
+  padding: 0.05em 0.45em;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, var(--border-default));
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  vertical-align: baseline;
+  /* Never the target of a text selection drag more than the prose itself. */
+  user-select: none;
+}
+
+/* A citation badge the reader can open. Inherits .page-citation's look and
+   adds only the affordance, so a clickable and a plain citation read as the
+   same object. */
+.page-citation-button {
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.page-citation-button:hover,
+.page-citation-button:focus-visible {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  color: var(--text-primary);
+}
+
+/* Sources the model defined but never referenced in a sentence -- trailing
+   the answer as one row, not stacked into a list. See MarkdownMessage.tsx. */
+.citation-trailing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+}
+
+/* Source view: the cited page, with the matched passage highlighted. */
+.source-peek-drawer { width: min(46rem, 100vw); padding: var(--space-5); gap: var(--space-3); }
+.source-peek-drawer > div { display: flex; flex-direction: column; gap: var(--space-3); }
+.source-peek-document {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-secondary);
+}
+.source-peek-note { margin: 0; color: var(--text-muted); }
+.source-peek-quote {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+  color: var(--text-primary);
+}
+.source-peek-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  /* The extracted text carries its own line breaks; they are part of what the
+     reader is checking against. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source-peek-page mark {
+  padding: 0.1em 0.15em;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-running) 35%, transparent);
+  color: inherit;
+}
+
+/* Compact by design: the detail is behind a <details>, so the stack sizes to
+   its content and never needs its own scrollbar. The cap is a last resort for
+   an unusual pile-up of events, not the normal case. */
+.chat-guardrail-stack {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  max-height: 40dvh;
+  overflow-y: auto;
+}
+/* Long, unbroken model text (a stray URL, a run-on token) must wrap instead
+   of stretching the alert and forcing the whole stack to scroll sideways. */
+.chat-guardrail-stack .alert-content { min-width: 0; overflow-wrap: anywhere; }
+.chat-guardrail-reasons { display: grid; gap: var(--space-2); }
+.chat-guardrail-reasons > p { margin: 0; }
+.chat-guardrail-removed {
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid color-mix(in srgb, var(--status-failed) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-failed) 8%, transparent);
+}
+.chat-guardrail-removed > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.chat-guardrail-removed[open] > summary { margin-bottom: var(--space-2); }
+.chat-guardrail-removed ul { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+.chat-guardrail-removed li { font-style: italic; color: var(--text-secondary); }
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
 .chat-content .interrupt-panel .draft-preview { max-height: none; overflow: visible; }
 .chat-content > .alert,
@@ -421,7 +531,7 @@
    sağında. Sadece bir halka; tıklanınca dar bir popup açılır. */
 .composer-mode-stack { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 .composer-mode-stack .composer-mode { margin-left: 0; }
-.context-usage { position: relative; display: inline-flex; }
+.context-usage { position: relative; z-index: 111; display: inline-flex; flex: 0 0 auto; }
 .context-usage-trigger { display: inline-flex; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
 .context-usage-ring { flex: 0 0 auto; animation: context-usage-in .28s ease both; }
 /* Yaylar veri her tur değişince yükselip/inerken yumuşak geçsin. */
@@ -814,7 +924,7 @@
   .document-list-heading { padding-inline: var(--space-4); }
   .document-list-toolbar { display: grid; grid-template-columns: 1fr; padding-inline: var(--space-4); }
   .document-list-toolbar .search-field,
-  .document-list-toolbar select,
+  .document-list-toolbar .dropdown,
   .document-list-toolbar .button { width: 100%; min-width: 0; }
   .document-accordion-trigger {
     grid-template-areas:
@@ -862,7 +972,7 @@
 .sidebar-footer { gap: var(--space-3); }
 .theme-control { min-width: 0; }
 .theme-control .form-field { width: auto; }
-.theme-control select { background: var(--surface-input); }
+.theme-control .dropdown { background: var(--surface-input); }
 
 .page-header { align-items: flex-start; margin-bottom: var(--space-6); }
 .drafts-page .page-header,
@@ -879,9 +989,10 @@
 
 .composer-dock { border-top: 0; background: transparent; }
 .chat-composer { display: grid; gap: var(--space-3); padding: var(--space-3); background: var(--surface-panel); }
-.composer-controls { display: flex; flex-direction: row; align-items: center; justify-content: space-between; margin: 0; }
+.composer-controls { display: flex; flex-direction: row; align-items: center; justify-content: space-between; min-width: 0; margin: 0; }
+.composer-controls .document-selector { min-width: 0; }
 .composer-mode { display: inline-flex; align-items: center; gap: var(--space-2); margin-left: auto; white-space: nowrap; }
-.composer-mode .select { width: auto; min-width: 6.25rem; }
+.composer-mode .dropdown { flex: 0 0 6.25rem; width: 6.25rem; min-width: 6.25rem; }
 .composer-input { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--space-2); }
 .composer-input .field-control { display: grid; }
 .composer-input textarea { min-height: var(--control-lg); background: var(--surface-input); }
@@ -1031,6 +1142,8 @@
 }
 
 @media (max-width: 47.5rem) {
+  .composer-controls { flex-wrap: wrap; }
+  .composer-mode-stack { margin-left: auto; }
   .brand { grid-template-columns: auto minmax(0, 1fr) auto; }
   .page-actions { width: 100%; }
   .chat-empty-state { min-height: 19rem; padding-block: var(--space-6); }
@@ -1169,7 +1282,7 @@
   .management-list > li { align-items: flex-start; flex-wrap: wrap; padding-inline: var(--space-4); }
   .management-row-actions { width: 100%; justify-content: flex-start; }
   .management-rule-row { grid-template-columns: minmax(0, 1fr) var(--touch-target); }
-  .management-rule-row .select { grid-column: 1; }
+  .management-rule-row .dropdown { grid-column: 1; }
   .audit-list > li { grid-template-columns: 1fr auto; }
   .audit-list > li time { grid-column: 1 / -1; }
   .pool-item-list .management-row-actions { margin-left: 0; }

@@ -15,7 +15,7 @@ rag_status: "rejected"
 ret_nedeni: "sentetik_simulasyon_yalniz_test"
 kaynak_kurum: "Sosyal Güvenlik Kurumu"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # İş Kazası Bildirim Tutanağı - Belge No 33
@@ -27,7 +27,7 @@ Tarih: 13.11.2020
 Konu: İş Kazası Bildirim Tutanağı - Belge No 33
 İLGİLİ MAKAMA
 İlgi: 5510 sayılı Kanun Madde 13 ve İş Kazası ve Meslek Hastalığı Bildirim Tebliği
-12.05.2021 tarihinde Antalya ili Nilüfer ilçesinde faaliyet gösteren işyerinde (Sicil No: 21) meydana gelen iş
+12.05.2021 tarihinde Antalya ili Nilüfer ilçesinde faaliyet gösteren işyerinde (Sicil No: [SİCİL NUMARASI]) meydana gelen iş
 kazası İl Müdürlüğümüze bildirilmiştir. [KİŞİ ADI] (TCKN: [T.C. KİMLİK NO]) adlı sigortalı yaralanmış
 olup, Antalya Devlet Hastanesi'nde tedavi altına alınmıştır. SGK müfettişlerince yapılan incelemede iş
 güvenliği mevzuatına aykırılıklar tespit edilmiş olup, işverene idari para cezası uygulanması ve iş yerinin

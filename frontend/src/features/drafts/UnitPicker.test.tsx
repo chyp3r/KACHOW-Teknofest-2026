@@ -33,10 +33,11 @@ describe("UnitPicker", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Birimi değiştir" }));
     const select = await screen.findByLabelText("Hedef birim");
+    fireEvent.click(select);
     await waitFor(() => expect(screen.getByRole("option", { name: "İnsan Kaynakları" })).toBeInTheDocument());
     expect(screen.queryByText("Arşivlenmiş Birim")).not.toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "İnsan Kaynakları" } });
+    fireEvent.click(await screen.findByRole("option", { name: "İnsan Kaynakları" }));
     fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
 
     expect(onSave).toHaveBeenCalledWith("İnsan Kaynakları");
@@ -48,7 +49,8 @@ describe("UnitPicker", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Birimi değiştir" }));
     const select = await screen.findByLabelText("Hedef birim");
-    fireEvent.change(select, { target: { value: "__custom__" } });
+    fireEvent.click(select);
+    fireEvent.click(await screen.findByRole("option", { name: "Diğer birim…" }));
     fireEvent.change(screen.getByLabelText("Birim adı"), { target: { value: "Basın ve Halkla İlişkiler" } });
     fireEvent.click(screen.getByRole("button", { name: "Kaydet" }));
 

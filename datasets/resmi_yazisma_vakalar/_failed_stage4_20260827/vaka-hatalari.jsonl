@@ -1,0 +1,10 @@
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:madde_yok", "case_id": "GKC-RET-001", "decision": "ret", "index": 1}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:numarasiz_atif", "case_id": "GKC-KISMI_KABUL-001", "decision": "kismi_kabul", "index": 1}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:numarasiz_atif", "case_id": "GKC-EKSIK_BELGE-001", "decision": "eksik_belge", "index": 1}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:baslik_uyusmazligi", "case_id": "GKC-YETKISIZLIK-001", "decision": "yetkisizlik", "index": 1}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:taninmayan_tur", "case_id": "GKC-COKLU_TALEP-001", "decision": "coklu_talep", "index": 1}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:baslik_uyusmazligi", "case_id": "GKC-KISMI_KABUL-002", "decision": "kismi_kabul", "index": 2}
+{"attempt": 2, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:baslik_uyusmazligi", "case_id": "GKC-KISMI_KABUL-002", "decision": "kismi_kabul", "index": 2}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:numarasiz_atif", "case_id": "GKC-EKSIK_BELGE-002", "decision": "eksik_belge", "index": 2}
+{"attempt": 2, "basarisizlik_kategorisi": "llm_hatasi:ValidationError", "case_id": "GKC-EKSIK_BELGE-002", "decision": "eksik_belge", "index": 2}
+{"attempt": 1, "basarisizlik_kategorisi": "mevzuat_dogrulanamadi:bulunamadi", "case_id": "GKC-COKLU_TALEP-002", "decision": "coklu_talep", "index": 2}

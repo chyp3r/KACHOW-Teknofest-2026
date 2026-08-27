@@ -5,10 +5,10 @@
       "missing_metadata_records": 0,
       "real_or_official": 453,
       "records_in_duplicate_template_families": 0,
-      "separate_dev_heldout_records": 140,
+      "separate_dev_heldout_records": 119,
       "simulation_records_in_production": 0,
-      "synthetic": 116,
-      "total_curated": 569
+      "synthetic": 62,
+      "total_curated": 515
     },
     "before": {
       "generic_person_placeholder_count": 58,
@@ -22,10 +22,10 @@
     }
   },
   "correspondence_type_distribution": {
-    "cover_letter": 129,
-    "information_notice": 130,
-    "other_official": 134,
-    "response_letter": 176
+    "cover_letter": 114,
+    "information_notice": 115,
+    "other_official": 118,
+    "response_letter": 168
   },
   "duplicate_template_families": 0,
   "generic_person_placeholder_count": 0,
@@ -61,7 +61,7 @@
     "Sağlık Bakanlığı": 1,
     "Sağlık Bilimleri Üniversitesi": 5,
     "Selçuk Üniversitesi": 1,
-    "Sentetik veri üretimi": 116,
+    "Sentetik veri üretimi": 62,
     "Sivas Defterdarlığı": 1,
     "Sosyal Güvenlik Kurumu": 1,
     "T.C. Adalar Belediye Başkanlığı": 1,
@@ -105,14 +105,14 @@
   },
   "legacy_deleted_placeholder_count": 0,
   "license_status_distribution": {
-    "project_internal": 116,
+    "project_internal": 62,
     "usage_review_required": 453
   },
   "missing_metadata": {},
   "origin_distribution": {
     "official_verified_local": 380,
     "official_web_pending_review": 73,
-    "synthetic": 116
+    "synthetic": 62
   },
   "pii_flagged_count": 0,
   "real_count_by_type": {
@@ -128,7 +128,7 @@
     "response_letter": 0
   },
   "real_or_official_count": 453,
-  "real_or_official_ratio": 0.7961,
+  "real_or_official_ratio": 0.8796,
   "records_in_duplicate_template_families": 0,
   "records_with_source_sha256": 433,
   "records_with_source_url": 295,
@@ -150,50 +150,50 @@
   },
   "schema_version": 1,
   "split_distribution": {
-    "dev": 89,
-    "heldout": 51,
-    "retrieval": 429
+    "dev": 80,
+    "heldout": 39,
+    "retrieval": 396
   },
   "split_origin_distribution": {
     "dev": {
-      "official_verified_local": 61,
+      "official_verified_local": 58,
       "official_web_pending_review": 15,
-      "synthetic": 13
+      "synthetic": 7
     },
     "heldout": {
-      "official_verified_local": 35,
+      "official_verified_local": 29,
       "official_web_pending_review": 7,
-      "synthetic": 9
+      "synthetic": 3
     },
     "retrieval": {
-      "official_verified_local": 284,
+      "official_verified_local": 293,
       "official_web_pending_review": 51,
-      "synthetic": 94
+      "synthetic": 52
     }
   },
-  "synthetic_ratio": 0.2039,
-  "total_curated": 569,
+  "synthetic_ratio": 0.1204,
+  "total_curated": 515,
   "type_origin_distribution": {
     "cover_letter": {
       "official_verified_local": 95,
       "official_web_pending_review": 12,
-      "synthetic": 22
+      "synthetic": 7
     },
     "information_notice": {
       "official_verified_local": 73,
       "official_web_pending_review": 35,
-      "synthetic": 22
+      "synthetic": 7
     },
     "other_official": {
       "official_verified_local": 94,
       "official_web_pending_review": 13,
-      "synthetic": 27
+      "synthetic": 11
     },
     "response_letter": {
       "official_verified_local": 118,
       "official_web_pending_review": 13,
-      "synthetic": 45
+      "synthetic": 37
     }
   },
-  "unique_template_families": 569
+  "unique_template_families": 515
 }

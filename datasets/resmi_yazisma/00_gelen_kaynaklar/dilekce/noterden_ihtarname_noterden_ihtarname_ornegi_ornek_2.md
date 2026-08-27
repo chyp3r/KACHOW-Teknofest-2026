@@ -8,14 +8,14 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Noterden İhtarname Örneği (Ornek 2)
 
 İHTARNAME
 
-İHTAR EDEN: Burak Sahin (T.C.: [T.C. KİMLİK NO])
+İHTAR EDEN: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
 Adres: [ADRES]
 
 MUHATAP: [KİŞİ ADI]
@@ -34,5 +34,5 @@ Sayın Muhatap,
 
 24.10.2024
 İhtar Eden
-Burak Sahin
+[İMZA SAHİBİ]
 İmza

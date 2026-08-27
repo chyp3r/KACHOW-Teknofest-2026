@@ -1,7 +1,6 @@
 import { Bot, FilePenLine, FileSearch, Info, MessageCircle, MessageSquare, Route, Sparkles, UploadCloud, UserRound } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UIEvent } from "react";
-import ReactMarkdown from "react-markdown";
 import type {
   ChatMessage,
   InterruptState,
@@ -10,6 +9,8 @@ import type {
 } from "../../types/chat";
 import { Button } from "../../components/Button";
 import { Accordion } from "../../components/Accordion";
+import { MarkdownMessage } from "./MarkdownMessage";
+import type { CitationTarget } from "./MarkdownMessage";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
@@ -21,6 +22,51 @@ import { ResolvedPromptCard } from "./ResolvedPromptCard";
 import type { PromptAnswers } from "./PromptQuestionCard";
 import type { FeedbackTargetKind } from "../../types/feedback";
 import { AnimatedMessageText } from "./AnimatedMessageText";
+
+const completedLiveAnimations = new Set<string>();
+
+function MessagePrimaryContent({
+  message,
+  animationKey,
+  onProgress,
+  onCitationClick,
+}: {
+  message: ChatMessage;
+  animationKey: string;
+  onProgress: () => void;
+  onCitationClick?: (target: CitationTarget) => void;
+}) {
+  const [shouldAnimate] = useState(
+    () => Boolean(message.animate && !completedLiveAnimations.has(animationKey)),
+  );
+  const [completedAnimationText, setCompletedAnimationText] = useState<string | null>(
+    shouldAnimate ? null : message.text,
+  );
+  const showDraftMeta =
+    !shouldAnimate || !message.text || completedAnimationText === message.text;
+
+  return (
+    <>
+      {message.text && (
+        <AnimatedMessageText
+          text={message.text}
+          animate={shouldAnimate}
+          onProgress={onProgress}
+          onComplete={() => {
+            completedLiveAnimations.add(animationKey);
+            setCompletedAnimationText(message.text);
+            onProgress();
+          }}
+          onCitationClick={onCitationClick}
+        />
+      )}
+      {message.resolvedPrompt && (
+        <ResolvedPromptCard interaction={message.resolvedPrompt} />
+      )}
+      {showDraftMeta && <DraftMetaStrip details={message.details} />}
+    </>
+  );
+}
 
 // What a message's vote should be filed under, plus a small context
 // snapshot worth carrying alongside it (see FeedbackModel.context) --
@@ -65,6 +111,7 @@ export function MessageList({
   onCancel,
   onRetryFast,
   sessionId,
+  onCitationClick,
 }: {
   messages: ChatMessage[];
   streamingText: string;
@@ -108,6 +155,10 @@ export function MessageList({
   // absent for a caller with no session concept, in which case a vote
   // simply carries no session link.
   sessionId?: string | null;
+  // Opens the cited page of the attached document. Absent for a surface
+  // with no document context, in which case citations render as plain
+  // labels (see MarkdownMessage).
+  onCitationClick?: (target: CitationTarget) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const pinnedRef = useRef(true);
@@ -186,17 +237,12 @@ export function MessageList({
                     ? "KACHOW Asistan"
                     : "Siz"}
               </header>
-              {message.text && (
-                <AnimatedMessageText
-                  text={message.text}
-                  animate={message.animate}
-                  onProgress={scrollToBottom}
-                />
-              )}
-              {message.resolvedPrompt && (
-                <ResolvedPromptCard interaction={message.resolvedPrompt} />
-              )}
-              <DraftMetaStrip details={message.details} />
+              <MessagePrimaryContent
+                message={message}
+                animationKey={`${sessionId ?? "local"}:${message.id ?? `${message.sender}:${index}:${message.text}`}`}
+                onProgress={scrollToBottom}
+                onCitationClick={onCitationClick}
+              />
               {message.questions?.length ? (
                 <PromptQuestionCard
                   questions={message.questions}
@@ -257,7 +303,7 @@ export function MessageList({
           <div>
             <header>KACHOW Asistan</header>
             <div className="markdown-content">
-              <ReactMarkdown>{streamingText}</ReactMarkdown>
+              <MarkdownMessage text={streamingText} onCitationClick={onCitationClick} />
               <span className="streaming-caret" />
             </div>
           </div>
