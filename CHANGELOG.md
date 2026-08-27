@@ -18,6 +18,11 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   hiçbir dal ucunda bulunmayan eski `datasets/sample/` (d9e0e237) hiç
   güncellenmemişti. Dizin `datasets/sample/` olarak yeniden adlandırıldı
   (`git mv`), başka hiçbir dosya değişmedi (#291).
+- `backend/tests/unit/api/openapi.snapshot.json` bayattı -- `root_router.py`
+  (`/root/users/insights` vb.) eklendiğinde şema değişmişti ama snapshot hiç
+  yeniden üretilmemişti. `KACHOW_UPDATE_OPENAPI_SNAPSHOT=1` ile yeniden
+  üretildi, `frontend/src/api/generated.ts` `npm run api:types` ile
+  senkronlandı (#296).
 
 ### Değiştirildi
 - `LOCAL_MODE=false` (Evren/bulut) iken niyet (intent) yönlendirmesinde LLM
