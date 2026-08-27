@@ -1717,6 +1717,21 @@ def create_planning_graph(
             updates["revise_result"] = {"status": result["status"]}
             return
 
+        # draft_graph akışıyla aynı: kullanıcının bu oturumdaki önceki
+        # turlarında verdiği bir isim/tarih/kurum, revizyonun doğrulama
+        # geçişinde de "kullanıcının kendi sözü" sayılmalı (bkz.
+        # _build_instruction_haystack). Revizyon turunda `brief` adımı
+        # çalışmadığı için brief cevapları doğrudan yerleşmiş taslaktan
+        # (active_draft.writing_brief) alınır.
+        prior_user_turns = [
+            turn.get("content", "")
+            for turn in _prior_turns(state, limit=10_000)
+            if turn.get("role") == "user"
+        ]
+        instruction_haystack = _build_instruction_haystack(
+            state["input_text"], prior_user_turns, active_draft.writing_brief
+        )
+
         result = await run_revise(
             active_draft=active_draft,
             instructions=state["input_text"],
@@ -1730,6 +1745,8 @@ def create_planning_graph(
             instruction_origin="user_turn",
             company_id=state.get("company_id"),
             today=today_tr(),
+            instruction_haystack=instruction_haystack,
+            resolved_placeholder_answers=active_draft.resolved_placeholder_answers,
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -2354,9 +2371,23 @@ def create_planning_graph(
                 updates["final_output"] = _compile_final_output(state, updates)
                 return updates
 
+            gate_answers = answer.get("answers", {}) or {}
             filled_draft, residual = apply_answers(
-                draft_result.get("draft", ""), answer.get("answers", {})
+                draft_result.get("draft", ""), gate_answers
             )
+
+            # Bu turda verilen cevaplar (ve "Sen karar ver" ertelemeleri)
+            # taslak sürümünün üstünde kalıcılaşsın diye draft_result'a
+            # yazılır -- sonraki bir `revize` turunun
+            # build_missing_info_request çağrısı, kullanıcının zaten
+            # cevapladığı/ertelediği bir yer tutucuyu tekrar sormaz
+            # (bkz. DraftVersion.resolved_placeholder_answers, revise_graph.
+            # verify_node). AUTO_ANSWER sentinel'leri aynen korunur: erteleme
+            # işareti onlardır.
+            merged_resolved = {
+                **(draft_result.get("resolved_placeholder_answers") or {}),
+                **gate_answers,
+            }
 
             # Only a placeholder key this draft actually asked a question
             # about is grounds to reopen the gate. `residual` alone is not
@@ -2386,6 +2417,7 @@ def create_planning_graph(
                     **draft_result,
                     "draft": filled_draft,
                     "missing_information": residual_questions,
+                    "resolved_placeholder_answers": merged_resolved,
                     "status": StepStatus.NEEDS_INPUT,
                 }
                 return {
@@ -2457,6 +2489,7 @@ def create_planning_graph(
                 "applied_rules": [rule.model_dump() for rule in report.applied_rules],
                 "evaluation_notes": report.evaluation_notes,
                 "missing_information": [],
+                "resolved_placeholder_answers": merged_resolved,
                 "status": status,
             }
             return {"draft_result": updated}
@@ -2513,6 +2546,7 @@ def create_planning_graph(
             status=draft_result.get("status") or "",
             rejection_reason=draft_result.get("rejection_reason") or "",
             writing_brief=draft_result.get("writing_brief") or {},
+            resolved_placeholder_answers=draft_result.get("resolved_placeholder_answers") or {},
         )
 
         await emit_node_start(
@@ -2532,6 +2566,7 @@ def create_planning_graph(
             instruction_origin="human_gate",
             company_id=state.get("company_id"),
             today=today_tr(),
+            resolved_placeholder_answers=active_draft.resolved_placeholder_answers,
         )
         if result.get("status") == StepStatus.FAILED:
             await emit_node_error(
