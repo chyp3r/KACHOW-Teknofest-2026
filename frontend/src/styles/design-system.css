@@ -437,7 +437,14 @@
 }
 .dialog-header { flex: 0 0 auto; padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--border-default); }
 .dialog-body { min-height: 0; overflow-y: auto; padding: var(--space-5) var(--space-6); }
-.dialog-actions { display: flex; flex: 0 0 auto; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-3); margin-top: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default); background: var(--surface-elevated); }
+.dialog-actions { display: flex; flex: 0 0 auto; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--space-3); margin-top: 0; padding: var(--space-4) var(--space-6); border-top: 1px solid var(--border-default); background: var(--surface-elevated); }
+
+/* Confirmation dialog body: the warning icon sits beside its message rather
+   than orphaned in an otherwise-empty body block. */
+.confirmation-dialog-body { display: flex; align-items: flex-start; gap: var(--space-4); }
+.confirmation-dialog-body p { margin: 0; color: var(--text-secondary); }
+.confirmation-dialog-icon { display: inline-grid; flex: 0 0 auto; place-items: center; width: var(--icon-container-md); height: var(--icon-container-md); border-radius: var(--radius-lg); color: var(--text-error); background: color-mix(in srgb, var(--status-failed) 12%, transparent); }
+.confirmation-dialog-icon svg { width: var(--icon-md); height: var(--icon-md); }
 
 .accordion { overflow: hidden; border: 1px solid var(--border-default); border-radius: var(--radius-lg); background: var(--surface-panel); }
 .accordion-heading { display: flex; align-items: center; }
