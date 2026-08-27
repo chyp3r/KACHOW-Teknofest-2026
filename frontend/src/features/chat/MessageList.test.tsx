@@ -254,6 +254,27 @@ describe("MessageList", () => {
     expect(screen.getByText("Güven skoru: 92/100")).toBeInTheDocument();
   });
 
+  it("does not replay a completed live reply after returning to the chat", () => {
+    vi.useFakeTimers();
+    const reply: ChatMessage = {
+      id: "reply-1",
+      sender: "assistant",
+      text: "Bu yanıt yalnızca ilk gelişinde animasyonlu olmalı.",
+      animate: true,
+    };
+    const firstVisit = renderWithQueryClient(
+      <MessageList {...baseProps} sessionId="session-1" messages={[reply]} />,
+    );
+
+    act(() => vi.advanceTimersByTime(10_000));
+    firstVisit.unmount();
+    const secondVisit = renderWithQueryClient(
+      <MessageList {...baseProps} sessionId="session-1" messages={[reply]} />,
+    );
+
+    expect(secondVisit.container.querySelector(".streaming-caret")).toBeNull();
+  });
+
   it("shows document analysis as a compact message in the conversation", () => {
     const { container } = renderWithQueryClient(
       <MessageList {...baseProps} uploadingDocumentName="Başvuru.pdf" />,

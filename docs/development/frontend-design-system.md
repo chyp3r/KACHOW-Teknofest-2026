@@ -40,7 +40,7 @@ Tek üretim inline style istisnası teknik SVG grafiğinin veri kaynaklı koordi
 
 ## Bileşen sözleşmesi
 
-Primitive katman: `Button`, `IconButton`, `Input`, `Select`, `Textarea`, `FormField`, `Card`, `StatusBadge`, `Alert`, `Divider`, `Spinner`, `Skeleton`.
+Primitive katman: `Button`, `IconButton`, `Input`, `Dropdown`, `Textarea`, `FormField`, `Card`, `StatusBadge`, `Alert`, `Divider`, `Spinner`, `Skeleton`.
 
 Composite katman: `BrandLockup`, `Tabs`, `PageHeader`, `SectionHeader`, `EmptyState`, `ErrorState`, `ApiErrorNotice`, `ListRow`, `Drawer`, `Dialog`, `ConfirmationDialog`, `FormActions`.
 

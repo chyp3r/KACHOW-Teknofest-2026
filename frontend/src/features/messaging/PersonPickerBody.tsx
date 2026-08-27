@@ -3,7 +3,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "../../components/Button";
 import { EmptyState } from "../../components/EmptyState";
-import { Input, Select } from "../../components/FormControls";
+import { Dropdown, Input } from "../../components/FormControls";
 import { Spinner } from "../../components/Surface";
 import { useFavorites } from "../../hooks/useFavorites";
 import { useUserSearch } from "../../hooks/useUserSearch";
@@ -90,7 +90,7 @@ export function PersonPickerBody({
           onChange={(event) => search.setQuery(event.target.value)}
         />
         <div className="user-search-filter-row">
-          <Select
+          <Dropdown
             aria-label="Birime göre filtrele"
             controlSize="sm"
             value={unitId}
@@ -102,8 +102,8 @@ export function PersonPickerBody({
                 {unit.name}
               </option>
             ))}
-          </Select>
-          <Select
+          </Dropdown>
+          <Dropdown
             aria-label="Role göre filtrele"
             controlSize="sm"
             value={role}
@@ -115,7 +115,7 @@ export function PersonPickerBody({
                 {ASSIGNABLE_ROLE_LABELS[value]}
               </option>
             ))}
-          </Select>
+          </Dropdown>
         </div>
       </div>
 

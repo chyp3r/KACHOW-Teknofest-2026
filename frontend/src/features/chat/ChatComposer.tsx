@@ -6,7 +6,7 @@ import type { ContextUsage } from "../../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../../types/documents";
 import type { PersistedDraft } from "../../types/drafts";
 import { IconButton } from "../../components/Button";
-import { Select, Textarea } from "../../components/FormControls";
+import { Dropdown, Textarea } from "../../components/FormControls";
 import { useSpeechToText } from "../../hooks/useSpeechToText";
 
 export function ChatComposer({
@@ -111,24 +111,25 @@ export function ChatComposer({
         <div className="composer-mode-stack">
           <label className="composer-mode">
             <span>Çalışma modu</span>
-            <Select
+            <Dropdown
               controlSize="sm"
+              placement="top"
               value={level}
               onChange={(event) => setLevel(event.target.value as ReasoningLevel)}
             >
               <option value="fast">Hızlı</option>
               <option value="balanced">Dengeli</option>
-              <option value="deep">Derinlemesine</option>
-            </Select>
+              <option value="deep">Derin</option>
+            </Dropdown>
           </label>
-          {contextUsage && (
-            <ContextUsageRing
-              usage={contextUsage}
-              compacting={compacting}
-              onCompact={onCompact}
-            />
-          )}
         </div>
+        {contextUsage && (
+          <ContextUsageRing
+            usage={contextUsage}
+            compacting={compacting}
+            onCompact={onCompact}
+          />
+        )}
       </div>
       <div className="composer-input">
         <Textarea

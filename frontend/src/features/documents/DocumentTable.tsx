@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 import { Button, IconButton } from "../../components/Button";
 import { ConfirmationDialog } from "../../components/ConfirmationDialog";
 import { EmptyState } from "../../components/EmptyState";
-import { Input, Select, Textarea } from "../../components/FormControls";
+import { Dropdown, Input, Textarea } from "../../components/FormControls";
 import { StatusBadge } from "../../components/StatusBadge";
 import type { DocumentAnalysis, DocumentMetadata, DocumentText, EvrakFields, KnowledgeGraph } from "../../types/documents";
 import { DocumentAnalysisPanel } from "./DocumentAnalysisPanel";
@@ -264,21 +264,21 @@ export function DocumentTable({
           placeholder="Evrak adı, konu veya içerik ara…"
           aria-label="Evraklarda ara"
         />
-        <Select value={type} onChange={(event) => setType(event.target.value)} aria-label="Dosya türüne göre filtrele">
+        <Dropdown value={type} onChange={(event) => setType(event.target.value)} aria-label="Dosya türüne göre filtrele">
           <option value="all">Tüm türler</option>
           {types.map((item) => <option key={item}>{item}</option>)}
-        </Select>
-        <Select value={date} onChange={(event) => setDate(event.target.value as DateFilter)} aria-label="Tarihe göre filtrele">
+        </Dropdown>
+        <Dropdown value={date} onChange={(event) => setDate(event.target.value as DateFilter)} aria-label="Tarihe göre filtrele">
           <option value="all">Tüm tarihler</option>
           <option value="week">Son 7 gün</option>
           <option value="month">Son 30 gün</option>
-        </Select>
-        <Select value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Duruma göre filtrele">
+        </Dropdown>
+        <Dropdown value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)} aria-label="Duruma göre filtrele">
           <option value="all">Tüm durumlar</option>
           <option value="analyzed">Analiz tamamlandı</option>
           <option value="pending">Analiz bekliyor</option>
           <option value="attention">İnceleme gerekli</option>
-        </Select>
+        </Dropdown>
         <Button variant="secondary" leadingIcon={<ArrowDownAZ />} onClick={() => setAscending((value) => !value)}>
           {ascending ? "En eski" : "En yeni"}
         </Button>

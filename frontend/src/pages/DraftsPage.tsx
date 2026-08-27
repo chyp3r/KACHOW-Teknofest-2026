@@ -22,7 +22,7 @@ import { Button } from "../components/Button";
 import { ConfirmationDialog } from "../components/ConfirmationDialog";
 import { EmptyState } from "../components/EmptyState";
 import { FormActions, Grid } from "../components/LayoutPrimitives";
-import { Input, Select, Textarea } from "../components/FormControls";
+import { Dropdown, Input, Textarea } from "../components/FormControls";
 import { PageHeader } from "../components/PageHeader";
 import { SectionHeader } from "../components/SectionHeader";
 import { StatusBadge } from "../components/StatusBadge";
@@ -200,13 +200,13 @@ export function DraftsPage({
           <SectionHeader title="Yazışma bilgileri" description="Taslağın yönünü belirlemek için mevcut bilgileri gözden geçirin." />
           <div className="draft-brief-layout">
             <Grid className="draft-create-grid" min="15rem">
-              <Select label="Kaynak evrak" fieldClassName="draft-source-field" value={selected?.storage_path ?? ""} onChange={(event) => { const item = documents.find((document) => document.storage_path === event.target.value); if (item) onSelect(item); }}><option value="">Evrak seçin</option>{documents.map((document) => <option key={document.storage_path} value={document.storage_path}>{document.file_name}</option>)}</Select>
-              <Select label="Yazışma türü" value={type} disabled={creation.typesLoading} onChange={(event) => setType(event.target.value)}><option value="">Otomatik belirle</option>{creation.correspondenceTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Select>
-              <Select label="Çalışma modu" value={level} onChange={(event) => setLevel(event.target.value as ReasoningLevel)}><option value="fast">Hızlı</option><option value="balanced">Dengeli</option><option value="deep">Derinlemesine</option></Select>
+              <Dropdown label="Kaynak evrak" fieldClassName="draft-source-field" value={selected?.storage_path ?? ""} onChange={(event) => { const item = documents.find((document) => document.storage_path === event.target.value); if (item) onSelect(item); }}><option value="">Evrak seçin</option>{documents.map((document) => <option key={document.storage_path} value={document.storage_path}>{document.file_name}</option>)}</Dropdown>
+              <Dropdown label="Yazışma türü" value={type} disabled={creation.typesLoading} onChange={(event) => setType(event.target.value)}><option value="">Otomatik belirle</option>{creation.correspondenceTypes.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</Dropdown>
+              <Dropdown label="Çalışma modu" value={level} onChange={(event) => setLevel(event.target.value as ReasoningLevel)}><option value="fast">Hızlı</option><option value="balanced">Dengeli</option><option value="deep">Derin</option></Dropdown>
               <Textarea label="Ek talimat" counter={`${instructions.length}/4000`} fieldClassName="draft-instructions-field" value={instructions} maxLength={4000} rows={2} placeholder="İsteğe bağlı kısa bir talimat ekleyin." onChange={(event) => setInstructions(event.target.value)} />
               <FormActions className="draft-create-submit"><Button loading={creation.creating} disabled={!selected || !analysis} onClick={() => void create()}>Taslak oluştur</Button></FormActions>
             </Grid>
-            <aside className="draft-brief-summary" aria-label="Seçilen yazışma bilgileri"><header><span><FilePenLine /></span><div><h3>Seçtiğiniz bilgiler</h3><p>Taslak bu bilgilerle hazırlanacak.</p></div></header><dl><div><dt><CheckCircle2 />Kaynak evrak</dt><dd>{selected?.file_name ?? "Henüz seçilmedi"}</dd></div><div><dt><CheckCircle2 />Yazışma türü</dt><dd>{creation.correspondenceTypes.find((item) => item.value === type)?.label ?? "Otomatik belirlenecek"}</dd></div><div><dt><CheckCircle2 />Çalışma modu</dt><dd>{level === "fast" ? "Hızlı" : level === "deep" ? "Derinlemesine" : "Dengeli"}</dd></div></dl></aside>
+            <aside className="draft-brief-summary" aria-label="Seçilen yazışma bilgileri"><header><span><FilePenLine /></span><div><h3>Seçtiğiniz bilgiler</h3><p>Taslak bu bilgilerle hazırlanacak.</p></div></header><dl><div><dt><CheckCircle2 />Kaynak evrak</dt><dd>{selected?.file_name ?? "Henüz seçilmedi"}</dd></div><div><dt><CheckCircle2 />Yazışma türü</dt><dd>{creation.correspondenceTypes.find((item) => item.value === type)?.label ?? "Otomatik belirlenecek"}</dd></div><div><dt><CheckCircle2 />Çalışma modu</dt><dd>{level === "fast" ? "Hızlı" : level === "deep" ? "Derin" : "Dengeli"}</dd></div></dl></aside>
           </div>
         </Card>
       )}
@@ -220,8 +220,8 @@ export function DraftsPage({
       <Card className="draft-workspace" padding="compact">
         <div className="draft-workspace-toolbar">
           <Input leadingIcon={<Search />} aria-label="Taslaklarda ara" placeholder="Taslak ara…" value={query} onChange={(event) => setQuery(event.target.value)} />
-          {workspaceTab === "mine" && <Select aria-label="Taslak durumuna göre filtrele" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Tüm durumlar</option><option value="review">İnceleme gerekli</option><option value="hazır">Hazır</option><option value="taslak">Taslak</option></Select>}
-          {workspaceTab === "mine" && <Select aria-label="Hedef birime göre filtrele" value={destinationFilter} onChange={(event) => setDestinationFilter(event.target.value)}><option value="all">Tüm birimler</option>{destinations.map((destination) => <option key={destination}>{destination}</option>)}</Select>}
+          {workspaceTab === "mine" && <Dropdown aria-label="Taslak durumuna göre filtrele" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">Tüm durumlar</option><option value="review">İnceleme gerekli</option><option value="hazır">Hazır</option><option value="taslak">Taslak</option></Dropdown>}
+          {workspaceTab === "mine" && <Dropdown aria-label="Hedef birime göre filtrele" value={destinationFilter} onChange={(event) => setDestinationFilter(event.target.value)}><option value="all">Tüm birimler</option>{destinations.map((destination) => <option key={destination}>{destination}</option>)}</Dropdown>}
           <Button variant="secondary" onClick={() => setAscending((current) => !current)}>{ascending ? "En eski" : "En yeni"}</Button>
         </div>
 

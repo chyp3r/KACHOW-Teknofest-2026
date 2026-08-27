@@ -23,29 +23,37 @@ import type { PromptAnswers } from "./PromptQuestionCard";
 import type { FeedbackTargetKind } from "../../types/feedback";
 import { AnimatedMessageText } from "./AnimatedMessageText";
 
+const completedLiveAnimations = new Set<string>();
+
 function MessagePrimaryContent({
   message,
+  animationKey,
   onProgress,
   onCitationClick,
 }: {
   message: ChatMessage;
+  animationKey: string;
   onProgress: () => void;
   onCitationClick?: (target: CitationTarget) => void;
 }) {
+  const [shouldAnimate] = useState(
+    () => Boolean(message.animate && !completedLiveAnimations.has(animationKey)),
+  );
   const [completedAnimationText, setCompletedAnimationText] = useState<string | null>(
-    message.animate ? null : message.text,
+    shouldAnimate ? null : message.text,
   );
   const showDraftMeta =
-    !message.animate || !message.text || completedAnimationText === message.text;
+    !shouldAnimate || !message.text || completedAnimationText === message.text;
 
   return (
     <>
       {message.text && (
         <AnimatedMessageText
           text={message.text}
-          animate={message.animate}
+          animate={shouldAnimate}
           onProgress={onProgress}
           onComplete={() => {
+            completedLiveAnimations.add(animationKey);
             setCompletedAnimationText(message.text);
             onProgress();
           }}
@@ -231,6 +239,7 @@ export function MessageList({
               </header>
               <MessagePrimaryContent
                 message={message}
+                animationKey={`${sessionId ?? "local"}:${message.id ?? `${message.sender}:${index}:${message.text}`}`}
                 onProgress={scrollToBottom}
                 onCitationClick={onCitationClick}
               />

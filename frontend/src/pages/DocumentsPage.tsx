@@ -75,6 +75,10 @@ export function DocumentsPage({
     await onUpload(file);
     setUploadOpen(false);
   };
+  const openUpload = () => {
+    setTab("library");
+    setUploadOpen(true);
+  };
 
   return (
     <div className="page page-scroll documents-page">
@@ -82,17 +86,17 @@ export function DocumentsPage({
         title="Evrak Kütüphanesi"
         description="Kurum içi ve dışı tüm evraklarınıza tek yerden erişin, yönetin ve paylaşın."
         secondaryActions={tab === "library" && canPush && selected ? <Button variant="outline" leadingIcon={<Send />} onClick={() => setPushOpen(true)}>Havuza gönder</Button> : undefined}
-        primaryAction={tab === "library" ? (
+        primaryAction={(
           <Button
             variant={uploadOpen ? "outline" : "primary"}
             aria-controls="document-upload-panel"
             aria-expanded={uploadOpen}
-            onClick={() => setUploadOpen((current) => !current)}
+            onClick={() => tab === "library" ? setUploadOpen((current) => !current) : openUpload()}
             leadingIcon={uploadOpen ? <X /> : <Plus />}
           >
             {uploadOpen ? "Yüklemeyi kapat" : "Evrak yükle"}
           </Button>
-        ) : undefined}
+        )}
       />
 
       <Tabs label="Evrak görünümleri" active={tab} onChange={setTab} items={[{ id: "library", label: "Kütüphane", icon: <Library /> }, { id: "incoming", label: "Gelen Evraklar", icon: <Inbox /> }]} />
