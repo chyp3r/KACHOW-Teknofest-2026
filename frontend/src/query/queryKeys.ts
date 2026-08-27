@@ -44,6 +44,7 @@ export const queryKeys = {
   rootOverview: ["root", "overview"] as const,
   rootCompanies: ["root", "companies"] as const,
   rootUsers: ["root", "users"] as const,
+  rootUserInsights: ["root", "users", "insights"] as const,
   rootHealth: ["root", "health"] as const,
   companies: ["companies"] as const,
   company: (companyId: string) => ["companies", companyId] as const,

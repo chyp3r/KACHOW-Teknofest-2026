@@ -5,6 +5,7 @@ import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
 import { ConversationHistoryDrawer } from "../features/chat/ConversationHistoryDrawer";
+import { guardrailDecisionLabel, formatGuardrailReason } from "../features/chat/guardrailLabels";
 import { MessageList } from "../features/chat/MessageList";
 import type {
   ChatMessage,
@@ -192,7 +193,6 @@ export function ChatsPage({
         <ConversationHistoryDrawer
           sessions={sessions}
           activeSessionId={activeSessionId}
-          activeMessages={messages}
           loading={sessionsLoading}
           refreshing={sessionsRefreshing}
           error={sessionsError}
@@ -220,10 +220,12 @@ export function ChatsPage({
             {guardrailEvents.map((guardrail, index) => (
               <Alert
                 variant={guardrail.decision === "blocked" ? "error" : "warning"}
-                title={`Güvenlik kontrolü: ${guardrail.decision}`}
+                title={`Güvenlik kontrolü: ${guardrailDecisionLabel(guardrail.decision)}`}
                 key={`${guardrail.stage}-${guardrail.kind}-${index}`}
               >
-                <span>{guardrail.reasons.join(" · ")}</span>
+                <span>
+                  {guardrail.reasons.map(formatGuardrailReason).join(" · ")}
+                </span>
               </Alert>
             ))}
           </div>

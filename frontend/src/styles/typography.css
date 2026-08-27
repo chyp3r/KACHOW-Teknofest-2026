@@ -606,6 +606,19 @@ label,
   line-height: var(--leading-secondary);
 }
 
+.prompt-question-example-hint {
+  font-size: var(--font-size-secondary);
+  line-height: var(--leading-secondary);
+}
+
+.prompt-question-example-hint strong {
+  font-weight: var(--weight-medium);
+}
+
+.prompt-question-example-key {
+  font-size: var(--text-caption);
+}
+
 .prompt-question-option-label {
   font-size: var(--text-body);
   font-weight: var(--weight-regular);

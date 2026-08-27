@@ -2,6 +2,11 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    # Sabit uid: sağlanan (provisioned) panolar datasource'a bu uid ile
+    # başvurur. Boş bırakılırsa Grafana rastgele bir uid atar ve panoların
+    # "${DS_PROMETHEUS}" referansları çözülmediği için her panelde
+    # "datasource not found" hatası çıkar.
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090

@@ -745,7 +745,7 @@ button:disabled, select:disabled, input:disabled, textarea:disabled { cursor: no
 }
 .brand, .user-card, .theme-control, .nav-item, .login-link,
 .page-header, .section-heading, .composer-controls, .selected-document,
-.interrupt-header, .interrupt-actions, .dialog-actions {
+.interrupt-header, .interrupt-actions {
   display: flex;
   align-items: center;
 }
@@ -876,9 +876,9 @@ textarea { min-height: 105px; resize: vertical; }
    animation-duration in this block to near-zero, so no separate
    reduced-motion handling is needed here. */
 .thinking-bubble-body { display: grid; gap: var(--space-3); }
-.thinking-bubble-header { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); color: var(--text-secondary); }
-.thinking-bubble-title { display: inline-flex; align-items: center; gap: var(--space-2); }
-.thinking-bubble-spinner { animation: thinking-bubble-spin .9s linear infinite; color: var(--accent-blue); }
+.thinking-bubble-header { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: var(--space-2); color: var(--text-secondary); }
+.thinking-bubble-title { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.thinking-bubble-spinner { flex: 0 0 auto; animation: thinking-bubble-spin .9s linear infinite; color: var(--accent-blue); }
 .thinking-bubble-elapsed,
 .thinking-bubble-step-time { flex: 0 0 5ch; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 @keyframes thinking-bubble-spin { to { transform: rotate(360deg); } }
@@ -1006,6 +1006,11 @@ textarea { min-height: 105px; resize: vertical; }
 .prompt-question-progress-bar { height: 4px; overflow: hidden; border-radius: var(--radius-full); background: var(--border-default); }
 .prompt-question-progress-fill { height: 100%; background: var(--accent-blue); transition: width .2s ease; }
 .prompt-question-freetext { display: grid; gap: var(--space-2); }
+.prompt-question-example-hint { display: inline-flex; align-self: start; align-items: center; gap: var(--space-2); padding: 2px var(--space-2); border: 1px dashed var(--border-default); border-radius: var(--radius-sm); color: var(--text-muted); background: transparent; cursor: pointer; }
+.prompt-question-example-hint:hover:not(:disabled) { border-color: var(--border-glass-focus); color: var(--text-secondary); }
+.prompt-question-example-hint:disabled { opacity: .6; cursor: default; }
+.prompt-question-example-hint strong { color: var(--text-primary); }
+.prompt-question-example-key { padding: 0 4px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-muted); }
 .prompt-question-nav { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-1); }
 .prompt-question-nav > .button:last-child { margin-left: auto; }
 
@@ -1402,9 +1407,9 @@ td > span { color: var(--text-secondary); margin-top: var(--space-1); }
 .login-icon { width: 45px; height: 45px; border-radius: var(--radius-lg); color: var(--accent-blue); background: rgba(59, 130, 246, .13); }
 .empty-state { display: grid; justify-items: center; gap: var(--space-2); padding: var(--space-8); text-align: center; color: var(--text-secondary); }
 .empty-icon { width: 45px; height: 45px; border-radius: var(--radius-lg); color: var(--accent-blue); background: rgba(59, 130, 246, .12); }
-.dialog-backdrop { position: fixed; inset: 0; display: grid; place-items: center; padding: var(--space-5); background: rgba(0, 0, 0, .55); z-index: 100; }
-.dialog { width: min(440px, 100%); padding: var(--space-5); border-radius: var(--radius-xl); color: var(--text-primary); background: var(--bg-secondary); }
-.dialog-actions { justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-5); }
+/* .dialog / .dialog-backdrop / .dialog-actions are owned by design-system.css
+   (loaded after this file). The duplicates that used to live here only
+   diverged on padding/background/margin and caused drift -- removed. */
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); }
 
 @media (max-width: 1350px) {

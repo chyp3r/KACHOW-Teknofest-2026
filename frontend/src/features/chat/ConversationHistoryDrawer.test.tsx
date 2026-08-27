@@ -28,7 +28,6 @@ function session(
 const baseProps = {
   sessions: [] as ChatSession[],
   activeSessionId: null,
-  activeMessages: [],
   loading: false,
   refreshing: false,
   error: null,
@@ -73,7 +72,6 @@ describe("ConversationHistoryDrawer", () => {
           session("older", "Eski görüşme", 5),
         ]}
         activeSessionId="today"
-        activeMessages={[{ sender: "assistant", text: "Son yanıtın kısa önizlemesi" }]}
         refreshing
       />,
     );
@@ -81,7 +79,8 @@ describe("ConversationHistoryDrawer", () => {
     expect(screen.getByRole("heading", { name: "Bugün" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Dün" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Daha eski" })).toBeInTheDocument();
-    expect(screen.getByText("Son yanıtın kısa önizlemesi")).toBeInTheDocument();
+    // The row shows only the session title (the user's first message) -- no
+    // assistant-reply preview line.
     expect(screen.getByRole("button", { name: /Bugünkü görüşme/ })).toHaveAttribute(
       "aria-current",
       "page",

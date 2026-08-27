@@ -30,6 +30,7 @@ from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
 from app.ai.tools.handoff_tools import build_handoff_tools
+from app.ai.tools.routing_tools import build_routing_tools
 from app.ai.tools.transfer_tools import build_transfer_tools
 from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
@@ -1273,6 +1274,23 @@ def create_planning_graph(
             *build_handoff_tools(
                 has_active_draft=(state.get("focus") or SessionFocus()).active_draft is not None,
                 on_handoff_requested=_record_handoff_request,
+            ),
+        ]
+
+        # "Birim Yönlendirme" (assistant.md 4. yetenek) sohbette doğrudan bir
+        # soru olarak da sorulabilsin diye -- _step_routing ile aynı
+        # routing_graph'ı çalıştırır, salt-okunur (bkz. routing_tools).
+        _assist_focus = state.get("focus") or SessionFocus()
+        tools = [
+            *tools,
+            *build_routing_tools(
+                company_id=state.get("company_id"),
+                routing_graph=routing_graph,
+                active_draft_text=(
+                    _assist_focus.active_draft.text if _assist_focus.active_draft else ""
+                ),
+                document_text=cached.get("extracted_text", "") if document_id else "",
+                config=config,
             ),
         ]
 

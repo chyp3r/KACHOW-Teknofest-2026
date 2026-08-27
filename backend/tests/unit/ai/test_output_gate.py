@@ -92,7 +92,7 @@ def test_pii_from_an_unmarked_document_is_masked_not_blocked():
     )
     assert verdict.action == "redact"
     assert "0532 123 45 67" not in verdict.text
-    assert "pii bulgusu maskelendi" in "".join(verdict.reasons)
+    assert "PII bulgusu maskelendi" in "".join(verdict.reasons)
 
 
 def test_pii_from_a_gizli_document_with_no_clearance_is_blocked():

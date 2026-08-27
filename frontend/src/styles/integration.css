@@ -360,7 +360,7 @@
 }
 .chat-layout { display: block; min-height: 0; }
 .messages-area { width: 100%; padding: var(--space-3) var(--space-1) var(--space-6); }
-.chat-guardrail-stack { display: grid; gap: var(--space-2); flex: 0 1 auto; min-height: 0; max-height: 22dvh; overflow-y: auto; }
+.chat-guardrail-stack { display: grid; gap: var(--space-2); flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
 .chat-content .interrupt-panel .draft-preview { max-height: none; overflow: visible; }
 .chat-content > .alert,

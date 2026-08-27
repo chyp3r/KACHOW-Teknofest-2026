@@ -20,13 +20,28 @@ export function ConfirmationDialog({
   onCancel: () => void;
 }) {
   return (
-    <Dialog open={open} role="alertdialog" title={title} description={description} onClose={onCancel} footer={<>
-          <Button variant="secondary" onClick={onCancel}>Vazgeç</Button>
-          <Button variant="destructive" loading={busy} onClick={onConfirm}>{busy ? "İşleniyor…" : confirmLabel}</Button>
-        </>}>
-        <span className="dialog-icon" aria-hidden="true">
+    <Dialog
+      open={open}
+      role="alertdialog"
+      title={title}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button variant="secondary" onClick={onCancel}>
+            Vazgeç
+          </Button>
+          <Button variant="destructive" loading={busy} onClick={onConfirm}>
+            {busy ? "İşleniyor…" : confirmLabel}
+          </Button>
+        </>
+      }
+    >
+      <div className="confirmation-dialog-body">
+        <span className="confirmation-dialog-icon" aria-hidden="true">
           <AlertTriangle />
         </span>
+        <p>{description}</p>
+      </div>
     </Dialog>
   );
 }
