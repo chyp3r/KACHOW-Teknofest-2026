@@ -143,9 +143,11 @@ def _without_sources_block(text: Optional[str]) -> str:
 #: eklenen kapanış yönergesi (bkz. ``run_stream``).
 _FINAL_ANSWER_INSTRUCTION = (
     _NUDGE_PREFIX
-    + "Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: bulduğun "
-    "cevabı ya da tek cümlelik 'yüklü evrakta bu bilgiye ulaşılamadı' "
-    "ifadesini. Evraktan gelen her bilgiyi `[1]`, `[2]` gibi numaralı atıfla "
+    + "Şimdi kullanıcıya nihai yanıtı yaz. Doğrudan bilginin kendisiyle "
+    "başla; 'Belgede ... bilgisi bulunmaktadır/mevcuttur' gibi bir ön duyuru "
+    "cümlesi EKLEME -- cevabı vermen bilginin bulunduğunu zaten gösterir. "
+    "Bilgi gerçekten yoksa tek cümleyle 'yüklü evrakta bu bilgiye "
+    "ulaşılamadı' de. Evraktan gelen her bilgiyi `[1]`, `[2]` gibi numaralı atıfla "
     "işaretle ve yanıtın sonuna KAYNAKLAR bloğunu ekle; her satırda o "
     "bilginin evraktaki BİREBİR cümlesi ve varsa `(s. N)` sayfası olsun "
     "(sistem yönergesindeki biçim). Hangi aramaları yaptığını, hangi "
