@@ -17,6 +17,8 @@ from app.ai.agents.assistant import (
     MAX_TOOL_TURNS_EVREN,
     MAX_TOOL_TURNS_LOCAL,
     AssistantAgent,
+    _BUDGET_EXHAUSTED_INSTRUCTION,
+    _FINAL_ANSWER_INSTRUCTION,
     _GIVEUP_RETRY_NUDGE,
     _NARRATION_NUDGE,
     _NO_RETRIEVAL_NUDGE,
@@ -558,8 +560,8 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
 @pytest.mark.asyncio
 async def test_tool_turn_cap_follows_provider(fake_llm):
     """Local (Ollama) mode keeps the tight 2-turn cap; connected to Evren the
-    agent gets the wider 5-turn cap so it can try several tools before it
-    converges on an answer."""
+    agent gets a much wider cap so it can sweep a multi-page document before
+    it converges on an answer."""
     handler = AsyncMock(return_value="sonuç")
     tool = ToolSpec(
         name="search_document", description="test", args_schema=_NoArgs, handler=handler
@@ -964,6 +966,71 @@ async def test_no_nudge_ever_sends_a_system_turn_mid_conversation(fake_llm):
         roles = [msg.get("role") for msg in call["messages"]]
         assert roles[0] == "system"
         assert "system" not in roles[1:], f"mid-conversation system turn: {roles}"
+
+
+@pytest.mark.asyncio
+async def test_when_the_tool_budget_runs_out_the_model_answers_with_what_it_has(fake_llm):
+    """Sweeping a multi-page document, the model keeps requesting tools until
+    the cap is hit. It must not fall through to a "couldn't reach it" answer
+    -- it is told to answer from whatever it gathered so far."""
+    handler = AsyncMock(return_value="[s. N] proje bilgisi")
+    tool = ToolSpec(
+        name="get_document_section", description="test", args_schema=_NoArgs, handler=handler
+    )
+    # Every turn asks for another page -- never converges on its own.
+    always_reads = ToolCallResponse(
+        content="", tool_calls=[{"id": "x", "name": "get_document_section", "args": {}}]
+    )
+    fake_llm.generate_with_tools_side_effect = [always_reads] * (_max_tool_turns() + 5)
+    fake_llm.stream_chunks = ["Bulunan projeler: A, B, C."]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="Projeleri listele", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    assert "".join(chunks) == "Bulunan projeler: A, B, C."
+    # The cap held.
+    assert len(fake_llm.generate_with_tools_calls) == _max_tool_turns()
+    # The final streaming call was told to answer with what it has, not the
+    # generic "give the answer or say not found" instruction.
+    final_messages = fake_llm.stream_calls[-1]["messages"]
+    assert any(
+        msg.get("content") == _BUDGET_EXHAUSTED_INSTRUCTION for msg in final_messages
+    )
+    assert not any(
+        msg.get("content") == _FINAL_ANSWER_INSTRUCTION for msg in final_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_budget_instruction_when_the_model_converges_on_its_own(fake_llm):
+    """The budget-exhausted instruction is only for hitting the ceiling. A
+    model that answers before the cap must not see it."""
+    handler = AsyncMock(return_value="[s. 1] bulundu")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="", tool_calls=[{"id": "c1", "name": "search_document", "args": {}}]
+        ),
+        ToolCallResponse(content="Cevap [1].\n\nKAYNAKLAR:\n[1] (s. 1) bulundu", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="soru", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    assert "Cevap [1]." in "".join(chunks)
+    assert fake_llm.stream_calls == []  # reused the converged answer, no extra stream
 
 
 @pytest.mark.asyncio

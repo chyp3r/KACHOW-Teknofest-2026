@@ -23,13 +23,14 @@ logger = logging.getLogger(__name__)
 #: bütçesini patlatır.
 MAX_TOOL_TURNS_LOCAL = 2
 
-#: Evren'e (çevrimiçi, TEKNOFEST barındırmalı API) bağlıyken daha yüksek bir
-#: tavan. Uzak çıkarım yerel bir turdan belirgin biçimde daha hızlıdır, bu
-#: yüzden "assist" node'unun zaman bütçesi birkaç araç turunu rahatça
-#: kaldırır; bu da modele, yanıt için gereken bilgiye ulaşana kadar farklı
-#: araçları (belge erişimi, mevzuat, birim yönlendirme, ...) sırayla deneme
-#: alanı verir.
-MAX_TOOL_TURNS_EVREN = 5
+#: Evren'e (çevrimiçi, TEKNOFEST barındırmalı API) bağlıyken çok daha yüksek
+#: bir tavan. Uzak çıkarım yerel bir turdan belirgin biçimde daha hızlıdır,
+#: bu yüzden "assist" node'unun zaman bütçesi çok sayıda araç turunu rahatça
+#: kaldırır; bu da modele, çok sayfalı bir belgeyi baştan sona tarayıp
+#: (belge erişimi, mevzuat, birim yönlendirme, ...) yanıt için gereken tüm
+#: bilgiyi toplama alanı verir. Tavana vurulursa döngü, modele elindekiyle
+#: cevap verdirir (bkz. ``_BUDGET_EXHAUSTED_INSTRUCTION`` ve ``run_stream``).
+MAX_TOOL_TURNS_EVREN = 10
 
 
 def _max_tool_turns() -> int:
@@ -153,6 +154,24 @@ _FINAL_ANSWER_INSTRUCTION = (
     "(sistem yönergesindeki biçim). Hangi aramaları yaptığını, hangi "
     "terimleri denediğini veya sırada ne yapacağını ANLATMA; kullanıcı arama "
     "sürecini görmemeli."
+)
+
+#: Döngü ``max_tool_turns`` tavanına vurup daha fazla araç çağırılamayacağı
+#: için nihai ``stream()`` çağrısına düşüldüğünde eklenir. Model muhtemelen
+#: hâlâ okuyacak sayfası olduğunu düşünüyordu; "ulaşılamadı" demesi yanlış
+#: olur -- şimdiye kadar topladığı bilgiyle en iyi cevabı vermesi istenir.
+_BUDGET_EXHAUSTED_INSTRUCTION = (
+    _NUDGE_PREFIX
+    + "Araç kullanma hakkın doldu; başka arama YAPAMAZSIN. Şimdiye kadar "
+    "araç sonuçlarından topladığın bilgiyle kullanıcının sorusunu şimdi "
+    "yanıtla. 'Sonraki sayfalara bakacağım', 'incelemeye devam edeceğim' "
+    "gibi bir şey YAZMA -- elindekiyle en eksiksiz cevabı ver. Sonuç kısmen "
+    "eksikse, cevabın sonunda tek cümleyle bunun evrakın tümü taranmadan "
+    "verildiğini belirtebilirsin. Hiçbir ilgili bilgi bulamadıysan tek "
+    "cümleyle 'yüklü evrakta bu bilgiye ulaşılamadı' de. Evraktan gelen her "
+    "bilgiyi `[1]`, `[2]` numaralı atıfla işaretle ve yanıtın sonuna "
+    "KAYNAKLAR bloğunu ekle (sistem yönergesindeki biçim). Hangi aramaları "
+    "yaptığını ANLATMA."
 )
 
 #: Bir belge ekliyken, model araç çağırmayı bırakıp bu kalıplardan birini
@@ -389,6 +408,11 @@ class AssistantAgent(BaseAgent):
         max_tool_turns = _max_tool_turns()
         tool_calls_made = 0
         nudges = 0
+        #: Döngü, model hâlâ araç isterken ``max_tool_turns`` tavanına
+        #: vurduğunda ``for``'un ``else``'i ile True olur (``break``, ya bir
+        #: istisnada ya da model kendi kendine bir cevaba yakınsadığında
+        #: çalışır -- ikisi de burada değil).
+        budget_exhausted = False
         for _ in range(max_tool_turns if lc_tools else 0):
             try:
                 response = await self.llm_client.generate_with_tools(
@@ -460,6 +484,10 @@ class AssistantAgent(BaseAgent):
                         "name": call["name"],
                     }
                 )
+        else:
+            # `break` yok: döngü tüm turlarını tüketti ve model hâlâ araç
+            # çağırmak (ya da nudge sonrası tekrar denemek) istiyordu.
+            budget_exhausted = bool(lc_tools)
 
         # Araç döngüsünün kendi yanıtı zaten yakınsadığında, aynı şeyi tekrar
         # söylemek için ikinci bir tam üretim geçişine ödeme yapmak yerine onu
@@ -473,12 +501,18 @@ class AssistantAgent(BaseAgent):
             final_chunks.append(final_response_content)
             yield final_response_content
         else:
-            # Bir düzeltme verildiyse konuşmanın son turları araç sonuçları ve
-            # sistem uyarılarıdır; buradan devam eden bir stream, cevabı değil
-            # süreci anlatmaya meyleder. Nihai yanıtın ne olması gerektiğini
-            # son bir kez söyle -- yalnızca bu durumda, sıradan (düzeltmesiz)
-            # yolun davranışı değişmesin.
-            if nudges:
+            # Bir düzeltme verildiyse ya da araç bütçesi tavana vurduysa,
+            # konuşmanın son turları araç sonuçları ve sistem uyarılarıdır;
+            # buradan devam eden bir stream, cevabı değil süreci anlatmaya
+            # meyleder. Nihai yanıtın ne olması gerektiğini son bir kez söyle
+            # -- yalnızca bu durumlarda, sıradan (düzeltmesiz, bütçesi
+            # tükenmemiş) yolun davranışı değişmesin. Bütçe tükenmesi kendi
+            # talimatını alır: "ulaşılamadı" değil, elindekiyle cevap ver.
+            if budget_exhausted:
+                messages.append(
+                    {"role": _NUDGE_ROLE, "content": _BUDGET_EXHAUSTED_INSTRUCTION}
+                )
+            elif nudges:
                 messages.append(
                     {"role": _NUDGE_ROLE, "content": _FINAL_ANSWER_INSTRUCTION}
                 )
