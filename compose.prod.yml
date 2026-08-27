@@ -1,39 +1,28 @@
-# Production override for compose.yml. Applied on top of it, never alone:
+# compose.yml için üretim override'ı. Tek başına değil, üstüne uygulanır:
 #
 #   docker compose -f compose.yml -f compose.prod.yml --env-file .env.prod up -d
 #
-# Services this file does not mention (worker, prometheus, grafana,
-# langfuse, jaeger) are inherited from compose.yml unchanged -- monitoring/alerting
-# wiring for a production stack is Workstream H, not this file. `${VAR:?...}`
-# throughout is deliberate: compose.yml's own `${VAR:-dev_default}` fallbacks
-# exist so a bare `docker compose up` works with zero setup, which is
-# exactly wrong for production -- a missing secret here must fail `up`
-# immediately, not silently boot with a public default (see
-# app.lifespan._require_auth_in_production/_require_secret_key_in_production
-# for the same principle enforced a second time, inside the process itself).
+# Burada anılmayan servisler (worker, prometheus, grafana, langfuse, jaeger)
+# compose.yml'den olduğu gibi devralınır. Her yerde `${VAR:?...}` bilerek:
+# compose.yml'nin dev varsayılanlarının aksine, eksik bir sır üretimde `up`'ı
+# anında hataya düşürmeli, sessizce açık varsayılanla açılmamalı.
 #
-# `!override`/`!reset` are Compose Specification merge-control tags: the
-# base file's list-valued fields (`volumes`, `ports`, `environment`) are
-# concatenated with this file's by default, which is never what a
-# production override of a dev-bind-mount list wants.
+# `!override`/`!reset`: Compose birleştirme kontrol etiketleri. Liste alanları
+# (volumes/ports/environment) varsayılan olarak birleştirilir; bir üretim
+# override'ı dev bind-mount listesini bunun yerine değiştirmek/sıfırlamak ister.
 
 services:
   backend:
     build:
       dockerfile: deploy/docker/backend.prod.Dockerfile
     image: kachow-backend:${IMAGE_TAG:-latest}
-    # compose.yml's own container_name carries a "_dev" suffix -- reset
-    # rather than inherited, so `docker ps` doesn't call a production
-    # container a dev one. `null` lets Compose fall back to its normal
-    # <project>-<service>-<index> naming.
+    # compose.yml'nin adı "_dev" ekli; `docker ps`'te üretim container'ına
+    # dev demesin diye sıfırlanır (null -> Compose normal adlandırması).
     container_name: !reset null
-    # No bind-mounted source (that's what makes this the prod image rather
-    # than the dev one with prod env slapped on) -- only the named volume
-    # backing settings.LOCAL_STORAGE_DIR survives a container recreate.
-    # NOTE: this is a single named volume, so `backend` cannot be scaled
-    # past 1 replica here without also carrying the analysis-cache-on-disk
-    # fix (Workstream J9) -- see deploy/kubernetes/backend.yaml's own note
-    # once that manifest exists.
+    # Bind-mount edilmiş kaynak yok (bu, imajı üretim imajı yapan şey) --
+    # yalnızca settings.LOCAL_STORAGE_DIR'i tutan adlandırılmış volume kalıcı.
+    # NOT: tek volume olduğundan `backend`, disk-önbellek düzeltmesi olmadan
+    # 1 replikanın ötesine ölçeklenemez.
     volumes: !override
       - backend_storage_data:/workspace/storage_data
     ports: !reset []
@@ -41,9 +30,8 @@ services:
       - ENVIRONMENT=production
       - REQUIRE_AUTH=true
       - SECRET_KEY=${SECRET_KEY:?SECRET_KEY must be set in .env.prod -- see app.lifespan._require_secret_key_in_production}
-      # True -> Ollama + local Qdrant (below). False -> Evren (hosted
-      # inference) + Evren's own Qdrant cluster. See
-      # app.core.config.Settings.LOCAL_MODE.
+      # true -> Ollama + yerel Qdrant. false -> Evren (barındırılan çıkarım)
+      # + Evren'in Qdrant kümesi. Bkz. Settings.LOCAL_MODE.
       - LOCAL_MODE=${LOCAL_MODE:-true}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:?OLLAMA_BASE_URL must be set in .env.prod (e.g. http://host.docker.internal:11434 or a dedicated Ollama host)}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
@@ -54,8 +42,8 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
-      # Evren (only used when LOCAL_MODE=false). API key/Qdrant key come from
-      # .env.prod, never committed.
+      # Evren (yalnızca LOCAL_MODE=false). Anahtarlar .env.prod'dan gelir,
+      # asla commit'lenmez.
       - EVREN_BASE_URL=${EVREN_BASE_URL:-https://evren-llmapi.ssyz.org.tr/v1}
       - EVREN_API_KEY=${EVREN_API_KEY:-}
       - EVREN_LLM_LARGE_MODEL=${EVREN_LLM_LARGE_MODEL:-llm-large}
@@ -71,8 +59,8 @@ services:
       - DRAFT_JUDGE_TIMEOUT_SECONDS=${DRAFT_JUDGE_TIMEOUT_SECONDS:-30}
       - GUARDRAIL_JUDGE_TIMEOUT_SECONDS=${GUARDRAIL_JUDGE_TIMEOUT_SECONDS:-15}
       - MEVZUAT_MCP_TIMEOUT_SECONDS=${MEVZUAT_MCP_TIMEOUT_SECONDS:-25}
-      # The restricted kachow_app role -- see compose.yml's own comment on
-      # why the app must never connect as the schema owner.
+      # Kısıtlı kachow_app rolü -- uygulama neden şema sahibi olarak
+      # bağlanmamalı, bkz. compose.yml'deki not.
       - DATABASE_URL=postgresql+asyncpg://kachow_app:${KACHOW_APP_DB_PASSWORD:?KACHOW_APP_DB_PASSWORD must be set in .env.prod}@db:5432/${POSTGRES_DB:-kachow}
       - ALEMBIC_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:?POSTGRES_USER must be set in .env.prod}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env.prod}@db:5432/${POSTGRES_DB:-kachow}
       - KACHOW_APP_DB_PASSWORD=${KACHOW_APP_DB_PASSWORD:?KACHOW_APP_DB_PASSWORD must be set in .env.prod}
@@ -81,18 +69,14 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-}
       - LANGFUSE_HOST=${LANGFUSE_HOST:-http://langfuse:3000}
-      # Infrastructure spans (HTTP/DB/Redis/outbound httpx) -- separate from
-      # Langfuse above. `jaeger` (inherited unchanged from compose.yml, see
-      # this file's header) is a fine default for a single-node deployment;
-      # point this at a real OTLP collector for a multi-node one. Empty
-      # disables it entirely (app/observability/otel.py's no-op degrade).
+      # Altyapı span'leri (HTTP/DB/Redis/httpx) -- Langfuse'dan ayrı. Tek
+      # düğüm için `jaeger` yeterli; çok düğümde gerçek bir OTLP collector'a
+      # işaret ettir. Boş bırakılırsa otel.py sessizce devre dışı.
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
-      # Live mevzuat.gov.tr scraping is off by default in the prod image
-      # (backend.prod.Dockerfile's WITH_MEVZUAT_MCP=0) -- MEVZUAT_SOURCE
-      # must match, or every legislation lookup pays a doomed MCP attempt
-      # before falling back (harmless but wasteful; see backend.prod.
-      # Dockerfile's own comment). Operators who built with
-      # --build-arg WITH_MEVZUAT_MCP=1 override this in .env.prod.
+      # Canlı mevzuat.gov.tr sorgusu üretim imajında varsayılan kapalı
+      # (WITH_MEVZUAT_MCP=0) -- MEVZUAT_SOURCE eşleşmezse her sorgu boşa bir
+      # MCP denemesi yapar. --build-arg WITH_MEVZUAT_MCP=1 ile derleyenler
+      # .env.prod'da override eder.
       - MEVZUAT_SOURCE=${MEVZUAT_SOURCE:-local}
       - MEVZUAT_MCP_ENABLED=${MEVZUAT_MCP_ENABLED:-false}
       - MEVZUAT_MCP_COMMAND=${MEVZUAT_MCP_COMMAND:-/tmp/mcpvenv/bin/mevzuat-mcp}
@@ -123,14 +107,9 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # One-shot schema migration, run to completion before `backend` starts --
-  # this is what replaces `make bootstrap`'s manual `alembic upgrade head`
-  # step in production. Not an initContainer-style pattern here (this is
-  # Compose, not Kubernetes -- see deploy/kubernetes/backend.yaml, Workstream
-  # G, for that environment's own equivalent, a separate migrate-job.yaml
-  # rather than a Deployment initContainer, for the same reason: with
-  # `backend` scaled to more than one instance, two initContainers would
-  # race on the same `alembic upgrade head`).
+  # Tek seferlik şema migration'ı; `backend` başlamadan önce tamamlanır
+  # (üretimde `make bootstrap`'in manuel `alembic upgrade head` adımının
+  # yerine geçer). Kubernetes'te karşılığı ayrı bir migrate-job'dur.
   migrate:
     build:
       context: ./
@@ -194,9 +173,8 @@ services:
     container_name: !reset null
     ports: !reset []
     restart: unless-stopped
-    # qdrant/qdrant ships neither curl nor wget (Debian slim base, verified
-    # by inspecting the image) -- bash's own /dev/tcp is used to issue a
-    # bare HTTP GET against /readyz instead of adding a package.
+    # qdrant/qdrant imajında curl/wget yok; paket eklemek yerine bash'in
+    # /dev/tcp'siyle /readyz'e çıplak bir HTTP GET atılır.
     healthcheck:
       test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && printf 'GET /readyz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && head -1 <&3 | grep -q 200"]
       interval: 10s
@@ -218,10 +196,8 @@ services:
       dockerfile: deploy/docker/frontend.prod.Dockerfile
     image: kachow-frontend:${IMAGE_TAG:-latest}
     container_name: !reset null
-    # !override, not a plain list -- compose.yml's own "5173:5173" (the Vite
-    # dev server's port) would otherwise stay published alongside this one;
-    # confirmed by `docker compose config` actually listing both ports
-    # before this override tag was added.
+    # !override: yoksa compose.yml'nin "5173:5173" (Vite dev sunucusu) portu
+    # bunun yanında yayınlanmaya devam eder.
     ports: !override
       - "${FRONTEND_PORT:-80}:8080"
     volumes: !override []
@@ -236,13 +212,10 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  # Not present in compose.yml at all -- dev relies on Prometheus/Grafana's
-  # own UI to see a firing alert (see kachow.rules.yml, Workstream H2);
-  # only a production stack routes alerts somewhere a human sees without
-  # opening that UI. prometheus.yml's `alerting:` block already points at
-  # `alertmanager:9093` unconditionally (harmless in dev -- Prometheus
-  # tolerates an unreachable alertmanager target, verified), so no
-  # override of the `prometheus` service is needed here, only this.
+  # compose.yml'de yok -- yalnızca üretim yığını uyarıları bir yere
+  # yönlendirir. prometheus.yml'nin `alerting:` bloğu zaten
+  # `alertmanager:9093`'e işaret ettiğinden `prometheus` servisi için
+  # override gerekmez, yalnızca bu servis.
   alertmanager:
     image: prom/alertmanager:latest
     container_name: !reset null

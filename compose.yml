@@ -15,31 +15,22 @@ services:
       - ./backend/pyproject.toml:/workspace/pyproject.toml
       - ./scripts:/workspace/scripts
       - ./datasets:/workspace/datasets
-      # The evaluation harness and its gold sets. Mounted rather than only
-      # baked into the image so `make eval` picks up dataset edits without a
-      # rebuild -- the gold sets are edited far more often than the code.
+      # Değerlendirme (eval) harness'ı ve gold set'ler -- `make eval` yeniden
+      # derleme olmadan dataset düzenlemelerini görsün diye mount edilir.
       - ./evaluation:/workspace/evaluation
-      # k6 load-test scripts and scripts/export_budgets.py's own output
-      # (perf/k6/lib/budgets.json) -- mounted so that script's write lands
-      # on the host to be committed, not lost with the container on --rm.
+      # k6 yük testi betikleri ve export_budgets.py çıktısı -- yazımı host'a
+      # düşüp commit'lenebilsin diye (--rm ile kaybolmaz).
       - ./perf:/workspace/perf
-      # Uploaded documents and their analysis cache (settings.LOCAL_STORAGE_DIR,
-      # "./storage_data" relative to /workspace). Without this mount it lives
-      # only in the container's writable layer: every document's DB row
-      # (GET /documents' library listing, including its summary) is backed by
-      # the real postgres_data volume and survives a container recreate, but
-      # its analysis cache JSON (backing GET /documents/{path} and the AI
-      # workflow's cached-document reads) does not -- producing a document
-      # that shows a summary in the library but 404s as "Bu evrak için bir
-      # analiz bulunamadı" the moment it's opened.
+      # Yüklenen evraklar ve analiz önbelleği (settings.LOCAL_STORAGE_DIR).
+      # Mount edilmezse analiz JSON'ları container yeniden oluşturulunca
+      # kaybolur: evrak kütüphanede görünür ama açılınca "analiz bulunamadı".
       - ./backend/storage_data:/workspace/storage_data
     environment:
       - ENVIRONMENT=development
-      # Local demo mode only. Production refuses to start while auth is off.
+      # Yalnızca yerel demo. Üretim, auth kapalıyken başlamayı reddeder.
       - REQUIRE_AUTH=${REQUIRE_AUTH:-true}
-      # True -> Ollama + local Qdrant (below). False -> Evren (hosted
-      # inference, https://evren-teknofest.ssyz.org.tr) + Evren's own Qdrant
-      # cluster. See app.core.config.Settings.LOCAL_MODE.
+      # true -> Ollama + yerel Qdrant. false -> Evren (barındırılan çıkarım)
+      # + Evren'in Qdrant kümesi. Bkz. Settings.LOCAL_MODE.
       - LOCAL_MODE=${LOCAL_MODE:-true}
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen3.5:9b}
@@ -50,8 +41,8 @@ services:
       - OLLAMA_KEEP_ALIVE=${OLLAMA_KEEP_ALIVE:-30m}
       - OLLAMA_FAST_MODEL=${OLLAMA_FAST_MODEL:-}
       - OLLAMA_EMBEDDING_MODEL=${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text:latest}
-      # Evren (only used when LOCAL_MODE=false). API key/Qdrant key come from
-      # the team's own .env, never committed.
+      # Evren (yalnızca LOCAL_MODE=false). Anahtarlar ekibin .env'inden gelir,
+      # asla commit'lenmez.
       - EVREN_BASE_URL=${EVREN_BASE_URL:-https://evren-llmapi.ssyz.org.tr/v1}
       - EVREN_API_KEY=${EVREN_API_KEY:-}
       - EVREN_LLM_LARGE_MODEL=${EVREN_LLM_LARGE_MODEL:-llm-large}
@@ -62,24 +53,20 @@ services:
       - EVREN_REQUEST_TIMEOUT_SECONDS=${EVREN_REQUEST_TIMEOUT_SECONDS:-1800}
       - EVREN_QDRANT_URL=${EVREN_QDRANT_URL:-}
       - EVREN_QDRANT_API_KEY=${EVREN_QDRANT_API_KEY:-}
-      # AI workflow timeouts (seconds). Raise these to test long-running
-      # "deep" reasoning runs locally without them being cut off early.
+      # AI iş akışı zaman aşımları (sn). Uzun "deep" koşuları yerelde erken
+      # kesilmeden denemek için yükseltilebilir.
       - AI_WORKFLOW_TIMEOUT_SECONDS=${AI_WORKFLOW_TIMEOUT_SECONDS:-480}
       - REVISION_RERETRIEVAL_TIMEOUT_SECONDS=${REVISION_RERETRIEVAL_TIMEOUT_SECONDS:-10}
       - DRAFT_JUDGE_TIMEOUT_SECONDS=${DRAFT_JUDGE_TIMEOUT_SECONDS:-30}
       - GUARDRAIL_JUDGE_TIMEOUT_SECONDS=${GUARDRAIL_JUDGE_TIMEOUT_SECONDS:-15}
       - MEVZUAT_MCP_TIMEOUT_SECONDS=${MEVZUAT_MCP_TIMEOUT_SECONDS:-25}
-      # The app's runtime connection: the restricted kachow_app role, not
-      # the schema owner -- Postgres row-level security (migration
-      # 0013_rls) never applies to a table's owner, so the app must not
-      # connect as one. See app.core.config.Settings.DATABASE_URL's own
-      # docstring.
+      # Uygulamanın çalışma zamanı bağlantısı: kısıtlı kachow_app rolü. RLS
+      # (0013_rls) tablo sahibine uygulanmaz, bu yüzden uygulama şema sahibi
+      # olarak bağlanmamalı.
       - DATABASE_URL=postgresql+asyncpg://kachow_app:${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}@db:5432/${POSTGRES_DB:-kachow}
-      # The schema-owner connection: Alembic migrations (DDL) and the
-      # narrow pre-tenant identity lookups in app.infrastructure.database.
-      # session.get_owner_db (login/refresh/registration) still need this.
-      # Derived from the same POSTGRES_* values as the db service below, so
-      # the two can never drift out of sync with each other.
+      # Şema-sahibi bağlantısı: Alembic migration'ları (DDL) ve tenant öncesi
+      # dar kimlik sorguları (login/refresh/kayıt) bunu kullanır. db servisiyle
+      # aynı POSTGRES_* değerlerinden türetilir.
       - ALEMBIC_DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-kachow}
       - KACHOW_APP_DB_PASSWORD=${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}
       - QDRANT_URL=http://qdrant:6333
@@ -88,16 +75,12 @@ services:
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse-web:3000
-      # Infrastructure spans (HTTP/DB/Redis/outbound httpx) -- separate from
-      # Langfuse above, which only sees LLM calls. Empty this to verify the
-      # no-op degrade in app/observability/otel.py.
+      # Altyapı span'leri (HTTP/DB/Redis/httpx) -- yalnızca LLM çağrılarını
+      # gören Langfuse'dan ayrı. Boş bırakılırsa otel.py sessizce devre dışı.
       - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-http://jaeger:4317}
-      # mevzuat-mcp is baked into the image (backend.Dockerfile) at this
-      # exact path -- without pointing this at it, MEVZUAT_MCP_COMMAND falls
-      # back to the bare "mevzuat-mcp", which is not on PATH, and every
-      # live legislation fetch fails identically before ever reaching the
-      # network. Override MEVZUAT_SOURCE=local in a root .env to skip MCP
-      # entirely and always use the committed corpus.
+      # mevzuat-mcp imaja bu yola gömülüdür; buraya işaret edilmezse komut
+      # PATH'te olmadığından her canlı mevzuat sorgusu başarısız olur. MCP'yi
+      # tümden atlamak için .env'de MEVZUAT_SOURCE=local.
       - MEVZUAT_SOURCE=${MEVZUAT_SOURCE:-mcp}
       - MEVZUAT_MCP_ENABLED=${MEVZUAT_MCP_ENABLED:-false}
       - MEVZUAT_MCP_COMMAND=${MEVZUAT_MCP_COMMAND:-/tmp/mcpvenv/bin/mevzuat-mcp}
@@ -109,26 +92,16 @@ services:
       - qdrant
       - jaeger
 
-  # LoRA/PEFT training worker (Faz C3 Aşama 3, #191). Deliberately under a
-  # profile, not a plain service: `docker compose up`/`up -d` never starts
-  # this, only `docker compose --profile training up -d worker` does --
-  # scripts/start_training_worker.sh wraps exactly that command, and
-  # scripts/stop_training_worker.sh stops it again. A LoRA run is enqueued
-  # by the ordinary backend process (POST /companies/{id}/training-runs
-  # ?kind=lora_sft) regardless of whether this worker happens to be
-  # running -- an unattended queue with nothing consuming it is the correct
-  # "not running right now" state, not an error.
+  # LoRA/PEFT eğitim worker'ı (#191). Bilerek profile altında: sıradan
+  # `docker compose up` bunu başlatmaz, yalnızca
+  # `docker compose --profile training up -d worker` (bkz.
+  # scripts/start_training_worker.sh). LoRA işi, worker çalışsa da çalışmasa
+  # da backend tarafından kuyruğa alınır.
   #
-  # Real GPU fine-tuning needs a CUDA-capable host and driver -- this
-  # compose definition intentionally does not reserve a GPU
-  # (`deploy.resources.reservations.devices`) since that syntax is
-  # host/runtime-specific (nvidia-container-toolkit) and would break `up`
-  # on a machine without one configured; add that block yourself on the
-  # actual training host.
-  #
-  # TRAINING_ARTIFACTS_DIR must be a path Ollama's own server process can
-  # also read (see app.workers.training._ollama_create's docstring) --
-  # the local bind mount below only makes it visible to *this* container.
+  # Gerçek GPU eğitimi CUDA'lı host ister; GPU rezervasyonu host'a özgü
+  # olduğundan burada tanımlanmaz -- eğitim host'unda kendiniz ekleyin.
+  # TRAINING_ARTIFACTS_DIR, Ollama sunucu sürecinin de okuyabileceği bir yol
+  # olmalıdır.
   worker:
     profiles: ["training"]
     build:
@@ -161,9 +134,8 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-postgres}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-postgres}
       - POSTGRES_DB=${POSTGRES_DB:-kachow}
-      # Read by scripts/init-db.sh (docker-entrypoint-initdb.d, fresh
-      # volumes only) to create the kachow_app role -- must match the
-      # backend service's KACHOW_APP_DB_PASSWORD above.
+      # scripts/init-db.sh (yalnızca boş volume'de) kachow_app rolünü
+      # oluştururken okur -- backend'deki KACHOW_APP_DB_PASSWORD ile eşleşmeli.
       - KACHOW_APP_DB_PASSWORD=${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -334,11 +306,8 @@ services:
       langfuse-web:
         condition: service_started
 
-  # OTLP collector + UI for the infrastructure spans app/observability/otel.py
-  # emits (HTTP/DB/Redis/outbound httpx) -- deliberately separate from
-  # Langfuse, which only ever sees LLM calls. All-in-one exposes an OTLP/gRPC
-  # receiver on 4317 out of the box, no extra collector config needed for a
-  # single-service dev setup.
+  # otel.py'nin ürettiği altyapı span'leri için OTLP collector + arayüz
+  # (Langfuse'dan ayrı). All-in-one imaj 4317'de OTLP/gRPC alıcısını hazır sunar.
   jaeger:
     image: jaegertracing/all-in-one:1.60
     container_name: kachow_jaeger_dev
@@ -361,11 +330,9 @@ services:
       - /workspace/node_modules
     environment:
       - VITE_API_URL=http://backend:8000
-      # Off by default: the backend's own REQUIRE_AUTH default is `true`
-      # (see the backend service above), so a bypassed frontend session has
-      # no real JWT and every authenticated call 401s -- opt in explicitly
-      # (VITE_DEV_AUTH_BYPASS=true) only when also running the backend with
-      # REQUIRE_AUTH=false.
+      # Varsayılan kapalı: backend REQUIRE_AUTH=true olduğundan bypass'lı
+      # oturumun gerçek JWT'si olmaz ve her çağrı 401 alır. Yalnızca backend'i
+      # REQUIRE_AUTH=false ile çalıştırırken aç.
       - VITE_DEV_AUTH_BYPASS=${VITE_DEV_AUTH_BYPASS:-false}
     depends_on:
       - backend
