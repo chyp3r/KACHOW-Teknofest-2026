@@ -70,6 +70,11 @@ class OllamaClient(BaseLLMClient):
             self.keep_alive,
         )
 
+    @property
+    def context_window(self) -> int:
+        """Bu istemcinin ``num_ctx``'i -- her çağrıda Ollama'ya geçilen değer."""
+        return self.num_ctx
+
     def _build_client(
         self,
         temperature: float,

@@ -5409,6 +5409,53 @@
         ]
       }
     },
+    "/api/v1/chat/sessions/{session_id}/compact": {
+      "post": {
+        "description": "Sohbeti sıkıştır: birebir geçmiş penceresini yuvarlanan özete katla.\n\nBağlam göstergesinin \"Bağlamı sıkıştır\" düğmesi çağırır. Aktif bir tur\nveya bekleyen bir HITL varsa ``{\"status\": \"busy\"}`` döner.",
+        "operationId": "compact_chat_session_api_v1_chat_sessions__session_id__compact_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Compact Chat Session",
+        "tags": [
+          "chat",
+          "chat"
+        ]
+      }
+    },
     "/api/v1/chat/sessions/{session_id}/messages": {
       "get": {
         "description": "Bir oturumun mesajlarını konuşma sırasına göre listeler (en eskiden en yeniye).\n\nSahiplik, ``ChatService._verify_thread_ownership``'i yeniden kullanır --\n``/chat/resume``'un başka bir kullanıcının thread'ine dokunmasını zaten\nengelleyen aynı ``user_id:`` öneki kontrolü.\n\nRaises:\n    AuthorizationException: ``session_id``, ``current_user``'dan\n        farklı bir kullanıcıya aitse.",
@@ -8132,6 +8179,66 @@
           }
         ],
         "summary": "Update Draft Destination",
+        "tags": [
+          "drafts",
+          "drafts"
+        ]
+      }
+    },
+    "/api/v1/drafts/{draft_id}/export": {
+      "get": {
+        "description": "Bir taslak sürümünü indirilebilir bir belgeye dönüştürür (docx | pdf).\n\nRouter'daki diğer rotalardan farklı olarak bir ``SuccessResponse`` zarfı\ndeğil, doğrudan ``attachment`` olarak işaretlenmiş binary döndürür.",
+        "operationId": "export_draft_api_v1_drafts__draft_id__export_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "draft_id",
+            "required": true,
+            "schema": {
+              "title": "Draft Id",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Çıktı biçimi.",
+            "in": "query",
+            "name": "fmt",
+            "required": false,
+            "schema": {
+              "default": "docx",
+              "description": "Çıktı biçimi.",
+              "pattern": "^(docx|pdf)$",
+              "title": "Fmt",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Export Draft",
         "tags": [
           "drafts",
           "drafts"

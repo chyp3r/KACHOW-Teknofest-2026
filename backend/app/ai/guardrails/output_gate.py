@@ -16,12 +16,16 @@ Sırayla çalışan üç kontrol vardır, her biri verdikti daha ağır bir sevi
 yükseltebilir:
 
 1. ``assert_no_prompt_leak`` -- değişmedi, hâlâ anında sert bir engelleme.
-2. Dayanaklılık (``app.ai.verification.draft_verifier.check_groundedness``,
-   yeniden uygulanmadı, yeniden kullanıldı) -- dayanaksız bir iddia, yanıtın
-   tamamının yerine geçmek yerine yanıttan kırpılarak kaldırılır, çünkü
-   "kaç sayfa bu belge" sorusuna kısmen uydurulmuş bir yanıt, uydurulan
-   kısım kaldırılmış haliyle genel bir reddedişle değiştirilmesinden daha
-   kullanışlıdır.
+2. Dayanaklılık (``app.ai.verification.draft_verifier.groundedness_report``,
+   yeniden uygulanmadı, yeniden kullanıldı) -- yanıttan çıkarılan somut
+   iddiaların getirilen kaynağa kadar izlenebilen payı çözülmüş politikanın
+   ``output_groundedness_threshold``'unun altındaysa, dayanaksız iddialar
+   yanıtın tamamının yerine geçmek yerine tek tek kırpılır (çünkü uydurulan
+   kısmı kaldırılmış bir yanıt, genel bir reddedişten daha kullanışlıdır).
+   Eşiği geçen -- yani büyük ölçüde kaynaklı -- bir yanıt olduğu gibi bırakılır:
+   yığında bulunan MCP mevzuat metninden alınmış ama token-örtüşme
+   eşleştiricisinin ya da 6000 karakterlik alıntı sınırının kaçırdığı birkaç
+   ifade, tüm yanıtı sansürlemeye yetmez.
 3. PII sızıntısı (``app.ai.guardrails.pii.redact_pii``) -- yalnızca bu
    turda gerçekten bir belge eklendiğinde devreye girer (``sensitivity is
    not None``); kullanıcının konuşmaya kendisinin yazdığı PII şeklindeki bir
@@ -45,7 +49,7 @@ from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
 from app.ai.guardrails.pii import redact_pii
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.policy import GuardrailPolicy, get_policy
-from app.ai.verification.draft_verifier import check_groundedness
+from app.ai.verification.draft_verifier import groundedness_report
 from app.core.enums.sensitivity_level import SensitivityLevel
 
 logger = logging.getLogger(__name__)
@@ -149,8 +153,20 @@ def evaluate_response(
     reasons: list[str] = []
     redacted = reply
 
-    unsupported = check_groundedness(reply, source_materials=source_materials)
-    if unsupported:
+    # Dayanaklılık: yanıttan çıkarılan somut iddiaların (sayı/tarih/mevzuat/
+    # kurum/tutar) getirilen kaynak materyale kadar izlenebilen payı, çözülmüş
+    # politikanın `output_groundedness_threshold`'unun (bkz.
+    # GuardrailPolicy) altına düşerse dayanaksız iddialar kırpılır. Eşiği
+    # geçen bir yanıt olduğu gibi bırakılır: MCP mevzuat aracından gelen ve
+    # yığında bulunan ama 6000 karakterlik alıntı sınırı ya da Türkçe hukuk
+    # metninde token-örtüşme eşleştiricisinin kaçırdığı bir "madde 125" gibi
+    # birkaç ifade yüzünden, büyük ölçüde kaynaklı bir yanıtın her yerine
+    # `[Doğrulanamayan ifade kaldırıldı]` serpilmesini önler.
+    unsupported, total_claims = groundedness_report(
+        reply, source_materials=source_materials
+    )
+    grounded_share = 1.0 if total_claims == 0 else 1.0 - len(unsupported) / total_claims
+    if unsupported and grounded_share < active_policy.output_groundedness_threshold:
         redacted = _redact_unsupported_claims(redacted, unsupported)
         reasons.append(f"{len(unsupported)} doğrulanamayan ifade kaldırıldı")
 

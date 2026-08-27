@@ -434,11 +434,11 @@ describe("DocumentsPage", () => {
       />,
     );
 
-    expect(screen.getAllByRole("button", { name: "0 saniyedir analiz ediliyor" })).toHaveLength(2);
-    expect(screen.getAllByRole("button", { name: "0 saniyedir analiz ediliyor" })[0]).toHaveAttribute("aria-busy", "true");
+    expect(screen.getAllByRole("button", { name: "Analiz ediliyor…" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Analiz ediliyor…" })[0]).toHaveAttribute("aria-busy", "true");
 
     act(() => vi.advanceTimersByTime(3000));
-    expect(screen.getAllByRole("button", { name: "3 saniyedir analiz ediliyor" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Analiz ediliyor · 3 sn" })).toHaveLength(2);
 
     view.unmount();
     vi.useRealTimers();

@@ -10,6 +10,7 @@ araçları basitçe atlar; model onları hiçbir zaman çağırmak için görmez
 
 import json
 import logging
+import re
 from typing import Any, Callable, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -34,6 +35,10 @@ QA_COLLECTION_NAME = "document_qa"
 #: Vektör araması hiçbir şey döndürmediğinde ve yanıtlamanın başka bir yolu
 #: olmadığında yedek dilim boyutu. Prompt bütçesini şişirmesin diye sınırlı.
 TEXT_SLICE_CHARS = 8000
+
+#: ``search_document_regex``'in modele döndüreceği en fazla eşleşen satır --
+#: geniş bir kalıbın (örn. ``\d+``) tüm belgeyi bağlama boşaltmasını engeller.
+REGEX_MATCH_LIMIT = 40
 
 #: `search_legislation`'ın (yerel `mevzuat` koleksiyonu) en iyi sonucunun,
 #: sorguyu gerçekten yanıtlamadığının işareti sayılacağı RRF skor eşiği --
@@ -85,6 +90,18 @@ class SearchDocumentArgs(BaseModel):
     """Arguments for the ``search_document`` tool."""
 
     query: str = Field(description="Belgede aranacak soru veya anahtar kelimeler.")
+
+
+class SearchDocumentRegexArgs(BaseModel):
+    """Arguments for the ``search_document_regex`` tool."""
+
+    pattern: str = Field(
+        description=(
+            "Python düzenli ifade (regex) söz dizimi. Büyük/küçük harf duyarsız, "
+            "satır satır uygulanır. Birebir bir ifade de geçerli bir kalıptır "
+            "(örn. 'E-12345', '15/08/2024', 'sayılı Kanun')."
+        )
+    )
 
 
 class GetDocumentDetailsArgs(BaseModel):
@@ -365,6 +382,53 @@ def build_assistant_tools(
             )
             return text
 
+        async def _search_document_regex(pattern: str) -> str:
+            """RAG dışında, belge metni üzerinde birebir/regex satır araması.
+
+            `search_document` anlamsal (vektör) arama yapar; kesin bir dizge --
+            bir sayı, tarih, atıf kodu, birebir bir ifade -- veya bir terimin
+            *tüm* geçtiği yerlerin sayımı gerektiğinde bu araç daha güvenilirdir.
+            """
+            if not clearance_ok:
+                return _CLEARANCE_REFUSAL
+            try:
+                regex = re.compile(pattern, re.IGNORECASE | re.MULTILINE)
+            except re.error as exc:
+                return f"Geçersiz düzenli ifade: {exc}"
+            pages = _pages()
+            if not pages:
+                return "Belge metni mevcut değil."
+
+            hits: list[str] = []
+            total = 0
+            for page_number, page_text in enumerate(pages, start=1):
+                anchor = format_anchor(page_number)
+                for line in page_text.splitlines():
+                    if not regex.search(line):
+                        continue
+                    total += 1
+                    if len(hits) < REGEX_MATCH_LIMIT:
+                        stripped = line.strip()
+                        hits.append(
+                            f"{anchor} {stripped}" if stripped else f"{anchor} (boş satır eşleşti)"
+                        )
+
+            if not hits:
+                return f"'{pattern}' kalıbıyla eşleşen satır bulunamadı."
+
+            text = "\n".join(hits)
+            if total > len(hits):
+                text += f"\n\n[... toplam {total} eşleşmenin ilk {len(hits)}'i gösterildi]"
+            _report(
+                ToolResult(
+                    tool="search_document_regex",
+                    text=text,
+                    source_ids=[document_id],
+                    sensitivity_level=document_sensitivity,
+                )
+            )
+            return text
+
         tools.extend(
             [
                 ToolSpec(
@@ -408,6 +472,18 @@ def build_assistant_tools(
                     ),
                     args_schema=GetDocumentSectionArgs,
                     handler=_get_document_section,
+                ),
+                ToolSpec(
+                    name="search_document_regex",
+                    description=(
+                        "Belge metninde düzenli ifade (regex) veya birebir dizge "
+                        "ile satır araması yapar -- vektör tabanlı search_document'in "
+                        "aksine. Kesin bir sayı/tarih/atıf kodu ararken, bir ifadenin "
+                        "belgede geçip geçmediğini ya da kaç kez geçtiğini "
+                        "doğrularken kullan. Sonuçlar [s. N] ile sayfa atfı taşır."
+                    ),
+                    args_schema=SearchDocumentRegexArgs,
+                    handler=_search_document_regex,
                 ),
             ]
         )

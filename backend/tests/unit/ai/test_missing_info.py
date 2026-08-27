@@ -178,6 +178,31 @@ def test_example_is_populated_for_known_field_shapes():
     assert by_key["belge_sayisi"].example
 
 
+def test_signer_name_and_title_get_distinct_examples():
+    """Writer iki ayrı imza yer tutucusu bırakır; HITL'de ad sorusu ile unvan
+    sorusu aynı "Ahmet Yılmaz / Daire Başkanı" önerisini göstermemeli."""
+    draft = (
+        "Bilgilerinize arz ederim.\n\n"
+        "[İmzalayacak yetkilinin adı ve soyadı]\n"
+        "[İmzalayacak yetkilinin unvanı]"
+    )
+    by_key = {q.key: q for q in build_missing_info_request(draft, REPORT, {"missing_fields": []})}
+
+    assert by_key["imzalayacak_yetkilinin_adi_ve_soyadi"].example == "Ahmet Yılmaz"
+    assert by_key["imzalayacak_yetkilinin_unvani"].example == "Daire Başkanı"
+
+
+def test_generic_fallback_help_no_longer_mentions_sen_karar_ver():
+    """Eksik-bilgi kartında "Sen karar ver" kontrolü yok; yardım metni de
+    kullanıcıyı ona yönlendirmemeli."""
+    questions = build_missing_info_request(
+        "Metinde bir [Tuhaf Alan] var.", REPORT, {"missing_fields": []}
+    )
+
+    assert questions
+    assert all("Sen karar ver" not in q.why for q in questions)
+
+
 def test_compliance_match_still_wins_over_the_generic_help():
     draft = "Sayın [MUHATAP],"
     classification = {

@@ -2,6 +2,7 @@ import { apiErrorFromResponse, apiFetch, apiRequest } from "./apiClient";
 import type {
   ChatRequest,
   ChatSession,
+  ContextUsage,
   PersistedChatMessage,
   ResumeRequest,
   SessionState,
@@ -154,4 +155,12 @@ export const chatService = {
       `/api/v1/chat/sessions/${encodeURIComponent(threadId)}/cancel`,
       { method: "POST" },
     ),
+  compact: (threadId: string) =>
+    apiRequest<{
+      status: "compacted" | "noop" | "busy" | "unavailable";
+      folded_turns?: number;
+      context_usage?: ContextUsage;
+    }>(`/api/v1/chat/sessions/${encodeURIComponent(threadId)}/compact`, {
+      method: "POST",
+    }),
 };

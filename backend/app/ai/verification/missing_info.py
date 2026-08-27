@@ -127,10 +127,22 @@ _GENERIC_FIELD_HELP: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
         "E-12345678-100-4567",
     ),
     (
+        # Yalnızca unvan sorusu -- ad sorusundan (aşağıda) önce gelir, çünkü
+        # writer iki ayrı yer tutucu bırakır ("[İmzalayacak yetkilinin adı
+        # ve soyadı]" ve "[İmzalayacak yetkilinin unvanı]") ve ikisi de
+        # aşağıdaki genel "imzalayacak yetkili" parçasıyla eşleşir; ayrılmazsa
+        # HITL'de her iki soruda da aynı "Ahmet Yılmaz / Daire Başkanı"
+        # önerisi görünür.
+        ("imzalayacak yetkilinin unvani", "yetkilinin unvani", "imza blogu unvani"),
+        "Belgeyi imzalayacak yetkilinin kadro/görev unvanı. Resmî yazı, yetkili amir "
+        "tarafından unvanı belirtilerek imzalanır.",
+        "Daire Başkanı",
+    ),
+    (
         ("imza sahibi", "imzalayacak yetkili", "imzalayacak yetkilinin adi", "yetkili amir", "imza blogu"),
-        "Belgeyi imzalayacak yetkilinin adı, soyadı ve unvanı. Resmî yazı, yetkili amir "
+        "Belgeyi imzalayacak yetkilinin adı ve soyadı. Resmî yazı, yetkili amir "
         "tarafından ad ve unvan belirtilerek imzalanır.",
-        "Ahmet Yılmaz / Daire Başkanı",
+        "Ahmet Yılmaz",
     ),
     (
         ("muhatap", "alicinin adi", "alici adi", "gonderilecek makam", "gonderilecegi makam"),
@@ -176,8 +188,7 @@ def _generic_field_help(label_text: str) -> tuple[str, str | None]:
             return help_text, example
     return (
         f"Taslakta '{label_text}' alanı boş bırakılmış. Bu alana ne yazılması gerektiğini "
-        f"belirtin; sistem verdiğiniz değeri metindeki yer tutucunun yerine koyacaktır. Emin "
-        f"değilseniz 'Sen karar ver' seçeneğini işaretleyebilirsiniz.",
+        f"belirtin; sistem verdiğiniz değeri metindeki yer tutucunun yerine koyacaktır.",
         None,
     )
 

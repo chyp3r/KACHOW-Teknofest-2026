@@ -10,6 +10,7 @@ import { MessageList } from "../features/chat/MessageList";
 import type {
   ChatMessage,
   ChatSession,
+  ContextUsage,
   GuardrailEvent,
   InterruptState,
   ToolCallEvent,
@@ -34,6 +35,9 @@ export function ChatsPage({
   messages,
   streamingText,
   loading,
+  compacting,
+  contextUsage,
+  onCompact,
   guardrailEvents,
   interrupt,
   workflowOpen,
@@ -75,6 +79,9 @@ export function ChatsPage({
   messages: ChatMessage[];
   streamingText: string;
   loading: boolean;
+  compacting: boolean;
+  contextUsage: ContextUsage | null;
+  onCompact: () => void | Promise<void>;
   guardrailEvents: GuardrailEvent[];
   interrupt: InterruptState | null;
   workflowOpen: boolean;
@@ -275,6 +282,9 @@ export function ChatsPage({
               selectedDocument={selectedDocument}
               selectedDraft={selectedDraft}
               loading={loading}
+              compacting={compacting}
+              contextUsage={contextUsage}
+              onCompact={onCompact}
               onSelectDocument={(document) => { setSelectedDraftId(null); onSelectDocument(document); }}
               onSelectDraft={(draft) => {
                 onClearDocument();

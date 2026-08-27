@@ -15,6 +15,7 @@ from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
 from app.ai.context.compress import truncate_with_marker
+from app.ai.context.usage import compute_context_usage
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.llm_nuance import judge_output_leakage
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
@@ -1161,8 +1162,13 @@ def create_planning_graph(
         fixed_cost = llm_client.count_tokens(
             assistant_agent.system_prompt
         ) + llm_client.count_tokens(state["input_text"])
+        # Aktif sağlayıcının gerçek bağlam penceresi: yerel Ollama'da
+        # OLLAMA_NUM_CTX (8192), Evren'de EVREN_NUM_CTX (262144). Hem
+        # geçmiş penceresi bütçesi hem de sohbetteki bağlam göstergesi buna
+        # göre boyutlanır (bkz. BaseLLMClient.context_window).
+        context_window = llm_client.context_window
         context_budget = TokenBudget(
-            total=settings.OLLAMA_NUM_CTX,
+            total=context_window,
             reserved_for_completion=ASSIST_COMPLETION_RESERVE_TOKENS + fixed_cost,
         )
 
@@ -1193,8 +1199,16 @@ def create_planning_graph(
         )
 
         remaining_for_history = context_budget.available - assembled.total_tokens
+        # Kullanıcı bağlamı elle sıkıştırdıysa (ChatService.compact_session)
+        # ``history_summarized_through`` ileri alınır; özetlenmiş turlar artık
+        # birebir pencereye girmez, yalnızca `history_summary`'de yaşar.
+        # Otomatik konsolidasyon zaten bu işareti steady-state'te ~son
+        # HISTORY_WINDOW turuna denk tutar, bu yüzden sıradan turda etki
+        # nötrdür.
+        _compacted_through = max(0, int(state.get("history_summarized_through") or 0))
+        _windowable_history = _prior_turns(state, HISTORY_RAW_CAP)[_compacted_through:]
         history = select_history_window(
-            _prior_turns(state, HISTORY_RAW_CAP),
+            _windowable_history,
             remaining_for_history,
             llm_client.count_tokens,
             min_turns=0 if is_small_talk_turn else 2,
@@ -1209,6 +1223,22 @@ def create_planning_graph(
                 assembled.compressed,
                 len(history),
             )
+
+        # Bağlam penceresi doluluk dökümü -- frontend'in sohbet alanındaki
+        # dairesel göstergesini besler. Modelin gerçekten kullandığı bütçe
+        # kalemleriyle birebir; ChatService.compact_session ile aynı
+        # yardımcıyı paylaşır (bkz. app.ai.context.usage).
+        context_usage = compute_context_usage(
+            llm_client,
+            system_prompt=assistant_agent.system_prompt,
+            input_text=state["input_text"],
+            document_context=assembled.get("document_context") if document_id else "",
+            history_summary=(
+                "" if is_small_talk_turn else (assembled.get("history_summary") or "")
+            ),
+            history_turns=history,
+            reserved_tokens=ASSIST_COMPLETION_RESERVE_TOKENS,
+        )
 
         referenced_anchor: dict[str, str] = {}
 
@@ -1392,6 +1422,7 @@ def create_planning_graph(
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
+                "context_usage": context_usage,
             }
             if flagged:
                 result["flagged"] = True
@@ -2120,6 +2151,13 @@ def create_planning_graph(
             "assist": _pick("assist_result"),
             "transfer": transfer_result,
         }
+        # Bağlam penceresi doluluk dökümü (yalnızca assist turu üretir; bkz.
+        # _run_assist). Frontend'in dairesel göstergesi son bilinen değeri
+        # koruduğu için diğer turlarda alanın olmaması sorun değil.
+        assist_context_usage = _pick("assist_result").get("context_usage")
+        if assist_context_usage:
+            output["context_usage"] = assist_context_usage
+
         if draft_result.get("conflicts") or draft_result.get("changelog"):
             output["revision"] = {
                 "conflicts": draft_result.get("conflicts") or [],

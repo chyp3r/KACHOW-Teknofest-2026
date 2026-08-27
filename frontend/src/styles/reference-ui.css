@@ -315,6 +315,9 @@ body { background: var(--surface-app); }
 .draft-routing-row > .button { flex: 0 0 auto; }
 .draft-routing-row .unit-picker { width: min(100%, 24rem); }
 .draft-meta-change-summary { margin: 0; padding: 0.75rem 0.875rem; color: var(--text-secondary); }
+.draft-download-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.65rem 0.875rem; color: var(--text-secondary); }
+.draft-download-link { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.6rem; border: 1px solid var(--border-default); border-radius: var(--radius-sm); color: var(--text-primary); background: transparent; cursor: pointer; }
+.draft-download-link:hover { border-color: var(--border-glass-focus); background: var(--surface-hover); }
 
 .workflow-region { border-left: 1px solid var(--border-default); background: var(--surface-panel); }
 .workflow-panel { padding: 1.25rem 1rem; border: 0; border-radius: 0; box-shadow: none; }

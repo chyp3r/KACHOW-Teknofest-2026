@@ -36,12 +36,10 @@ flowchart TD
     Workflow --> Planner{"Planner (Karar)"}
     Planner -->|Analiz| Graph1["Document Analysis Graph"]
     Planner -->|Taslak| Graph2["Draft Graph"]
-    Planner -->|Soru Cevap| Graph3["RAG Graph"]
-    Planner -->|Sohbet| Graph4["Chat Graph"]
+    Planner -->|Soru Cevap / Sohbet| Graph3["Asistan Düğümü"]
     Graph1 --> Response
     Graph2 --> Response
     Graph3 --> Response
-    Graph4 --> Response
     Response -->|Çıktı| Backend
 ```
 
@@ -79,8 +77,22 @@ sequenceDiagram
     end
 ```
 
-### 4. RAG Graph (Genel Soru-Cevap)
-Dokümanlar hakkındaki serbest soruları Qdrant üzerinden Hybrid Retriever (RRF) kullanarak yanıtlar.
+### 4. Asistan Düğümü (Genel Soru-Cevap)
+Sohbet ve belge/mevzuat sorularını tek bir düğümde karşılar (`planning_graph._run_assist` + `AssistantAgent`). Model, tur başına hangi aracı çağıracağına kendisi karar verir; bir belge ekliyse belge kapsamlı araçlar da bağlanır. Araç seti:
+
+| Araç | Ne yapar |
+| --- | --- |
+| `search_document` | Belge içinde **anlamsal (vektör)** arama; `[s. N]` sayfa atfı taşır. |
+| `search_document_regex` | Belge metninde **regex / birebir dizge** ile satır araması -- kesin bir sayı, tarih, atıf kodu veya bir terimin kaç kez geçtiği gibi anlamsal aramanın zayıf kaldığı durumlar için. `[s. N]` atfı taşır, 40 eşleşmede kesip toplamı belirtir. |
+| `get_document_details` | Belgenin özeti, üst verileri, uygunluk denetimi sonucu. |
+| `get_document_outline` | Sayfa listesi ve her sayfanın ilk satırı. |
+| `get_document_section` | Belirli bir sayfanın tam metni. |
+| `search_legislation` | Yerel mevzuat korpüsünde (Qdrant + BM25, RRF) arama. |
+| `search_legislation_live` | Yerel korpüs yetersizse `mevzuat.gov.tr` üzerinden canlı sorgu (MCP). |
+
+Her araç, modele döndürdüğü metni ayrıca yapılandırılmış bir `ToolResult` olarak da raporlar; çıktı guardrail'i (`output_gate`) yanıtı **yalnızca bu tur gerçekten alınan** kaynaklara göre dayanaklılık denetiminden geçirir.
+
+Yanıtın `details.context_usage` alanı, o turun bağlam penceresini nasıl kullandığını (sistem yönergesi, belge bağlamı, geçmiş özeti, sohbet geçmişi, güncel mesaj, tamamlama için ayrılan pay) gerçek token sayılarıyla döker; frontend'in sohbet alanındaki dairesel gösterge bunu okur.
 
 ### 5. Routing Graph
 Hazırlanan taslağın (güven skoru dikkate alınarak) en uygun kurumsal birime yönlendirilmesini sağlar. Güven skoru yetersizse insan onayına düşürür.

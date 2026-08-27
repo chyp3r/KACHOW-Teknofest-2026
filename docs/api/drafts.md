@@ -82,6 +82,27 @@ durumu `APPROVED` olur; `missing_information` varsa bu bulgular korunur ve
 durum `NEEDS_INPUT` kalır. Taslak sahibi ile aynı kurumdaki yönetici rollerinin
 `draft:update` yetkisi gerekir.
 
+---
+
+## `GET /api/v1/drafts/{draft_id}/export`
+
+Taslak sürümünü indirilebilir bir belgeye dönüştürür. Diğer uçların aksine
+`SuccessResponse` zarfı değil, doğrudan `attachment` olarak işaretlenmiş binary
+döndürür.
+
+| Sorgu Parametresi | Değer | Açıklama |
+| :--- | :--- | :--- |
+| `fmt` | `docx` \| `pdf` | Çıktı biçimi. Varsayılan `docx`. |
+
+Yazı tipi her iki biçimde de 12 punto Times New Roman'dır; PDF'te Türkçe glif
+kapsamı için Times New Roman metriğine denk bir serif TTF (Liberation Serif)
+çalışma anında kaydedilir. Yetki `GET /drafts/{draft_id}` ile aynıdır (sahip
+veya kurum genelinde ADMIN/MANAGER/ROOT).
+
+- **200 OK** — `Content-Type: application/vnd.openxmlformats-officedocument.wordprocessingml.document` veya `application/pdf`; `Content-Disposition: attachment; filename="..."` (Türkçe adı `filename*` ile de taşır).
+- **404 Not Found** — `draft_id` yok.
+- **422 Unprocessable Entity** — `fmt` `docx`/`pdf` dışında.
+
 #### 422 Unprocessable Entity
 `VALIDATION_ERROR`: `storage_path` geçersiz veya evrak okunamadı.
 

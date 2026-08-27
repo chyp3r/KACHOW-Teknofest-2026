@@ -101,6 +101,24 @@ async def record_draft(
                 if session_id is not None
                 else None
             )
+            # Bir revizyon turunun planı yalnızca `["revise"]`'dir --
+            # `routing` adımı yoktur (bkz. `app.ai.workflows.planner`), bu
+            # yüzden `chat_service._maybe_record_draft` bu çağrıya
+            # `destination=None` geçer. Birim önerisi bu versiyonun metni
+            # *hakkında* bir meta veridir ve içerik revizyonu onu
+            # değiştirmez; bu yüzden yeni değer boşsa üst versiyondan
+            # devralınır -- aksi halde her revizyon "Hedef birim"i sıfırlar.
+            # Gerçek bir `draft` turu (planında `routing` olan) yeni bir
+            # öneri getirdiğinde `destination` dolu gelir ve devralma
+            # tetiklenmez.
+            parent_unit_id = None
+            if parent is not None:
+                if not destination:
+                    destination = parent.destination
+                    parent_unit_id = parent.destination_unit_id
+                if not destination_justification:
+                    destination_justification = parent.destination_justification
+
             # `destination`, routing graph'ın serbest metin birim *adı*dır --
             # burada, yazma anında, bir kere gerçek bir `units` satırına
             # çözümlenir; `DraftShareService.send`'in eskiden her
@@ -113,6 +131,11 @@ async def record_draft(
             if destination and company_id:
                 unit = await UnitRepository(session).get_by_name(destination, company_id)
                 destination_unit_id = unit.id if unit else None
+            # Ad üst versiyondan devralındıysa ama bu turda çözümlenemediyse
+            # (company_id yok, ya da birim yeniden adlandırıldı) üst
+            # versiyonun zaten çözülmüş id'sine düş.
+            if destination_unit_id is None and parent_unit_id is not None:
+                destination_unit_id = parent_unit_id
             draft = await repository.create_version(
                 user_id=user_id,
                 company_id=company_id,

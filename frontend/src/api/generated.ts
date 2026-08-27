@@ -494,6 +494,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/chat/sessions/{session_id}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact Chat Session
+         * @description Sohbeti sıkıştır: birebir geçmiş penceresini yuvarlanan özete katla.
+         *
+         *     Bağlam göstergesinin "Bağlamı sıkıştır" düğmesi çağırır. Aktif bir tur
+         *     veya bekleyen bir HITL varsa ``{"status": "busy"}`` döner.
+         */
+        post: operations["compact_chat_session_api_v1_chat_sessions__session_id__compact_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/companies": {
         parameters: {
             query?: never;
@@ -1325,6 +1348,29 @@ export interface paths {
          * @description Bu taslağın revizyon zincirindeki her sürümü en eskiden en yeniye listeler.
          */
         get: operations["list_draft_versions_api_v1_drafts__draft_id__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/drafts/{draft_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Draft
+         * @description Bir taslak sürümünü indirilebilir bir belgeye dönüştürür (docx | pdf).
+         *
+         *     Router'daki diğer rotalardan farklı olarak bir ``SuccessResponse`` zarfı
+         *     değil, doğrudan ``attachment`` olarak işaretlenmiş binary döndürür.
+         */
+        get: operations["export_draft_api_v1_drafts__draft_id__export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5792,6 +5838,37 @@ export interface operations {
             };
         };
     };
+    compact_chat_session_api_v1_chat_sessions__session_id__compact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_companies_api_v1_companies_get: {
         parameters: {
             query?: {
@@ -6812,6 +6889,40 @@ export interface operations {
     list_draft_versions_api_v1_drafts__draft_id__versions_get: {
         parameters: {
             query?: never;
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_draft_api_v1_drafts__draft_id__export_get: {
+        parameters: {
+            query?: {
+                /** @description Çıktı biçimi. */
+                fmt?: string;
+            };
             header?: never;
             path: {
                 draft_id: string;

@@ -1,6 +1,8 @@
 import { Mic, MicOff, Send } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { DocumentSelector } from "../documents/DocumentSelector";
+import { ContextUsageRing } from "./ContextUsageRing";
+import type { ContextUsage } from "../../types/chat";
 import type { DocumentMetadata, ReasoningLevel } from "../../types/documents";
 import type { PersistedDraft } from "../../types/drafts";
 import { IconButton } from "../../components/Button";
@@ -13,6 +15,9 @@ export function ChatComposer({
   selectedDocument,
   selectedDraft,
   loading,
+  compacting = false,
+  contextUsage = null,
+  onCompact,
   onSelectDocument,
   onSelectDraft,
   onClearDocument,
@@ -26,6 +31,9 @@ export function ChatComposer({
   selectedDocument: DocumentMetadata | null;
   selectedDraft: PersistedDraft | null;
   loading: boolean;
+  compacting?: boolean;
+  contextUsage?: ContextUsage | null;
+  onCompact?: () => void | Promise<void>;
   onSelectDocument: (document: DocumentMetadata) => void;
   onSelectDraft: (draft: PersistedDraft) => void;
   onClearDocument: () => void;
@@ -72,9 +80,10 @@ export function ChatComposer({
     onPromptTemplateConsumed?.();
     textareaRef.current?.focus();
   }, [onPromptTemplateConsumed, promptTemplate]);
+  const locked = loading || compacting;
   const submit = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (!text.trim() || loading) return;
+    if (!text.trim() || locked) return;
     const value = text;
     setText("");
     dictationBaseRef.current = "";
@@ -99,34 +108,45 @@ export function ChatComposer({
           onClear={onClearDocument}
           onClearDraft={onClearDraft}
         />
-        <label className="composer-mode">
-          <span>Çalışma modu</span>
-          <Select
-            controlSize="sm"
-            value={level}
-            onChange={(event) => setLevel(event.target.value as ReasoningLevel)}
-          >
-            <option value="fast">Hızlı</option>
-            <option value="balanced">Dengeli</option>
-            <option value="deep">Derinlemesine</option>
-          </Select>
-        </label>
+        <div className="composer-mode-stack">
+          <label className="composer-mode">
+            <span>Çalışma modu</span>
+            <Select
+              controlSize="sm"
+              value={level}
+              onChange={(event) => setLevel(event.target.value as ReasoningLevel)}
+            >
+              <option value="fast">Hızlı</option>
+              <option value="balanced">Dengeli</option>
+              <option value="deep">Derinlemesine</option>
+            </Select>
+          </label>
+          {contextUsage && (
+            <ContextUsageRing
+              usage={contextUsage}
+              compacting={compacting}
+              onCompact={onCompact}
+            />
+          )}
+        </div>
       </div>
       <div className="composer-input">
         <Textarea
           ref={textareaRef}
           value={text}
-          disabled={loading}
+          disabled={locked}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={keyDown}
           maxLength={8000}
           rows={1}
           placeholder={
-            loading
-              ? "Bekleyen işlem tamamlandığında yeniden yazabilirsiniz."
-              : selectedDraft
-                ? "Seçili taslak için revizyon talimatınızı yazın…"
-                : "Bir soru yazın veya resmî yazı hazırlanmasını isteyin…"
+            compacting
+              ? "Sohbet sıkıştırılıyor…"
+              : loading
+                ? "Bekleyen işlem tamamlandığında yeniden yazabilirsiniz."
+                : selectedDraft
+                  ? "Seçili taslak için revizyon talimatınızı yazın…"
+                  : "Bir soru yazın veya resmî yazı hazırlanmasını isteyin…"
           }
           aria-label="Sohbet mesajı"
           aria-describedby="composer-keyboard-help"
@@ -138,7 +158,7 @@ export function ChatComposer({
               type="button"
               variant={speechListening ? "primary" : "outline"}
               icon={speechListening ? <MicOff /> : <Mic />}
-              disabled={loading}
+              disabled={locked}
               onClick={handleMicClick}
               tooltip={speechListening ? "Dikteyi durdur" : "Sesle yazdır"}
               aria-label={speechListening ? "Dikteyi durdur" : "Sesle yazdır"}
@@ -149,18 +169,26 @@ export function ChatComposer({
             type="submit"
             variant="primary"
             icon={<Send />}
-            loading={loading}
-            disabled={loading || !text.trim()}
-            aria-label={loading ? "Mesaj gönderiliyor" : "Mesajı gönder"}
+            loading={locked}
+            disabled={locked || !text.trim()}
+            aria-label={
+              compacting
+                ? "Sohbet sıkıştırılıyor"
+                : loading
+                  ? "Mesaj gönderiliyor"
+                  : "Mesajı gönder"
+            }
           />
         </div>
       </div>
       <small className="composer-keyboard-help" id="composer-keyboard-help">
-        {speechError
-          ? speechError
-          : speechListening
-            ? "Dinleniyor… durdurmak için mikrofon simgesine tekrar basın."
-            : "Göndermek için Enter, yeni satır için Shift + Enter"}
+        {compacting
+          ? "Sohbet sıkıştırılıyor; tamamlanınca mesaj alanı yeniden açılır."
+          : speechError
+            ? speechError
+            : speechListening
+              ? "Dinleniyor… durdurmak için mikrofon simgesine tekrar basın."
+              : "Göndermek için Enter, yeni satır için Shift + Enter"}
       </small>
     </form>
   );

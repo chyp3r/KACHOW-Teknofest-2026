@@ -30,6 +30,11 @@ ORCHESTRATION_TIMEOUT_SECONDS = settings.AI_WORKFLOW_TIMEOUT_SECONDS * 2
 DEFAULT_REPLY = "İşleminiz tamamlandı."
 INTERRUPTED_REPLY = "Devam etmek için ek bilgiye veya onayınıza ihtiyaç var."
 
+#: `compact_session` sohbeti sıkıştırırken birebir bırakılan son tur sayısı --
+#: süreklilik için (zamir/eksilti çözümü) yeterince yeni bağlam, ama pencereyi
+#: gerçekten küçültecek kadar az.
+COMPACT_KEEP_TURNS = 2
+
 #: Modül seviyesinde, bir `ChatService` örnek özniteliği değil (C13/C14, Faz 8):
 #: `api/dependency.get_chat_service` her istek için yeni bir `ChatService`
 #: oluşturur; oysa sardığı planlama grafı paylaşılan, tembel oluşturulan bir
@@ -565,6 +570,104 @@ class ChatService:
             )
             await self._end_orphaned_run(config, "cancelled")
             return {"status": "cancelled"}
+
+    async def compact_session(
+        self,
+        session_id: str,
+        user_id: Optional[str] = None,
+        company_id: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Sohbeti sıkıştır: birebir geçmiş penceresini `history_summary`'ye katla.
+
+        Kullanıcı tetikler (sohbetteki bağlam göstergesinin "Bağlamı sıkıştır"
+        düğmesi). Son ``COMPACT_KEEP_TURNS`` turu birebir bırakır, öncesini
+        yuvarlanan özete ekler ve ``history_summarized_through``'u ileri alır --
+        böylece bir sonraki assist turu bu turları yalnızca özet olarak görür
+        (bkz. ``planning_graph._run_assist``'in `_compacted_through` dilimi).
+        ``history`` kanalı bir reducer (append-only) olduğundan trim edilmez;
+        işaret + özet, birebir pencereyi küçültmeye yeter.
+
+        Returns:
+            ``{"status": "compacted"|"noop"|"busy"|"unavailable",
+            "folded_turns": int, "context_usage": {...}}``.
+        """
+        self._verify_thread_ownership(session_id, user_id)
+        async with _session_lock(session_id):
+            config = self._trace_config(session_id, user_id, company_id)
+            try:
+                snapshot = await self.planning_graph.aget_state(config)
+            except Exception:
+                return {"status": "unavailable"}
+            if getattr(snapshot, "next", ()):
+                # Aktif bir tur ya da bekleyen bir HITL var; şimdi sıkıştırmak
+                # yarıda kalmış durumu bozardı.
+                return {"status": "busy"}
+
+            values = getattr(snapshot, "values", None) or {}
+            history: list[dict[str, str]] = list(values.get("history") or [])
+            through = max(0, int(values.get("history_summarized_through") or 0))
+            existing_summary = values.get("history_summary") or ""
+
+            fold_end = max(through, len(history) - COMPACT_KEEP_TURNS)
+            to_fold = history[through:fold_end]
+            if not to_fold:
+                return {
+                    "status": "noop",
+                    "folded_turns": 0,
+                    "context_usage": self._context_usage_snapshot(
+                        existing_summary, history[through:]
+                    ),
+                }
+
+            from app.ai.agents.memory_summarizer import MemorySummarizerAgent
+            from app.ai.llms import get_fast_llm_client
+
+            summarizer = MemorySummarizerAgent(get_fast_llm_client())
+            new_summary = await summarizer.summarize(
+                existing_summary=existing_summary, new_turns=to_fold
+            )
+            await self.planning_graph.aupdate_state(
+                config,
+                {
+                    "history_summary": new_summary,
+                    "history_summarized_through": fold_end,
+                },
+                as_node="consolidate_memory",
+            )
+            return {
+                "status": "compacted",
+                "folded_turns": len(to_fold),
+                "context_usage": self._context_usage_snapshot(
+                    new_summary, history[fold_end:]
+                ),
+            }
+
+    @staticmethod
+    def _context_usage_snapshot(
+        history_summary: str, kept_turns: list[dict[str, str]]
+    ) -> dict[str, Any]:
+        """Sıkıştırma sonrası bağlam doluluk dökümü (assist turu beklemeden).
+
+        ``_run_assist``'in ürettiğiyle aynı biçim; frontend'in dairesel
+        göstergesi bunu anında güncelleyebilsin diye.
+        """
+        try:
+            from app.ai.agents.assistant import AssistantAgent
+            from app.ai.context.usage import compute_context_usage
+            from app.ai.llms import get_llm_client
+            from app.ai.workflows.planning_graph import ASSIST_COMPLETION_RESERVE_TOKENS
+
+            client = get_llm_client()
+            return compute_context_usage(
+                client,
+                system_prompt=AssistantAgent(client).system_prompt,
+                history_summary=history_summary or "",
+                history_turns=kept_turns,
+                reserved_tokens=ASSIST_COMPLETION_RESERVE_TOKENS,
+            )
+        except Exception:
+            logger.exception("Could not compute post-compaction context usage")
+            return {}
 
     async def _invoke(
         self,

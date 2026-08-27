@@ -79,6 +79,23 @@ export interface ChatMessage {
   resolvedPrompt?: ResolvedPromptInteraction;
 }
 
+/** Bir assist turunun `details.context_usage`'ı -- modelin bağlam
+ * penceresinin ne kadarının, ne için kullanıldığı (bkz. backend
+ * planning_graph._run_assist). Sohbet alanındaki dairesel gösterge bunu
+ * okur; yalnızca assist turları üretir, diğer turlarda alan yoktur. */
+export interface ContextUsageSegment {
+  key: string;
+  label: string;
+  tokens: number;
+}
+
+export interface ContextUsage {
+  total: number;
+  used: number;
+  free: number;
+  segments: ContextUsageSegment[];
+}
+
 export interface ChatSession {
   session_id: string;
   title: string | null;

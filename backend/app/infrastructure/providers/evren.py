@@ -83,6 +83,11 @@ class EvrenClient(BaseLLMClient):
             self.request_timeout,
         )
 
+    @property
+    def context_window(self) -> int:
+        """Evren'in bağlam penceresi (``settings.EVREN_NUM_CTX``, varsayılan 262144)."""
+        return settings.EVREN_NUM_CTX
+
     def _build_client(
         self,
         temperature: float,

@@ -177,3 +177,72 @@ async def test_concurrent_calls_for_different_sessions_are_not_serialized():
     # "second" ran to completion while "first" was still holding its own,
     # unrelated lock -- proof the two sessions never contended.
     assert order.index("second-enter") < order.index("first-exit")
+
+
+# ---------------------------------------------------------------------------
+# compact_session -- sohbeti sıkıştır (birebir pencereyi özete katla)
+# ---------------------------------------------------------------------------
+
+
+def _snapshot(values: dict, *, running: bool = False):
+    snap = AsyncMock()
+    snap.next = ("planning",) if running else ()
+    snap.values = values
+    return snap
+
+
+@pytest.mark.asyncio
+async def test_compact_session_folds_the_window_and_advances_the_marker(monkeypatch, fake_llm):
+    fake_llm.generate_return = "sıkıştırılmış özet"
+    monkeypatch.setattr("app.ai.llms.get_fast_llm_client", lambda *a, **k: fake_llm)
+    monkeypatch.setattr("app.ai.llms.get_llm_client", lambda *a, **k: fake_llm)
+
+    history = [
+        {"role": "user" if i % 2 == 0 else "assistant", "content": f"tur {i}"}
+        for i in range(10)
+    ]
+    graph = AsyncMock()
+    graph.aget_state.return_value = _snapshot(
+        {"history": history, "history_summary": "", "history_summarized_through": 0}
+    )
+    service = ChatService(planning_graph=graph)
+
+    result = await service.compact_session("sess-1", user_id=None)
+
+    assert result["status"] == "compacted"
+    assert result["folded_turns"] == 10 - 2  # COMPACT_KEEP_TURNS son turu birebir bırakır
+    assert result["context_usage"]["total"] > 0
+
+    graph.aupdate_state.assert_awaited_once()
+    _config, update = graph.aupdate_state.await_args.args
+    assert update["history_summary"] == "sıkıştırılmış özet"
+    assert update["history_summarized_through"] == 8
+
+
+@pytest.mark.asyncio
+async def test_compact_session_is_a_noop_when_the_window_is_already_small(monkeypatch, fake_llm):
+    monkeypatch.setattr("app.ai.llms.get_fast_llm_client", lambda *a, **k: fake_llm)
+    monkeypatch.setattr("app.ai.llms.get_llm_client", lambda *a, **k: fake_llm)
+
+    graph = AsyncMock()
+    graph.aget_state.return_value = _snapshot(
+        {"history": [{"role": "user", "content": "tek tur"}], "history_summarized_through": 0}
+    )
+    service = ChatService(planning_graph=graph)
+
+    result = await service.compact_session("sess-1", user_id=None)
+
+    assert result["status"] == "noop"
+    graph.aupdate_state.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_compact_session_refuses_while_a_turn_is_running(monkeypatch):
+    graph = AsyncMock()
+    graph.aget_state.return_value = _snapshot({"history": []}, running=True)
+    service = ChatService(planning_graph=graph)
+
+    result = await service.compact_session("sess-1", user_id=None)
+
+    assert result["status"] == "busy"
+    graph.aupdate_state.assert_not_awaited()

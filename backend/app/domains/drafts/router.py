@@ -1,6 +1,8 @@
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependency import get_draft_history_service, require_auth_if_enabled
@@ -15,6 +17,12 @@ from app.domains.audit.service import AuditService
 from app.domains.drafts.draft_share_service import DraftShareService
 from app.domains.drafts.model.draft_model import DraftModel
 from app.domains.drafts.model.draft_share_model import DraftShareModel
+from app.domains.drafts.export import (
+    draft_subject,
+    filename_for,
+    render_docx,
+    render_pdf,
+)
 from app.domains.drafts.repository import DraftRepository, DraftShareRepository
 from app.domains.drafts.schema.draft_schema import DraftDestinationUpdateRequest, DraftResponse
 from app.domains.drafts.schema.draft_share_schema import (
@@ -284,6 +292,55 @@ async def list_draft_versions(
             DraftResponse.model_validate(version).model_dump(mode="json")
             for version in versions
         ]
+    )
+
+
+_EXPORT_MEDIA_TYPE = {
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "pdf": "application/pdf",
+}
+
+
+@router.get("/{draft_id}/export", response_model=None)
+async def export_draft(
+    draft_id: str,
+    fmt: str = Query("docx", pattern="^(docx|pdf)$", description="Çıktı biçimi."),
+    service: DraftService = Depends(get_draft_history_service),
+    current_user: UserModel = Depends(require_auth_if_enabled),
+):
+    """Bir taslak sürümünü indirilebilir bir belgeye dönüştürür (docx | pdf).
+
+    Router'daki diğer rotalardan farklı olarak bir ``SuccessResponse`` zarfı
+    değil, doğrudan ``attachment`` olarak işaretlenmiş binary döndürür.
+    """
+    draft = await service.get_draft(draft_id)
+    _assert_owns_draft(draft, current_user)
+
+    subject = draft_subject(draft.content)
+    render = render_docx if fmt == "docx" else render_pdf
+    payload = render(
+        draft.content,
+        subject=subject,
+        correspondence_type=draft.correspondence_type,
+        destination=draft.destination,
+        version=draft.version,
+    )
+
+    ascii_name = filename_for(
+        subject=subject,
+        correspondence_type=draft.correspondence_type,
+        version=draft.version,
+        fmt=fmt,
+    )
+    pretty_name = f"{subject or ascii_name.rsplit('-v', 1)[0]} v{draft.version}.{fmt}"
+    disposition = (
+        f'attachment; filename="{ascii_name}"; '
+        f"filename*=UTF-8''{quote(pretty_name)}"
+    )
+    return Response(
+        content=payload,
+        media_type=_EXPORT_MEDIA_TYPE[fmt],
+        headers={"Content-Disposition": disposition},
     )
 
 
