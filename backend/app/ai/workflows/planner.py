@@ -78,6 +78,7 @@ from typing import TYPE_CHECKING, Any, Literal, NamedTuple, Optional
 
 from pydantic import BaseModel, Field
 
+from app.core.config import settings
 from app.observability.ai_metrics import ROUTER_STAGE_DURATION
 
 from app.ai.context.compress import truncate_with_marker
@@ -849,7 +850,17 @@ async def _resolve_intent(
     # ve burada onu yeniden sorgulamak, semantik katmanın kendi oyunu
     # görmezden gelmenin daha yavaş bir yolundan başka bir şey olmazdı.
     weak = source == "fused" and _has_only_weak_evidence(top_intent, lexical, has_active_draft)
-    if top_probability >= policy.tau_high and not weak:
+    decisive = top_probability >= policy.tau_high and not weak
+    # LOCAL_MODE=false iken semantik katman zaten ölü (PrototypeMatcher,
+    # aktif embedding modeli komitli vektörlerin damgasıyla -- nomic-embed-
+    # text -- uyuşmadığı için hiçbir aile yüklemiyor, bkz. planning_graph.py'
+    # deki ROUTER_SEMANTIC_AVAILABLE ERROR logu). Bu, kendinden emin ama
+    # yanlış bir sözcüksel/füzyon sonucunu düzeltecek hiçbir mekanizma
+    # bırakmıyor -- semantik yeniden-füzyonun normalde oynadığı "ikinci
+    # görüş" rolünü LLM üstlenir: kararlı bir sonuç bile bulut modunda LLM'e
+    # doğrulatılır, sonucu gerekirse geçersiz kılar.
+    force_llm_confirmation = decisive and not settings.LOCAL_MODE and llm_client is not None
+    if decisive and not force_llm_confirmation:
         logger.info(
             "Plan resolved via %s: intent=%s p=%.3f", source, top_intent, top_probability
         )
@@ -868,10 +879,17 @@ async def _resolve_intent(
         ROUTER_STAGE_DURATION.labels(stage="model").observe(time.perf_counter() - _model_start)
 
         if result == "model_failed":
-            logger.warning(
-                "Fused probability %.3f contested; model call failed, defaulting to assist.",
-                top_probability,
-            )
+            if force_llm_confirmation:
+                logger.warning(
+                    "LOCAL_MODE=false: forced confirmation call failed for an "
+                    "otherwise-decisive fused result (p=%.3f); defaulting to assist.",
+                    top_probability,
+                )
+            else:
+                logger.warning(
+                    "Fused probability %.3f contested; model call failed, defaulting to assist.",
+                    top_probability,
+                )
             return PlanDecision(
                 steps=list(PLAN_BY_INTENT["assist"]),
                 intent="assist",
@@ -900,11 +918,28 @@ async def _resolve_intent(
             )
             return _fused_decision(top_intent, probs, ranked, lexical, "model_unclear")
 
-        logger.info(
-            "Fused probability %.3f contested; model broke the tie: intent=%s",
-            top_probability,
-            result,
-        )
+        if force_llm_confirmation:
+            if result == top_intent:
+                logger.info(
+                    "LOCAL_MODE=false: model confirmed the decisive fused result "
+                    "(p=%.3f): intent=%s",
+                    top_probability,
+                    result,
+                )
+            else:
+                logger.info(
+                    "LOCAL_MODE=false: model overrode the decisive fused result "
+                    "(p=%.3f, fused=%s): intent=%s",
+                    top_probability,
+                    top_intent,
+                    result,
+                )
+        else:
+            logger.info(
+                "Fused probability %.3f contested; model broke the tie: intent=%s",
+                top_probability,
+                result,
+            )
         return PlanDecision(
             steps=list(PLAN_BY_INTENT[result]),
             intent=result,  # type: ignore[arg-type]
