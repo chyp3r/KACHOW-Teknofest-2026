@@ -1,6 +1,8 @@
 import logging
+import time
 from typing import Any, Dict, List, Optional
 from app.mcp.client import MCPClient
+from app.observability.ai_metrics import MCP_CALL_DURATION
 
 logger = logging.getLogger(__name__)
 
@@ -38,11 +40,22 @@ class MCPManager:
         client = self.clients.get(server_name)
         if not client:
             raise ValueError(f"MCP server '{server_name}' is not registered.")
-        
-        async with client.connect() as session:
-            logger.info(f"Calling tool '{tool_name}' on MCP server '{server_name}'...")
-            result = await session.call_tool(name=tool_name, arguments=arguments)
+
+        # Bu, her MCP çağrısının geçtiği tek boğaz noktası -- burada
+        # ölçmek, çağıranların (mevzuat_client.py, mevzuat_tools.py, ...)
+        # her biri kendi zamanlamasını ayrı ayrı eklemesini gerektirmez.
+        start = time.perf_counter()
+        status = "error"
+        try:
+            async with client.connect() as session:
+                logger.info(f"Calling tool '{tool_name}' on MCP server '{server_name}'...")
+                result = await session.call_tool(name=tool_name, arguments=arguments)
+            status = "success"
             return result
+        finally:
+            MCP_CALL_DURATION.labels(
+                server=server_name, tool=tool_name, status=status
+            ).observe(time.perf_counter() - start)
 
 # Tekil (singleton) yönetici örneği
 mcp_manager = MCPManager()

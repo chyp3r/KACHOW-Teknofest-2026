@@ -39,16 +39,20 @@ curl -f http://localhost/api/v1/health
 
 ---
 
-## `MEVZUAT_SOURCE` Ayarı
+## Canlı Mevzuat Araması (`LOCAL_MODE`, `MEVZUAT_SOURCE`)
 
-Prodüksiyon imajı (`backend.prod.Dockerfile`) varsayılan olarak canlı MCP servisini **inşa etmez** (`WITH_MEVZUAT_MCP=0`). Hızlı yanıt ve stabilite için:
+Mevzuat-mcp'nin istek başına ne zaman kullanılacağını asıl belirleyen `LOCAL_MODE`'dur, `MEVZUAT_SOURCE` değil (ayrıntı için [configuration.md](configuration.md)'nin "Mevzuat Kaynağı" bölümüne bakın). `.env.prod.example`'ın kendi varsayılanı `LOCAL_MODE=true` -- bu modda mevzuat-mcp yalnızca boot açılışındaki curated 7 kanunu ısıtır, istek başına ağa çıkmaz; imajın `WITH_MEVZUAT_MCP` build arg'ından bağımsız olarak güvenlidir.
 
-1. `.env.prod` içinde `MEVZUAT_SOURCE=local` bırakılması önerilir.
-2. Canlı sorgu (Mevzuat.gov.tr) isteniyorsa imaj aşağıdaki şekilde yeniden inşa edilmelidir:
+Prodüksiyon imajı (`backend.prod.Dockerfile`) varsayılan olarak canlı MCP servisini **inşa eder** (`WITH_MEVZUAT_MCP=1`), çünkü `LOCAL_MODE=false` -- evrak analizi, taslak ve chat'in hepsinde canlı arama -- bu projenin desteklediği bir çalışma modudur. Chromium + `playwright install --with-deps`'in getirdiği sistem kütüphaneleri birkaç yüz MB ekler; bunu istemiyorsanız:
+
+1. `.env.prod` içinde `LOCAL_MODE=true` bırakın (varsayılan zaten bu) -- imaj mevzuat-mcp'yi içerse bile istek başına hiç kullanılmaz.
+2. İmaj boyutunu da düşürmek isterseniz, Chromium hiç kurulmadan yeniden inşa edin:
    ```bash
-   docker build --build-arg WITH_MEVZUAT_MCP=1 -f deploy/docker/backend.prod.Dockerfile -t kachow-backend:latest .
+   docker build --build-arg WITH_MEVZUAT_MCP=0 -f deploy/docker/backend.prod.Dockerfile -t kachow-backend:latest .
    ```
-   Ve ardından ortam değişkeni `MEVZUAT_SOURCE=mcp` yapılmalıdır.
+   Bu durumda `.env.prod`'da `MEVZUAT_SOURCE=local` bırakılması önerilir -- aksi halde boot warm-up'ı her açılışta başarısız bir MCP denemesinden sonra yerel korpusa düşer.
+
+`LOCAL_MODE=false` çalıştırmak isteyenler `.env.prod`'da `EVREN_API_KEY`/`EVREN_QDRANT_URL`/`EVREN_QDRANT_API_KEY`'i doldurmalıdır -- bkz. bu dosyanın kendi `LOCAL_MODE` yorumu (`.env.prod.example:25`).
 
 ---
 

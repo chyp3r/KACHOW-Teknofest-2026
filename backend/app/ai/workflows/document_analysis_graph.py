@@ -39,9 +39,12 @@ from app.ai.workflows.resilience import (
     TRANSIENT_ERRORS,
     node_timeout,
 )
+from app.core.config import settings
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
 from app.core.enums.sensitivity_level import SensitivityLevel
+from app.mcp.mevzuat_client import search_and_excerpt
+from app.mcp.registry import MEVZUAT_SERVER, is_registered
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +265,52 @@ def _build_mevzuat_query(state: DocumentAnalysisState) -> str:
     parts.append(DOCUMENT_TYPE_QUERY_TERMS[document_type])
 
     return " ".join(parts).strip()
+
+
+async def _fetch_live_mevzuat_excerpt(query: str) -> Optional[Document]:
+    """``LOCAL_MODE=false`` iken bir konu sorgusunu canlı mevzuat.gov.tr
+    aramasına gönderir ve hedefli bir alıntı döndürür.
+
+    Bu, `retrieve_mevzuat_node`'a özgü bir yardımcıdır -- paylaşılan
+    `app.mcp.mevzuat_client` yardımcılarının aksine kendi zaman aşımını
+    taşır, çünkü tek bir çağıranı var ve o çağıranın bütçesi
+    (`MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS`) zaten sabit. `search_legislation
+    (local)` her zaman önce çalışır; bu yalnızca onun üzerine ekler, hiçbir
+    zaman yerine geçmez -- ağ hatası veya eşleşme yokluğu, çağıranın zaten
+    sahip olduğu yerel sonuçları etkilemez.
+
+    Args:
+        query: `_build_mevzuat_query`'nin ürettiği konu sorgusu.
+
+    Returns:
+        Canlı eşleşen mevzuattan bir `Document`, ya da hiçbir şey
+        eşleşmediğinde/hata veya zaman aşımı olduğunda None -- asla fırlatmaz.
+    """
+    try:
+        resolved = await asyncio.wait_for(
+            search_and_excerpt(query),
+            timeout=settings.MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "Live mevzuat search timed out after %ss for %r.",
+            settings.MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS,
+            query,
+        )
+        return None
+    except Exception:
+        logger.warning("Live mevzuat search failed for %r.", query, exc_info=True)
+        return None
+    if resolved is None:
+        return None
+    document_id, excerpt = resolved
+    return Document(
+        page_content=excerpt,
+        metadata={
+            "mevzuat": f"mevzuat.gov.tr (canlı, mevzuat_id={document_id})",
+            "source": f"mcp:{document_id}",
+        },
+    )
 
 
 def _render_mevzuat_excerpts(documents: list[Document]) -> str:
@@ -700,6 +749,21 @@ def create_document_analysis_graph(
         logger.info("Running Mevzuat Retrieval Node...")
         try:
             documents = await mevzuat_retriever.retrieve(query, limit=MEVZUAT_RESULT_LIMIT)
+            # LOCAL_MODE=false iken canlı bir eskalasyon dene -- LOCAL_MODE=
+            # true'da mevzuat-mcp yalnızca boot'taki curated 7 kanunu ısıtmak
+            # için kullanılır (bkz. app.ai.retrieval.mcp_mevzuat), istek
+            # başına burada değil. Bağımsız kapılı: yerel sonuç zaten elde,
+            # canlı deneme başarısız olursa mevcut `documents` değişmeden
+            # kalır -- bkz. _fetch_live_mevzuat_excerpt'in kendi docstring'i.
+            live_enabled = (
+                not settings.LOCAL_MODE
+                and settings.MEVZUAT_MCP_ENABLED
+                and is_registered(MEVZUAT_SERVER)
+            )
+            if live_enabled:
+                live_document = await _fetch_live_mevzuat_excerpt(query)
+                if live_document is not None:
+                    documents = [live_document, *documents][:MEVZUAT_RESULT_LIMIT]
             logger.info("Retrieved %d mevzuat excerpt(s).", len(documents))
             await emit_node_end(
                 config,

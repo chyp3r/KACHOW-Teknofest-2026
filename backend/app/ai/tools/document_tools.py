@@ -20,6 +20,7 @@ from app.ai.documents.outline import build_outline, format_outline
 from app.ai.embeddings.models import BaseEmbeddingsClient
 from app.ai.guardrails.sensitivity import assessment_from_analysis
 from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
+from app.ai.tools.mevzuat_tools import NOT_FOUND as _LIVE_NOT_FOUND
 from app.ai.tools.mevzuat_tools import build_live_legislation_tools
 from app.ai.tools.registry import ToolSpec
 from app.ai.workflows.events import child_config
@@ -33,6 +34,23 @@ QA_COLLECTION_NAME = "document_qa"
 #: Vektör araması hiçbir şey döndürmediğinde ve yanıtlamanın başka bir yolu
 #: olmadığında yedek dilim boyutu. Prompt bütçesini şişirmesin diye sınırlı.
 TEXT_SLICE_CHARS = 8000
+
+#: `search_legislation`'ın (yerel `mevzuat` koleksiyonu) en iyi sonucunun,
+#: sorguyu gerçekten yanıtlamadığının işareti sayılacağı RRF skor eşiği --
+#: bkz. `HybridRetriever.retrieve` (hybrid.py:93), Qdrant'ın native RRF
+#: füzyonundan gelen skoru buraya yazar. `RETRIEVAL_LIMIT=4` (rag_graph.py)
+#: nedeniyle sonuç sayısı tek başına zayıf bir sinyal -- neredeyse her
+#: sorgu 4 komşu döndürür, alakasız olsa bile.
+#:
+#: DEĞER KALİBRE EDİLMEDİ. Qdrant'ın RRF sabiti ve bu koleksiyondaki gerçek
+#: skor dağılımı yalnızca canlı ölçümle bilinir --
+#: `python scripts/evaluate_mevzuat_retrieval.py --show-scores` bilinen
+#: cevaplanabilir/cevaplanamaz sorgular için skorları yazdırır; o ölçümden
+#: çıkan değer bu yorumla birlikte güncellenmelidir (EXCERPT_CHAR_LIMIT'in
+#: mevzuat_tools.py'de belgelendiği gibi). Kalibrasyon tamamlanana kadar bu,
+#: canlı eskalasyonun hiç tetiklenmemesi yönünde -- yani en güvenli yönde --
+#: hata yapması için kasıtlı olarak yüksek tutulmuş bir üst sınırdır.
+WEAK_SCORE_THRESHOLD = 0.05
 
 
 class ToolResult(BaseModel):
@@ -164,6 +182,14 @@ def build_assistant_tools(
     def _report(result: ToolResult) -> None:
         if on_tool_result:
             on_tool_result(result)
+
+    # Bu tur için yaşayan eskalasyon durumu: search_legislation_live'ın
+    # sarmalayıcısı (aşağıda), search_legislation gerçekten denenmeden --
+    # ya da denenip güçlü sonuç bulmuşken -- ağa çıkmamak için bunu okur.
+    # build_assistant_tools() turda bir kez çağrıldığından (bkz.
+    # planning_graph._run_assist), bu closure hem AssistantAgent'ın
+    # MAX_TOOL_TURNS=2 iç turunun her ikisine de doğal olarak yayılır.
+    _legislation_state = {"attempted": False, "weak": False}
 
     if document_id:
         document_sensitivity = assessment_from_analysis(
@@ -395,9 +421,19 @@ def build_assistant_tools(
                     config=child_config(config),
                 )
                 context = result.get("context") or ""
+                documents = result.get("documents") or []
             except Exception:
                 logger.exception("Assistant legislation search failed")
                 context = ""
+                documents = []
+            # search_legislation_live'ın sarmalayıcısının okuduğu eskalasyon
+            # sinyali. Sayı tek başına zayıf bir sinyal -- RETRIEVAL_LIMIT=4
+            # (rag_graph.py) nedeniyle neredeyse her sorgu 4 komşu döndürür,
+            # alakasız olsa bile; asıl sinyal en iyi sonucun RRF skoru (bkz.
+            # WEAK_SCORE_THRESHOLD'un kendi yorumu).
+            top_score = documents[0].metadata.get("score", 0.0) if documents else 0.0
+            _legislation_state["attempted"] = True
+            _legislation_state["weak"] = (not documents) or top_score < WEAK_SCORE_THRESHOLD
             if not context:
                 return "İlgili bir mevzuat maddesi bulunamadı."
             # Mevzuat, doğası gereği kamuya açık referans materyalidir, asla
@@ -420,9 +456,60 @@ def build_assistant_tools(
         )
 
     # Bilinçli olarak korpus aracından sonra eklenir: model sıralı bir
-    # listeden seçer ve çevrimdışı yol varsayılan olmalıdır. Bu,
-    # MEVZUAT_MCP_ENABLED kapalıyken hiçbir şey eklemez, bu yüzden modele
-    # asla çalışamayacak bir araç sunulmaz.
-    tools.extend(build_live_legislation_tools())
+    # listeden seçer ve çevrimdışı yol varsayılan olmalıdır. build_live_
+    # legislation_tools() kendi içinde settings.LOCAL_MODE +
+    # settings.MEVZUAT_MCP_ENABLED + sunucu kaydı şartlarını kontrol eder;
+    # hiçbiri tutmuyorsa boş liste döner ve modele asla çalışamayacak bir
+    # araç sunulmaz.
+    live_tools = build_live_legislation_tools()
+    if live_tools:
+        tools.append(_guard_live_legislation_tool(live_tools[0], _legislation_state, _report))
 
     return tools
+
+
+def _guard_live_legislation_tool(
+    live_tool: ToolSpec,
+    legislation_state: dict[str, bool],
+    report: Callable[[ToolResult], None],
+) -> ToolSpec:
+    """``search_legislation_live``'ı, yalnızca yerel arama gerçekten
+    denenip zayıf çıktığında ağa çıkacak şekilde sarmalar.
+
+    Model, açıklamaya uyup uymamakta serbesttir -- aynı yanıtta her iki
+    aracı da isteyebilir, ya da yereli hiç denemeden canlıyı ilk turda
+    çağırabilir. ``AssistantAgent.run_stream`` bir yanıtın tüm
+    ``tool_calls``'larını sırayla yürüttüğü için (bkz. assistant.py), bu
+    sarmalayıcı asıl ağ I/O'sundan hemen önce ``legislation_state``'i
+    okuyan çalışma zamanı kapısıdır: model iki aracı aynı yanıtta isterse
+    bile ``search_legislation`` önce çalışır ve durumu yazar, sonra bu
+    kapı gerçekten zayıf olup olmadığını görür; model doğrudan canlıyı
+    çağırırsa ``attempted`` hâlâ ``False`` olduğu için kapı reddeder.
+
+    Ayrıca alttaki ``live_tool.handler``'ın atladığı ``ToolResult``
+    raporlamasını da burada tamamlar -- onsuz, canlı aramadan gelen metin
+    modelin bağlamına girer ama ``output_gate.evaluate_response``'un
+    dayanaklılık kontrolüne hiç görünmez ve içindeki her somut iddia
+    (madde no, tarih) desteksiz sayılıp karartılır.
+    """
+
+    async def _guarded_handler(query: str) -> str:
+        if not (legislation_state["attempted"] and legislation_state["weak"]):
+            return (
+                "Önce search_legislation ile yerel korpüste ara. Sonuç yoksa "
+                "veya yetersizse bu aracı tekrar çağırabilirsin."
+            )
+        result = await live_tool.handler(query=query)
+        if result and result != _LIVE_NOT_FOUND:
+            # Mevzuat.gov.tr'den gelen metin de kamuya açık referans
+            # materyalidir -- search_legislation'ın kendi _report çağrısıyla
+            # aynı gerekçe, aynı UNMARKED gizlilik seviyesi.
+            report(ToolResult(tool="search_legislation_live", text=result))
+        return result
+
+    return ToolSpec(
+        name=live_tool.name,
+        description=live_tool.description,
+        args_schema=live_tool.args_schema,
+        handler=_guarded_handler,
+    )

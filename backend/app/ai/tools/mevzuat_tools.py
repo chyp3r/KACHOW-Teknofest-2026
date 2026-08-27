@@ -30,8 +30,7 @@ from pydantic import BaseModel, Field
 
 from app.ai.tools.registry import ToolSpec
 from app.core.config import settings
-from app.mcp.manager import mcp_manager
-from app.mcp.mevzuat_client import fetch_mevzuat_text, pick_document_id, resolve_and_fetch, text_of
+from app.mcp.mevzuat_client import resolve_and_fetch, search_and_excerpt
 from app.mcp.registry import MEVZUAT_SERVER, is_registered
 
 logger = logging.getLogger(__name__)
@@ -48,25 +47,27 @@ class SearchLiveLegislationArgs(BaseModel):
 
     query: str = Field(
         description=(
-            "Aranacak mevzuatın adı veya numarası (örn. '657', "
-            "'Tebligat Kanunu'). Konu değil, mevzuatın kendisi aranır."
+            "Aranacak mevzuatın adı, numarası (örn. '657') veya konusu "
+            "(örn. 'kamu ihale sözleşmesi feshi'). Sayısal olmayan sorgular "
+            "mevzuat.gov.tr'de tam metin araması yapar ve ilgili maddeyi "
+            "hedefli olarak döndürür."
         )
     )
 
 
 async def _lookup(query: str) -> str:
-    """Bir mevzuat adını veya numarasını resmî metnine çözümler.
+    """Bir mevzuat adını, numarasını veya konusunu resmî metnine çözümler.
 
     Args:
-        query: Mevzuat adı veya numarası.
+        query: Mevzuat adı, numarası veya konu/soru string'i.
 
     Returns:
         Resmî metnin bir alıntısı, veya `NOT_FOUND`.
     """
-    # Sayısal sorgular güvenilir yoldur. Başlığa göre çözümleme, önemli
+    # Sayısal sorgular en güvenilir yoldur -- ad/konu araması, önemli
     # olacak kadar sık yanlış belge döndürür -- "Devlet Memurları Kanunu"
     # araması, 657'yi *değiştiren* 2022 tarihli bir kanun olan 7417'yi en
-    # üste koyar; 657'nin kendisi ise hiç görünmez. `scripts/
+    # üste koyabilir; 657'nin kendisi ise hiç görünmeyebilir. `scripts/
     # fetch_mevzuat_corpus.py`'nin belgelediği aynı tuzak.
     stripped = query.strip()
     if stripped.isdigit():
@@ -80,14 +81,11 @@ async def _lookup(query: str) -> str:
         # tam olarak bu çözümleme mantığını paylaşır.
         resolved = await resolve_and_fetch(stripped, "KANUN")
     else:
-        by_name = await mcp_manager.call_tool(
-            MEVZUAT_SERVER, "search_mevzuat", {"mevzuat_adi": stripped, "page_size": 5}
-        )
-        document_id = pick_document_id(text_of(by_name))
-        resolved = None
-        if document_id is not None:
-            text = await fetch_mevzuat_text(document_id)
-            resolved = (document_id, text) if text else None
+        # Ad veya konu -- ikisi de aynı `search_mevzuat` tool'unun `phrase`
+        # parametresiyle içerikte tam metin araması olarak ele alınır (bkz.
+        # `search_and_excerpt`'in kendi docstring'i). Sonuç, tam metin
+        # çekip kırpmak yerine sorguyla eşleşen hedefli pasajlardır.
+        resolved = await search_and_excerpt(stripped)
 
     if resolved is None:
         return NOT_FOUND
@@ -102,18 +100,23 @@ def build_live_legislation_tools() -> list[ToolSpec]:
     """MCP sunucusu yapılandırıldığında canlı mevzuat aracını inşa eder.
 
     Returns:
-        `MEVZUAT_MCP_ENABLED` açık ve sunucu kayıtlıysa tek elemanlı bir
-        liste, aksi halde boş bir liste -- böylece modele asla çalışamayacak
-        bir araç sunulmaz.
+        `LOCAL_MODE` kapalı, `MEVZUAT_MCP_ENABLED` açık ve sunucu kayıtlıysa
+        tek elemanlı bir liste, aksi halde boş bir liste -- böylece modele
+        asla çalışamayacak bir araç sunulmaz.
     """
-    # Yalnızca kayıt değil, her iki koşul da: bugün `register_servers()`,
+    # LOCAL_MODE=true iken mevzuat-mcp yalnızca boot'taki curated 7 kanunu
+    # ısıtmak için kullanılır (bkz. app.ai.retrieval.mcp_mevzuat.warm_up);
+    # istek başına hiçbir MCP ağ çağrısı yapılmaz. Ölçüm: local modda
+    # mevzuat aramasının kullanıcı deneyimini bozacak kadar yavaş olması.
+    #
+    # Yalnızca kayıt değil, geri kalan iki koşul da: bugün `register_servers()`,
     # `mcp_manager.register_server`'ın tek çağıranıdır ve zaten bu aynı
     # bayrağa göre kapılanır, bu yüzden yalnızca is_registered()'ı kontrol
     # etmek tesadüfen bayrakla uyuşur. Burada ikisini de doğrudan kontrol
     # etmek, bunun eklenen tek kayıt yolu olduğu gerçeğine bağımlılığı
     # ortadan kaldırır; bu gerçeği gelecekteki bir çağıranın sessizce
     # geçersiz kılabileceği bir gerçek olarak bırakmak yerine.
-    if not settings.MEVZUAT_MCP_ENABLED or not is_registered(MEVZUAT_SERVER):
+    if settings.LOCAL_MODE or not settings.MEVZUAT_MCP_ENABLED or not is_registered(MEVZUAT_SERVER):
         return []
 
     async def _search_legislation_live(query: str) -> str:
