@@ -130,3 +130,30 @@ def test_the_writer_prompt_never_tells_the_model_to_sign_with_the_counterpartys_
 
     assert "gelen evrakın imza sahibi" not in writer_prompt
     assert "Gelen evrakın kendi imza sahibi" in writer_prompt  # the explicit prohibition
+
+
+def test_the_assistant_prompt_never_names_its_internal_document_tools():
+    """#282: the assistant used to surface tool names like
+    ``get_document_details`` verbatim in a user-facing answer, because they
+    were written in backticks in the prompt itself. The prompt now guides
+    the model by capability, not by tool name."""
+    assistant_prompt = get_prompt_manager().get_template("assistant")
+
+    for tool_name in (
+        "search_document",
+        "get_document_details",
+        "get_document_outline",
+        "get_document_section",
+        "search_legislation",
+    ):
+        assert tool_name not in assistant_prompt
+
+
+def test_the_assistant_prompt_forbids_permission_questions_for_read_only_work():
+    """#282: the assistant used to end a summary request with "...görmek
+    ister misiniz?" instead of just producing the summary. The prompt now
+    tells it to deliver read-only results directly."""
+    assistant_prompt = get_prompt_manager().get_template("assistant")
+
+    assert "izin isteme" in assistant_prompt
+    assert "İç mekanizma gizliliği" in assistant_prompt

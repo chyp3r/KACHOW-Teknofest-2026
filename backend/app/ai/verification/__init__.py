@@ -13,7 +13,12 @@ from app.ai.verification.llm_judge import (
     judge_draft,
     merge_verdicts,
 )
-from app.ai.verification.missing_info import InfoQuestion, apply_answers, build_missing_info_request
+from app.ai.verification.missing_info import (
+    InfoQuestion,
+    apply_answers,
+    build_missing_info_request,
+    resolve_placeholders_from_brief,
+)
 from app.ai.verification.placeholders import (
     NormalizedDraft,
     fill_date_placeholders,
@@ -42,6 +47,7 @@ __all__ = [
     "InfoQuestion",
     "apply_answers",
     "build_missing_info_request",
+    "resolve_placeholders_from_brief",
     "NormalizedDraft",
     "fill_date_placeholders",
     "normalize_role_placeholders",
