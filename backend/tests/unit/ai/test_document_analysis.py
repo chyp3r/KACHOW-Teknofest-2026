@@ -9,6 +9,7 @@ from app.ai.compliance import EvrakField
 from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
 from app.ai.llms.base import BaseLLMClient
 from app.ai.retrieval.hybrid import HybridRetriever
+from app.ai.agents.classifier import ClassifierAgent
 from app.ai.workflows.document_analysis_graph import (
     ANALYSIS_MAX_TOKENS,
     DocumentAnalysisOutput,
@@ -16,11 +17,14 @@ from app.ai.workflows.document_analysis_graph import (
     MevzuatSuggestion,
     MevzuatSuggestionOutput,
     _build_mevzuat_query,
+    _extract_with_gap_fill_cascade,
     _trim_for_extraction,
     create_document_analysis_graph,
 )
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
+from app.mcp.manager import mcp_manager
+from app.mcp.registry import MEVZUAT_SERVER
 
 OFFICIAL_LETTER_TEXT = (
     "T.C.\nÖRNEK BAKANLIĞI\nSayı: E-123-456\nTarih: 30.07.2026\n"
@@ -116,6 +120,182 @@ def test_mevzuat_query_tolerates_empty_state():
     query = _build_mevzuat_query({})
     assert query.startswith("resmî yazı")
     assert "sayı" in query
+
+
+# ==========================================
+# _extract_with_gap_fill_cascade
+# ==========================================
+# `merge_parsed_over_model` discards an AUTHORITATIVE_FIELD value the model
+# reported when the deterministic parser found nothing AND no document_text
+# is given to ground it (anti-hallucination guardrail -- see that function's
+# own docstring). So these tests pass a `parsed` dict covering every
+# required official_letter field except whichever one a given test wants to
+# be genuinely missing; passing document_text="" is then fine, since parsed
+# alone already satisfies the "authoritative field present" branch.
+_ALL_PARSED = {
+    "sayi": "E-123-456",
+    "tarih": "30.07.2026",
+    "konu": "Yıllık İzin Talebi",
+    "muhatap": "İLGİLİ MAKAMA",
+    "gonderen_kurum": "Örnek Bakanlığı",
+    "imza_sahibi": "Mehmet Öztürk",
+    "imza_unvani": "Genel Müdür",
+}
+
+
+def _agent_returning(*results) -> ClassifierAgent:
+    """A ClassifierAgent whose run_structured yields `results` in order."""
+    agent = ClassifierAgent(MagicMock(spec=BaseLLMClient))
+    agent.run_structured = AsyncMock(side_effect=results)
+    return agent
+
+
+@pytest.mark.asyncio
+async def test_cascade_does_not_escalate_when_the_fast_tier_result_is_compliant():
+    fast_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "Hızlı özet.", **COMPLETE_FIELDS.model_dump()))
+    escalation_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "asla kullanılmamalı"))
+
+    document_type, summary, fields, escalated = await _extract_with_gap_fill_cascade(
+        fast_agent, escalation_agent, "prompt", parsed=_ALL_PARSED, document_text=""
+    )
+
+    assert escalated is False
+    assert document_type == DocumentType.OFFICIAL_LETTER
+    assert summary == "Hızlı özet."
+    assert fields["sayi"] == "E-123-456"
+    escalation_agent.run_structured.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_cascade_escalates_when_the_fast_tier_result_is_missing_a_required_field():
+    # official_letter requires muhatap (see test_graph_detects_missing_fields_without_retriever) --
+    # left out of `parsed` and out of the model's own report, so it is
+    # genuinely missing after the merge and this must trigger escalation.
+    parsed = {k: v for k, v in _ALL_PARSED.items() if k != "muhatap"}
+    fast_fields = COMPLETE_FIELDS.model_dump()
+    fast_fields["muhatap"] = None
+    fast_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "Hızlı özet.", **fast_fields))
+    escalation_agent = _agent_returning(
+        _merged(DocumentType.OFFICIAL_LETTER, "Kalite özeti.", **COMPLETE_FIELDS.model_dump())
+    )
+
+    document_type, summary, fields, escalated = await _extract_with_gap_fill_cascade(
+        fast_agent, escalation_agent, "prompt", parsed=parsed, document_text=""
+    )
+
+    assert escalated is True
+    assert summary == "Kalite özeti."
+    escalation_agent.run_structured.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cascade_merge_keeps_the_fast_tiers_value_when_the_quality_tier_leaves_it_blank():
+    """Escalation isn't 'quality tier wins wholesale' -- a field the fast
+    tier correctly read must survive even if the quality tier's retry
+    happens to come back blank for it. Uses `ivedilik`, a non-authoritative
+    field that `merge_parsed_over_model` passes through exactly as the model
+    produced it, so this isolates the cascade's OWN merge preference from
+    `merge_parsed_over_model`'s separate authoritative-field/grounding
+    rules (covered by the tests above and by test_field_parser.py)."""
+    parsed = {k: v for k, v in _ALL_PARSED.items() if k != "muhatap"}  # triggers escalation
+    fast_fields = COMPLETE_FIELDS.model_dump()
+    fast_fields["muhatap"] = None
+    fast_fields["ivedilik"] = "Çok İvedi"
+    quality_fields = COMPLETE_FIELDS.model_dump()
+    quality_fields["muhatap"] = None
+    quality_fields["ivedilik"] = None  # quality tier regresses on this one
+    fast_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "Hızlı özet.", **fast_fields))
+    escalation_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "Kalite özeti.", **quality_fields))
+
+    _, _, fields, escalated = await _extract_with_gap_fill_cascade(
+        fast_agent, escalation_agent, "prompt", parsed=parsed, document_text=""
+    )
+
+    assert escalated is True
+    assert fields["ivedilik"] == "Çok İvedi"  # kept from the fast tier
+
+
+@pytest.mark.asyncio
+async def test_cascade_does_not_escalate_over_a_field_the_deterministic_parser_already_recovered():
+    """`format_parsed_fields` explicitly tells the model to skip fields the
+    regex parser already found (see its own docstring), so the model
+    deliberately leaves `muhatap` blank here -- that must NOT read as a gap:
+    `merge_parsed_over_model` fills it back in before the completeness check
+    runs, exactly as it does in `analyze_node`. Checking the model's raw,
+    pre-merge output here would make every document look incomplete (the
+    bug this test guards against)."""
+    fast_fields = COMPLETE_FIELDS.model_dump()
+    fast_fields["muhatap"] = None
+    fast_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "Hızlı özet.", **fast_fields))
+    escalation_agent = _agent_returning(_merged(DocumentType.OFFICIAL_LETTER, "asla kullanılmamalı"))
+
+    _, _, fields, escalated = await _extract_with_gap_fill_cascade(
+        fast_agent, escalation_agent, "prompt", parsed=_ALL_PARSED, document_text=""
+    )
+
+    assert escalated is False
+    assert fields["muhatap"] == "İLGİLİ MAKAMA"
+    escalation_agent.run_structured.assert_not_awaited()
+
+
+# ==========================================
+# analyze_node wired to the gap-fill cascade under LOCAL_MODE=false
+# ==========================================
+# LOCAL_MODE pinned explicitly in every test below -- see scripts/evaluate_analysis_cascade.py
+# for the benchmark this default flip was based on (identical recall, +1 document_type
+# correct, no measurable time cost across two runs on the 12-document sample corpus).
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_uses_the_fast_tier_alone_when_it_is_already_compliant(mock_classify):
+    mock_classify.side_effect = [
+        _merged(DocumentType.OFFICIAL_LETTER, "Hızlı özet.", **COMPLETE_FIELDS.model_dump()),
+    ]
+
+    with patch.multiple("app.core.config.settings", LOCAL_MODE=False):
+        graph = create_document_analysis_graph(
+            MagicMock(spec=BaseLLMClient), fast_llm_client=MagicMock(spec=BaseLLMClient)
+        )
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert result["summary"] == "Hızlı özet."
+    assert mock_classify.await_count == 1  # fast tier alone sufficed, no escalation
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_escalates_to_the_quality_tier_when_the_fast_tier_leaves_a_gap(mock_classify):
+    mock_classify.side_effect = [
+        _merged(DocumentType.OFFICIAL_LETTER, "Hızlı özet.", muhatap=None),  # fast tier: missing muhatap
+        _merged(DocumentType.OFFICIAL_LETTER, "Kalite özeti.", **COMPLETE_FIELDS.model_dump()),  # escalation
+    ]
+
+    with patch.multiple("app.core.config.settings", LOCAL_MODE=False):
+        graph = create_document_analysis_graph(
+            MagicMock(spec=BaseLLMClient), fast_llm_client=MagicMock(spec=BaseLLMClient)
+        )
+        result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    assert result["summary"] == "Kalite özeti."
+    assert mock_classify.await_count == 2
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_graph_does_not_escalate_on_an_incomplete_result_under_local_mode_true(mock_classify):
+    """The gap-fill cascade is scoped to LOCAL_MODE=false (Evren/cloud) only
+    -- under Ollama, an incomplete-but-successful result must not trigger a
+    second call even with a fast_llm_client available; only an outright
+    exception still cascades (the pre-existing ladder, untouched)."""
+    mock_classify.return_value = _merged(DocumentType.OFFICIAL_LETTER, "Özet.", muhatap=None)
+
+    with patch.multiple("app.core.config.settings", LOCAL_MODE=True):
+        graph = create_document_analysis_graph(
+            MagicMock(spec=BaseLLMClient), fast_llm_client=MagicMock(spec=BaseLLMClient)
+        )
+        result = await graph.ainvoke({"input_text": INCOMPLETE_LETTER_TEXT})
+
+    assert result["summary"] == "Özet."
+    assert mock_classify.await_count == 1
 
 
 # ==========================================
@@ -643,6 +823,182 @@ async def test_graph_survives_retriever_failure(mock_classify):
     assert result["mevzuat_documents"] == []
     assert result["mevzuat_suggestions"] == []
     assert result["compliance_status"] == ComplianceStatus.COMPLIANT.value
+
+
+# ==========================================
+# LOCAL_MODE ile canlı mevzuat eskalasyonu
+# ==========================================
+@pytest.fixture(autouse=True)
+def _clean_mcp_registry_for_live_mevzuat_tests():
+    mcp_manager.clients.clear()
+    yield
+    mcp_manager.clients.clear()
+
+
+def _local_only_retriever() -> AsyncMock:
+    retriever = AsyncMock(spec=HybridRetriever)
+    retriever.retrieve.return_value = [
+        Document(page_content="MADDE 11-", metadata={"mevzuat": "RYUEHY"})
+    ]
+    return retriever
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_is_never_attempted_in_local_mode(
+    mock_classify, mock_suggest
+):
+    """LOCAL_MODE=true'da mevzuat-mcp yalnızca boot'taki curated 7 kanunu
+    ısıtmak için kullanılır -- diğer iki şart (MEVZUAT_MCP_ENABLED, kayıt)
+    tutsa bile evrak analizi hiç ağa çıkmamalı."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=True,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_not_called()
+    assert [d.metadata["mevzuat"] for d in result["mevzuat_documents"]] == ["RYUEHY"]
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_is_never_attempted_when_the_global_switch_is_off(
+    mock_classify, mock_suggest
+):
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=False,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_is_never_attempted_when_the_server_is_not_registered(
+    mock_classify, mock_suggest
+):
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    # mcp_manager.clients deliberately left empty -- server never registered.
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_not_called()
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_prepends_its_result_ahead_of_the_local_excerpt(
+    mock_classify, mock_suggest
+):
+    """LOCAL_MODE=false + MEVZUAT_MCP_ENABLED=true + kayıtlı sunucu: canlı
+    arama tetiklenmeli ve sonucu, yerel korpustan gelen alıntının önüne
+    eklenmeli (en alakalı -- taze -- kaynak önce)."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        live_search.return_value = ("55555", "[Madde 4] canlı eşleşen pasaj")
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    live_search.assert_called_once()
+    query = live_search.call_args.args[0]
+    assert "İzin Talebi" in query or "Resmî Yazı" in query  # _build_mevzuat_query'nin çıktısı
+    documents = result["mevzuat_documents"]
+    assert documents[0].page_content == "[Madde 4] canlı eşleşen pasaj"
+    assert "mevzuat_id=55555" in documents[0].metadata["mevzuat"]
+    assert documents[1].metadata["mevzuat"] == "RYUEHY"
+
+
+@pytest.mark.asyncio
+@patch("app.ai.agents.compliance.ComplianceAgent.run_structured")
+@patch("app.ai.agents.classifier.ClassifierAgent.run_structured")
+async def test_live_mevzuat_search_failure_leaves_the_local_result_untouched(
+    mock_classify, mock_suggest
+):
+    """Canlı arama patlarsa (ağ hatası, zaman aşımı, ...) düğüm zaten sahip
+    olduğu yerel sonuçla temiz döner -- ne düğüm başarısız olur ne de
+    NodeBudgetExceeded fırlar."""
+    mock_classify.return_value = _merged(
+        DocumentType.OFFICIAL_LETTER, "x", **COMPLETE_FIELDS.model_dump()
+    )
+    mock_suggest.return_value = MevzuatSuggestionOutput(suggestions=[])
+    mcp_manager.clients[MEVZUAT_SERVER] = object()
+
+    graph = create_document_analysis_graph(
+        MagicMock(spec=BaseLLMClient), mevzuat_retriever=_local_only_retriever()
+    )
+    with patch.multiple(
+        "app.ai.workflows.document_analysis_graph.settings",
+        LOCAL_MODE=False,
+        MEVZUAT_MCP_ENABLED=True,
+    ), patch(
+        "app.ai.workflows.document_analysis_graph.search_and_excerpt",
+        new_callable=AsyncMock,
+    ) as live_search:
+        live_search.side_effect = ConnectionError("mevzuat.gov.tr unreachable")
+        result = await graph.ainvoke({"input_text": OFFICIAL_LETTER_TEXT})
+
+    assert [d.metadata["mevzuat"] for d in result["mevzuat_documents"]] == ["RYUEHY"]
 
 
 # ==========================================

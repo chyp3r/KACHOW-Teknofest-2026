@@ -231,3 +231,62 @@ def test_delete_draft_refuses_a_non_owner_employee():
 
     assert response.status_code == 403
     service.delete_draft.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# GET /drafts/{id}/export -- docx / pdf indirme
+# ---------------------------------------------------------------------------
+
+
+def test_export_draft_returns_a_docx_attachment_for_the_owner():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-1")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(
+        user_id="emp-1", version=3, content="Konu: Yıllık izin talebi\n\nArz ederim."
+    )
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.get("/drafts/draft-1/export?fmt=docx")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith(
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "attachment" in response.headers["content-disposition"]
+    assert "yillik-izin-talebi-v3.docx" in response.headers["content-disposition"]
+    assert response.content[:2] == b"PK"
+
+
+def test_export_draft_returns_a_pdf_attachment():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-1")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(user_id="emp-1", content="Gövde metni.")
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.get("/drafts/draft-1/export?fmt=pdf")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/pdf")
+    assert response.content[:5] == b"%PDF-"
+
+
+def test_export_draft_refuses_a_non_owner_employee():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-2")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(user_id="emp-1")
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.get("/drafts/draft-1/export?fmt=docx")
+
+    assert response.status_code == 403
+
+
+def test_export_draft_rejects_an_unknown_format():
+    app.dependency_overrides[require_auth_if_enabled] = lambda: _user(user_id="emp-1")
+    service = AsyncMock()
+    service.get_draft.return_value = _draft(user_id="emp-1")
+    app.dependency_overrides[get_draft_history_service] = lambda: service
+
+    response = client.get("/drafts/draft-1/export?fmt=rtf")
+
+    assert response.status_code == 422

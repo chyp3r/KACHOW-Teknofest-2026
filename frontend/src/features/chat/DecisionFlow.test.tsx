@@ -42,7 +42,7 @@ describe("DecisionFlow", () => {
     expect(within(stepper).getByText("Kalite Yargıcı")).toBeInTheDocument();
   });
 
-  it("renders an assist turn's tool calls as sub-items of the assist stage", () => {
+  it("renders an assist turn's tool calls as sub-items of the assist stage, with a Turkish label", () => {
     render(
       <DecisionFlow
         statuses={{ planning: "completed", assist: "running" }}
@@ -50,12 +50,13 @@ describe("DecisionFlow", () => {
         meta={{}}
         planSteps={["assist"]}
         nodeOrder={["planning", "assist"]}
-        toolCalls={[{ node: "assist", tool: "mevzuat_ara", args: {} }]}
+        toolCalls={[{ node: "assist", tool: "suggest_unit", args: {} }]}
       />,
     );
     const stepper = screen.getByRole("list", { name: "İş akışı adımları" });
     expect(within(stepper).getByText("Asistan")).toBeInTheDocument();
-    expect(within(stepper).getByText("mevzuat_ara")).toBeInTheDocument();
+    expect(within(stepper).getByText("Birim önerisi")).toBeInTheDocument();
+    expect(within(stepper).queryByText("suggest_unit")).not.toBeInTheDocument();
   });
 
   it("never drops a node the backend announces even when it isn't in the known registry", () => {

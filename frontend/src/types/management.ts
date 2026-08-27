@@ -200,6 +200,48 @@ export interface RootUserStats {
   seats_by_company: Array<{ company_id: string; name: string; user_count: number }>;
 }
 
+export interface RootUserInsights {
+  kpis: {
+    total_users: number;
+    active_7d: number;
+    active_30d: number;
+    activity_rate_30d: number;
+    new_7d: number;
+    new_30d: number;
+    total_runs: number;
+    runs_per_active_user_30d: number;
+  };
+  daily_activity: Array<{ date: string; active_users: number; runs: number }>;
+  by_role: Record<string, number>;
+  seats_by_company: Array<{
+    company_id: string;
+    name: string;
+    user_count: number;
+    is_active: boolean;
+  }>;
+  top_users: Array<{
+    user_id: string;
+    username: string;
+    role: string;
+    company_id: string;
+    company_name: string | null;
+    run_count: number;
+    draft_count: number;
+    document_count: number;
+    session_count: number;
+    last_seen: string | null;
+  }>;
+  runs_by_intent: Record<string, number>;
+  runs_by_status: Record<string, number>;
+  guardrail_by_decision: Record<string, number>;
+  token_usage: {
+    by_agent: Record<string, number>;
+    by_kind: Record<string, number>;
+    total: number;
+    available: boolean;
+  };
+}
+
 export interface RootHealth {
   status: string;
   project?: string;

@@ -11,6 +11,24 @@ from app.infrastructure.providers.message_utils import convert_messages
 
 logger = logging.getLogger(__name__)
 
+#: ``with_structured_output`` yolları. Tercih edilen ilki; ikincisi araç
+#: çağırma sunmayan bir model için yedektir (bkz.
+#: ``EvrenClient.generate_structured``).
+_FUNCTION_CALLING = "function_calling"
+_JSON_SCHEMA = "json_schema"
+
+#: vLLM'in araç çağırma ayrıştırıcısı olmayan bir modelde ``tool_choice``
+#: gördüğünde döndürdüğü reddin imzası. Durum kodu değil metin üzerinden
+#: eşleştirilir: aynı 400, LiteLLM'in sarmalayıcı mesajının içinden geçerek
+#: ulaşır ve ayırt edici olan tek şey bu ifadedir.
+_NO_TOOL_PARSER_MARKERS = ("tool-call-parser", "tool_call_parser")
+
+
+def _lacks_tool_calling(error: Exception) -> bool:
+    """Hata, modelin araç çağırmayı hiç sunmadığını mı söylüyor."""
+    message = str(error).lower()
+    return any(marker in message for marker in _NO_TOOL_PARSER_MARKERS)
+
 
 class EvrenClient(BaseLLMClient):
     """TEKNOFEST tarafından sağlanan barındırılan çıkarım API'si Evren için istemci.
@@ -72,6 +90,9 @@ class EvrenClient(BaseLLMClient):
             else settings.EVREN_REQUEST_TIMEOUT_SECONDS
         )
         self._client_cache: dict[tuple, ChatOpenAI] = {}
+        #: Bu modelin desteklediği yapılandırılmış çıktı yolu. İlk reddedilmede
+        #: bir kez ``json_schema``'ya düşer (bkz. ``generate_structured``).
+        self._structured_method = _FUNCTION_CALLING
         logger.info(
             "Initialized EvrenClient base_url=%s model=%s temperature=%s "
             "reasoning=%s max_tokens=%s timeout=%s",
@@ -82,6 +103,11 @@ class EvrenClient(BaseLLMClient):
             max_tokens,
             self.request_timeout,
         )
+
+    @property
+    def context_window(self) -> int:
+        """Evren'in bağlam penceresi (``settings.EVREN_NUM_CTX``, varsayılan 262144)."""
+        return settings.EVREN_NUM_CTX
 
     def _build_client(
         self,
@@ -197,6 +223,15 @@ class EvrenClient(BaseLLMClient):
             logger.exception("Error streaming response from Evren")
             raise
 
+    @staticmethod
+    async def _invoke_structured(
+        client: ChatOpenAI, response_model: Any, lc_messages: Any, method: str
+    ) -> Any:
+        """Tek bir yapılandırılmış çıktı denemesi, verilen yolla."""
+        return await client.with_structured_output(response_model, method=method).ainvoke(
+            lc_messages
+        )
+
     async def generate_structured(
         self,
         messages: list[dict[str, str]],
@@ -212,11 +247,18 @@ class EvrenClient(BaseLLMClient):
         yapılandırılmış/kısa çıktılar için tam olarak bu başarısızlık
         modunu (boş içerik, ``finish_reason="length"``) belgeler.
 
-        ``with_structured_output``'un ``"json_schema"`` varsayılanına
-        güvenmek yerine ``method="function_calling"`` sabitlenir,
-        ``OllamaClient.generate_structured``'ı yansıtarak -- yerel araç
+        Tercih edilen yol ``method="function_calling"``'dir
+        (``OllamaClient.generate_structured``'ı yansıtarak): yerel araç
         çağırma, vLLM-sunulan Qwen modellerine karşı güvenilir çalıştığı
-        doğrulanan yapılandırılmış çıktı yoludur.
+        doğrulanan yapılandırılmış çıktı yoludur. Ancak Evren'in her modeli
+        bunu sunmaz -- ``guard`` dağıtımı araç çağırma ayrıştırıcısı
+        olmadan çalışır ve her ``tool_choice`` isteğini 400 ile reddeder
+        ("requires --tool-call-parser to be set"). O modelde ısrar etmek,
+        guardrail hakemlerinin tamamının sessizce ölü kalması demekti
+        (çağıranlar açık başarısız olur, bkz. ``llm_nuance``): PII/sızıntı
+        değerlendirmesi hiç çalışmıyordu. Bu yüzden reddedilme
+        yakalanır ve istemci, ömrü boyunca ``json_schema``'ya geçer --
+        model başına bir kez öğrenilir, her çağrıda tekrar denenmez.
         """
         temp = temperature if temperature is not None else self.temperature
         max_tokens = kwargs.pop("max_tokens", None)
@@ -227,13 +269,27 @@ class EvrenClient(BaseLLMClient):
 
         started = time.perf_counter()
         try:
-            structured_llm = client.with_structured_output(
-                response_model, method="function_calling"
+            result = await self._invoke_structured(
+                client, response_model, lc_messages, self._structured_method
             )
-            result = await structured_llm.ainvoke(lc_messages)
-        except Exception:
-            logger.exception("Error generating structured response from Evren")
-            raise
+        except Exception as exc:
+            if self._structured_method != _FUNCTION_CALLING or not _lacks_tool_calling(exc):
+                logger.exception("Error generating structured response from Evren")
+                raise
+            logger.warning(
+                "Evren model '%s' does not support tool calling for structured "
+                "output; switching this client to %s for the rest of its life.",
+                self.model_name,
+                _JSON_SCHEMA,
+            )
+            self._structured_method = _JSON_SCHEMA
+            try:
+                result = await self._invoke_structured(
+                    client, response_model, lc_messages, _JSON_SCHEMA
+                )
+            except Exception:
+                logger.exception("Error generating structured response from Evren")
+                raise
 
         logger.info(
             "Evren structured model=%s schema=%s took=%.2fs",

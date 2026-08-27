@@ -52,7 +52,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...props}
     >
       {loading ? <Loader2 className="spinner" aria-hidden="true" /> : leadingIcon ? <span className="button-icon" aria-hidden="true">{leadingIcon}</span> : null}
-      <span className="button-label">{children}</span>
+      {/* İçerik yoksa (ör. yükleniyorken IconButton) boş bir label span'i
+          bırakma -- grid'de spinner'ı ikinci satıra iterek ortadan kaydırıyor. */}
+      {children != null && children !== false && (
+        <span className="button-label">{children}</span>
+      )}
       {!loading && trailingIcon ? <span className="button-icon" aria-hidden="true">{trailingIcon}</span> : null}
     </button>
   );
@@ -65,7 +69,7 @@ export interface IconButtonProps extends Omit<ButtonProps, "children" | "leading
 }
 
 export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
-  { icon, tooltip, className = "", variant = "ghost", size = "md", ...props },
+  { icon, tooltip, className = "", variant = "ghost", size = "md", loading = false, ...props },
   ref,
 ) {
   return (
@@ -73,11 +77,18 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       ref={ref}
       variant={variant}
       size={size}
+      loading={loading}
       className={`icon-button ${className}`.trim()}
       title={tooltip}
       {...props}
     >
-      <span className="icon-button-glyph" aria-hidden="true">{icon}</span>
+      {/* Yükleniyorken yalnızca spinner görünür -- ikon yanında ayrıca
+          çizilip düğmeyi sıkıştırmaz. */}
+      {!loading && (
+        <span className="icon-button-glyph" aria-hidden="true">
+          {icon}
+        </span>
+      )}
     </Button>
   );
 });

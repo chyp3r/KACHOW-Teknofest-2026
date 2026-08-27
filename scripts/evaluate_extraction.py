@@ -32,7 +32,7 @@ from collections import defaultdict
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
-from app.ai.agents.metadata import MetadataAgent  # noqa: E402
+from app.ai.agents.classifier import ClassifierAgent  # noqa: E402
 from app.ai.compliance import (  # noqa: E402
     EvrakField,
     format_parsed_fields,
@@ -42,6 +42,10 @@ from app.ai.compliance import (  # noqa: E402
     parse_labelled_fields,
 )
 from app.ai.llms import get_llm_client  # noqa: E402
+from app.ai.workflows.document_analysis_graph import (  # noqa: E402
+    EVRAK_FIELD_KEYS,
+    DocumentAnalysisOutput,
+)
 from app.core.config import settings  # noqa: E402
 
 SAMPLE_DIR = os.path.join(
@@ -151,7 +155,7 @@ async def main() -> int:
     if not samples:
         sys.exit(f"HATA: {SAMPLE_DIR} içinde örnek bulunamadı.")
 
-    agent = MetadataAgent(get_llm_client())
+    agent = ClassifierAgent(get_llm_client())
     # Mirrors the production extraction node: prescribed labels are parsed
     # deterministically and the model is told to skip them.
     prompt_template = (
@@ -180,11 +184,12 @@ async def main() -> int:
                     messages=prompt_template.format(
                         text=sample["text"], note=format_parsed_fields(parsed)
                     ),
-                    response_model=EvrakField,
+                    response_model=DocumentAnalysisOutput,
                     temperature=0.0,
                     num_ctx=EXTRACTION_NUM_CTX,
                 )
-                model_fields = result.model_dump()
+                payload = result.model_dump()
+                model_fields = {key: payload.get(key) for key in EVRAK_FIELD_KEYS}
             except Exception:
                 model_fields = EvrakField().model_dump()
             outcomes = _score(sample, merge_parsed_over_model(model_fields, parsed))

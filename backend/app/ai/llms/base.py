@@ -124,6 +124,20 @@ class BaseLLMClient(ABC):
         """
         pass
 
+    @property
+    def context_window(self) -> int:
+        """Bu sağlayıcının bağlam penceresi (token).
+
+        Bağlam bütçesinin (``TokenBudget.total``) ve sohbetteki bağlam
+        doluluk göstergesinin boyutlandığı değer. Varsayılan olarak yerel
+        Ollama sınırını (``settings.OLLAMA_NUM_CTX``) döndürür; barındırılan
+        sağlayıcılar (Evren) çok daha geniş bir pencere için bunu geçersiz
+        kılar.
+        """
+        from app.core.config import settings
+
+        return settings.OLLAMA_NUM_CTX
+
     def count_tokens(self, text: str) -> int:
         """``text``'in bağlam penceresine karşı kaç token'a mal olacağını tahmin eder.
 

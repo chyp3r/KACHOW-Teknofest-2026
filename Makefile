@@ -1,4 +1,4 @@
-.PHONY: setup-db bootstrap up down logs test test-e2e test-all eval eval-baseline eval-llm eval-retrieval \
+.PHONY: setup-db bootstrap up down logs test test-e2e test-corpus test-all eval eval-baseline eval-llm eval-retrieval \
 	benchmark benchmark-baseline export-budgets perf-smoke perf-chat perf-document latency-report \
 	migrate seed shell psql restart-backend \
 	reset-db reset-checkpoints reset-cache reset-storage reset-document-qa reset-evren-qdrant reset
@@ -6,26 +6,13 @@
 setup-db:
 	docker compose exec db psql -U postgres -tc "SELECT 1 FROM pg_database WHERE datname = 'langfuse'" | grep -q 1 || docker compose exec db psql -U postgres -c "CREATE DATABASE langfuse"
 
-# Brings the system up from a completely empty state (no containers, no
-# volumes, no schema) to a ready-to-use one in a single command: builds and
-# starts the datastores, waits for Postgres to actually accept connections
-# (compose.yml declares no healthcheck, so `up -d` returns long before
-# Postgres is ready -- running migrations against it immediately would
-# race), creates the langfuse database (setup-db), runs every Alembic
-# migration, then starts the backend. The backend's own lifespan hook
-# (backend/app/lifespan.py) seeds the default admin/manager/employee
-# accounts on that same boot -- see backend/app/core/config.py's SEED_*
-# settings for the credentials. Every step here is idempotent
-# (`docker compose up`, `alembic upgrade head`, and the seeder all no-op on
-# what already exists), so this is also safe to re-run on an
-# already-running system, e.g. after pulling migrations someone else wrote.
-#
-# Deliberately doesn't build/start `frontend` -- deploy/docker/
-# frontend.Dockerfile hardcodes the x64 Rollup native binary
-# (@rollup/rollup-linux-x64-musl) and fails to build on an arm64 host
-# (Apple Silicon); that's a pre-existing bug independent of this target,
-# tracked separately. Run `make up` for the full stack including frontend
-# on an x64 host, or `cd frontend && npm run dev` locally in the meantime.
+# Boş bir durumdan (container/volume/şema yok) tek komutla çalışır hale getirir:
+# datastore'ları başlatır, Postgres'i bekler, langfuse DB'sini kurar,
+# migration'ları koşar, backend'i başlatır. Varsayılan hesaplar backend
+# lifespan hook'unda otomatik seed'lenir (bkz. config.py SEED_*). Her adım
+# idempotent; çalışan sistemde de güvenle tekrar koşulur. frontend'i başlatmaz
+# -- frontend.Dockerfile arm64'te build olmaz (ayrı bir bilinen hata); x64'te
+# `make up`, aksi halde `cd frontend && npm run dev`.
 bootstrap:
 	docker compose up -d --build db redis qdrant
 	@echo "Waiting for Postgres to accept connections..."
@@ -45,24 +32,18 @@ down:
 logs:
 	docker compose logs -f
 
-# Applies any migration written since the system was last bootstrapped,
-# without the rest of `bootstrap`'s from-empty dance (no build, no wait
-# loop, no backend restart). The everyday "I pulled someone else's
-# migration" command.
+# Bootstrap'in geri kalanı olmadan yalnızca yeni migration'ları uygular.
+# "Başkasının migration'ını çektim" komutu.
 migrate:
 	docker compose run --rm --no-deps backend alembic upgrade head
 
-# Re-runs the same seeding chain backend/app/lifespan.py runs on every
-# boot (demo company -> users -> units, all idempotent), without
-# restarting the running backend container -- see scripts/seed_users.py's
-# own docstring for why this is `run --rm`, not `exec`. Useful right after
-# `migrate` against a database that had rows before this system's tables
-# existed, or any time `reset` below is run against a backend you don't
-# want to bounce.
+# lifespan'in her boot'ta koştuğu seed zincirini (demo şirket -> kullanıcı ->
+# birim, hepsi idempotent) backend'i yeniden başlatmadan tekrar koşar. `migrate`
+# sonrası ya da backend'i bounce etmek istemediğin bir `reset` sonrası kullanışlı.
 seed:
 	docker compose run --rm backend python scripts/seed_users.py
 
-# Convenience shells for poking at a running stack.
+# Çalışan yığında elle bakmak için kısayol kabuklar.
 shell:
 	docker compose exec backend bash
 
@@ -72,117 +53,79 @@ psql:
 restart-backend:
 	docker compose restart backend
 
-# Runs with the compose services up, though as of this writing that's a
-# convenience, not a hard requirement: Redis used to be load-bearing here
-# (seven API tests failed without it, because rate_limit() sits in front of
-# the document endpoints and turned a cache outage into a 500), but that was
-# the limiter failing closed, not a test-environment requirement -- it now
-# fails open. Verified by actually stopping both `redis` and `qdrant` and
-# re-running this target: all 2544 non-deselected tests still pass. Only
-# Postgres (real, throwaway, via tests/_db_fixtures.py) is genuinely needed,
-# by the `integration`-marked tests -- `e2e` and `performance` are
-# deselected here by pyproject.toml's `addopts` (see `test-e2e`/`test-all`
-# below), and no other test in this lane touches real infra at all.
-# --cov-fail-under=86 (Workstream J5): the measured value the day this gate
-# was added (`pytest -q --cov=app --cov-report=term-missing:skip-covered`
-# -> TOTAL 86%, 14561/16913 statements = 86.09%), not an aspirational
-# target -- an aspirational number starts the ratchet red and gets it
-# disabled by the first person annoyed by it. Only ever moves up as
-# coverage genuinely improves; a PR that lowers this number is a PR that
-# removed tests, not one that should edit this number down to make CI
-# green again. Deliberately only here, not in pyproject.toml's
-# [tool.coverage.report] -- that file's addopts already turns on `--cov`
-# for every pytest invocation (including a developer running one narrow
-# test file, whose own tiny slice of `app` is nowhere near 86%), and a
-# global `fail_under` there would fail that unrelated case for a reason
-# that has nothing to do with what changed.
+# Varsayılan hızlı test şeridi. Yalnızca `integration` testleri gerçek (tek
+# kullanımlık) Postgres ister; redis/qdrant fail-open olduğundan zorunlu değil.
+# e2e ve performance pyproject.toml addopts ile hariç tutulur.
+# --cov-fail-under=86: eklendiği gün ölçülen değer, aspirasyonel bir hedef
+# değil. Yalnızca kapsam gerçekten arttıkça yükselir; bu sayıyı düşüren PR test
+# silmiş demektir. Bilinçli olarak pyproject.toml'da değil burada.
 test:
 	docker compose run --rm backend pytest -q --cov-fail-under=86
 
-# Real ASGI HTTP e2e tests (tests/e2e/, Workstream C): RLS through a real
-# Postgres, a real app lifespan (LangGraph checkpointer included), fake LLM/
-# embeddings clients only. Deselected from the default `test` lane by
-# pyproject.toml's `addopts` -- needs db/redis/qdrant up, unlike the fast
-# default lane, which needs no infra at all.
-# --no-cov: pyproject.toml's `addopts` turns coverage measurement on for
-# every pytest invocation by default (Workstream J5); a marker-filtered
-# subset like this one covers a different, much smaller slice of `app` on
-# purpose, so its own coverage percentage is not a meaningful number to
-# print here -- the real gate (`--cov-fail-under=86`) lives on `test`
-# above, against the full default lane.
+# Gerçek ASGI HTTP e2e testleri (tests/e2e/): gerçek Postgres + RLS + gerçek
+# lifespan, sahte LLM/embedding. db/redis/qdrant ayakta olmalı. --no-cov:
+# marker ile filtrelenmiş bu alt küme farklı, çok daha küçük bir dilimi
+# kapsar; kapsam yüzdesi anlamlı değil (asıl kapı `test` hedefinde).
 test-e2e:
 	docker compose run --rm backend pytest -q -m e2e --no-cov
 
-# Everything: integration (already included in `test` above) plus e2e and
-# performance (both deselected by pyproject.toml's `addopts` otherwise).
-# Needs the full compose stack up, same as `test-e2e`. --no-cov: see
-# test-e2e's own comment.
+# Gerçek, hand-labelled korpusa (datasets/resmi_yazisma/) karşı doğruluk
+# pinning testleri (bkz. tests/performance/test_marks_accuracy.py). --no-cov
+# gerekçesi test-e2e ile aynı -- bu küçük alt küme için kapsam anlamlı değil.
+test-corpus:
+	docker compose run --rm backend pytest -q -m real_corpus --no-cov
+
+# Her şey: integration + e2e + performance. `test-e2e` gibi tam yığın ister.
+# --no-cov gerekçesi test-e2e ile aynı.
 test-all:
 	docker compose run --rm backend pytest -q -m "" --no-cov
 
-# Deterministic evaluation of the non-LLM decision layer. Deliberately a
-# separate target rather than a test: the full run is a measurement, not a
-# pass/fail gate, and it must not be bound by pytest's 60s per-test timeout.
-# --no-deps is correct *here*: the suites call pure decision functions and
-# touch no infrastructure at all. Verified by the run itself -- if that ever
-# stops being true it fails loudly rather than silently degrading.
+# LLM'siz karar katmanının deterministik değerlendirmesi. Test değil ölçüm
+# olduğundan ayrı hedef (pytest'in 60s test zaman aşımına takılmamalı).
+# --no-deps doğru: saf karar fonksiyonları, hiçbir altyapıya dokunmaz.
 eval:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite all
 
-# Records the pre-change numbers every later run is compared against.
-# Compare with: make eval ARGS="--baseline evaluation/reports/all-baseline.json"
+# Sonraki her koşunun karşılaştırılacağı değişiklik-öncesi sayıları kaydeder.
+# Karşılaştır: make eval ARGS="--baseline evaluation/reports/all-baseline.json"
 eval-baseline:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite all --label baseline
 
-# Opt-in, not part of `make eval`: makes real Ollama calls for every intent
-# case the fusion layer leaves contested (see evaluation/harness/
-# intent_suite.py::run_with_model), so it is slower and its model-sourced
-# decisions are not perfectly reproducible run to run the way the rest of the
-# suite is. --no-deps is still correct here -- Ollama is reached over
-# host.docker.internal regardless of which compose services are up, the same
-# way the backend service's own OLLAMA_BASE_URL is wired.
+# Opt-in, `make eval`'in parçası değil: füzyon katmanının çekişmeli bıraktığı
+# her intent için gerçek Ollama çağrısı yapar; daha yavaş ve tam tekrar
+# üretilebilir değil. Ollama host.docker.internal üzerinden erişildiğinden
+# --no-deps yine doğru.
 eval-llm:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite intents --with-model --label with-model
 
-# Chunking-configuration comparison (precision@k/recall@k/MRR/nDCG across
-# evaluation.harness.retrieval_suite.ARMS). Same --no-deps rationale as
-# `eval` above: everything here reads a precommitted embedding cache
-# (evaluation/datasets/retrieval_embeddings.json) and a stubbed in-memory
-# vector store, never live Qdrant/Ollama. Rebuild that cache after editing
-# evaluation/datasets/retrieval.jsonl or evaluation/datasets/
-# retrieval_corpus/ with:
-#   docker compose run --rm --no-deps backend python scripts/build_eval_embeddings.py --target retrieval
+# Chunking yapılandırması karşılaştırması (precision@k/recall@k/MRR/nDCG). Ön
+# hesaplı embedding cache + sahte in-memory vektör deposu okur; canlı
+# Qdrant/Ollama yok. retrieval.jsonl / retrieval_corpus düzenledikten sonra
+# cache'i yenile: docker compose run --rm --no-deps backend python scripts/build_eval_embeddings.py --target retrieval
 eval-retrieval:
 	docker compose run --rm --no-deps backend python -m evaluation.generate_report --suite retrieval --label retrieval
 
-# Wall-clock micro-benchmarks (Workstream E1, backend/tests/performance/
-# test_benchmarks.py) -- pure-CPU, I/O-free functions only, --no-deps like
-# every other eval/benchmark target. One-time setup: run this to record the
-# numbers this container's own hardware produces today, then commit the
-# result (evaluation/benchmarks/*/*_baseline.json).
+# Duvar-saati mikro-benchmark'lar (tests/performance/): saf CPU, I/O'suz
+# fonksiyonlar; --no-deps. Tek seferlik kurulum: bu makinenin bugünkü
+# sayılarını kaydet ve baseline JSON'u commit et.
 benchmark-baseline:
 	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=baseline
 
-# Re-runs the benchmarks and fails only on a >3x regression against the
-# committed baseline -- see evaluation/benchmarks/report.py's own docstring
-# for why this isn't pytest-benchmark's built-in --benchmark-compare-fail
-# (its percentage syntax caps at 99%, so ">200%" can't be expressed with it).
+# Benchmark'ları tekrar koşar ve yalnızca commit'li baseline'a karşı >3x
+# regresyonda hata verir (pytest-benchmark'ın kendi eşiği %99'da tıkandığı için).
 benchmark:
 	rm -f evaluation/benchmarks/*/*_latest.json
 	docker compose run --rm --no-deps backend pytest -q tests/performance/test_benchmarks.py -m performance --benchmark-only --benchmark-storage=file://evaluation/benchmarks --benchmark-save=latest
 	docker compose run --rm --no-deps backend python evaluation/benchmarks/report.py
 
-# Regenerates perf/k6/lib/budgets.json from the live BudgetPolicy -- run
-# after changing any node_seconds/workflow_ceiling_seconds value.
+# perf/k6/lib/budgets.json'u canlı BudgetPolicy'den yeniden üretir -- herhangi
+# bir node_seconds/workflow_ceiling_seconds değiştikten sonra koş.
 export-budgets:
 	docker compose run --rm --no-deps backend python scripts/export_budgets.py
 
-# k6 load tests (Workstream E2, perf/k6/ -- see perf/k6/README.md for the
-# full rationale). Needs a real running stack (`make bootstrap`/`make up`)
-# with the default seeded accounts; --network host isn't supported the same
-# way on Docker Desktop (macOS/Windows), so host.docker.internal + an
-# explicit K6_BASE_URL is what's used instead, matching every contributor's
-# environment instead of only Linux's.
+# k6 yük testleri (perf/k6/). Gerçek çalışan yığın + seed'li hesaplar ister.
+# Docker Desktop'ta --network host desteklenmediğinden host.docker.internal +
+# açık K6_BASE_URL kullanılır.
 perf-smoke:
 	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/smoke.js
 
@@ -192,70 +135,55 @@ perf-chat:
 perf-document:
 	docker run --rm -i -v "$(CURDIR)/perf/k6:/scripts" -e K6_BASE_URL=http://host.docker.internal:8000 grafana/k6 run /scripts/document_upload.js
 
-# Observed per-node latency vs. BudgetPolicy.node_seconds (Workstream E3,
-# evaluation/latency/). Needs the `backend` service actually running with
-# real traffic behind it already (a perf-chat/perf-document run, or real
-# usage) -- there is nothing to report against a freshly booted backend.
+# Gözlenen düğüm-başına gecikme vs BudgetPolicy.node_seconds. Arkasında gerçek
+# trafik olan çalışan bir backend ister (perf-chat/perf-document ya da gerçek
+# kullanım); yeni boot edilmiş backend'e karşı raporlanacak bir şey yoktur.
 latency-report:
 	docker compose run --rm backend python -m evaluation.latency.budget_report
 
 # ---------------------------------------------------------------------------
-# Reset: wipes application data (companies/users/documents/drafts/chat/...)
-# and reseeds a clean system, without touching the mevzuat/örnek-yazışma
-# Qdrant collections -- those are populated by separate, expensive indexing
-# scripts (scripts/index_mevzuat.py, scripts/index_yazisma_examples.py), not
-# by anything below. Each target is independently runnable for a narrower
-# cleanup; `reset` runs all of them in the right order and reseeds at the end.
+# Reset: uygulama verisini (şirket/kullanıcı/evrak/taslak/sohbet...) siler ve
+# temiz bir sistemi yeniden seed'ler; mevzuat/örnek-yazışma Qdrant
+# koleksiyonlarına dokunmaz (onları ayrı, pahalı indeksleme betikleri doldurur).
+# Her hedef tek başına koşulabilir; `reset` hepsini doğru sırada koşar.
 # ---------------------------------------------------------------------------
 
-# Drops and recreates every Alembic-managed table by replaying the full
-# migration history -- every company/user/unit/document/draft/chat row is
-# gone. Correct by construction (no hand-maintained table list to keep in
-# sync with new migrations), unlike TRUNCATE-ing tables by name.
+# Tüm Alembic tablolarını migration geçmişini baştan oynatarak siler/yeniden
+# oluşturur -- her şirket/kullanıcı/birim/evrak/taslak/sohbet satırı gider.
+# Elle tablo listesi tutmaya göre yapıca doğru.
 reset-db:
 	docker compose exec backend alembic downgrade base
 	docker compose exec backend alembic upgrade head
 
-# The LangGraph checkpointer's tables (checkpoints/checkpoint_blobs/
-# checkpoint_writes/checkpoint_migrations) live in the same Postgres
-# database but are deliberately excluded from Alembic (see alembic/env.py's
-# _CHECKPOINT_TABLE_PREFIX) -- AsyncPostgresSaver.setup() owns them instead,
-# so reset-db alone does not touch them. Dropping them here is safe: the
-# backend recreates them itself the next time it boots (app.lifespan calls
-# init_checkpointer() before it seeds anything).
+# LangGraph checkpointer tabloları aynı Postgres'te ama bilerek Alembic
+# dışıdır (AsyncPostgresSaver.setup() sahibidir), bu yüzden reset-db onlara
+# dokunmaz. Burada düşürmek güvenli: backend bir sonraki boot'ta kendisi
+# yeniden oluşturur.
 reset-checkpoints:
 	docker compose exec db psql -U $${POSTGRES_USER:-postgres} -d $${POSTGRES_DB:-kachow} \
 		-c "DROP TABLE IF EXISTS checkpoints, checkpoint_blobs, checkpoint_writes, checkpoint_migrations CASCADE;"
 
-# Company profile/adapter/rules and rate-limit state are cached in Redis
-# with a short TTL (see app.domains.companies.provider) -- harmless to drop,
-# everything behind it re-reads from Postgres on the next request.
+# Şirket profili/adapter/kuralları ve rate-limit durumu Redis'te kısa TTL ile
+# önbelleklenir -- düşürmek zararsız, her şey bir sonraki istekte Postgres'ten
+# yeniden okunur.
 reset-cache:
 	docker compose exec redis redis-cli FLUSHALL
 
-# Uploaded documents and their *_analysis.json caches under
-# backend/storage_data/uploads live on a host bind mount (compose.yml), so
-# neither reset-db nor a Docker volume wipe touches them -- after a DB
-# reset they no longer correspond to any row at all. Run inside the backend
-# container so this works regardless of the host user's permissions on the
-# bind-mounted files.
+# Yüklenen evraklar ve *_analysis.json önbellekleri host bind mount'unda
+# (compose.yml); ne reset-db ne de volume silme bunlara dokunur. Bind-mount
+# dosya izinlerinden bağımsız çalışsın diye backend container'ı içinde koşulur.
 reset-storage:
 	docker compose exec backend sh -c 'rm -rf storage_data/uploads/* storage_data/uploads/.[!.]*' 2>/dev/null || true
 
-# The document_qa Qdrant collection holds per-document Q&A chunks (see
-# app.domains.documents.service._index_for_qa) -- distinct from the
-# mevzuat/örnek-yazışma collections this target never touches. Safe to
-# drop: DocumentService recreates it automatically the next time any
-# document is analyzed (create_collection is already idempotent there).
+# document_qa Qdrant koleksiyonu belge-başına soru-cevap parçalarını tutar --
+# mevzuat/örnek-yazışma koleksiyonlarından ayrı, buna dokunulmaz. Düşürmek
+# güvenli: bir belge analiz edilince DocumentService yeniden oluşturur.
 reset-document-qa:
 	curl -sf -X DELETE http://localhost:6333/collections/document_qa || true
 
-# Wipes every collection on Evren's remote Qdrant cluster (EVREN_QDRANT_URL),
-# not the local one -- separate from reset-document-qa above and NOT part of
-# the `reset` chain below, since it hits real remote infra rather than this
-# machine's own containers. Team-isolated (see /mimari on the Evren docs
-# site), so this only ever deletes this team's own data, but it is still
-# irreversible -- same CONFIRM=yes gate as `reset`.
+# Evren'in uzak Qdrant kümesindeki (EVREN_QDRANT_URL) TÜM koleksiyonları siler,
+# yereli değil. `reset` zincirinin parçası DEĞİL (uzak gerçek altyapıya gider).
+# Takıma izole olsa da geri alınamaz -- `reset` ile aynı CONFIRM=yes kapısı.
 reset-evren-qdrant:
 	@if [ "$(CONFIRM)" != "yes" ]; then \
 		echo "This permanently deletes ALL collections on Evren's remote Qdrant"; \
@@ -265,11 +193,10 @@ reset-evren-qdrant:
 	fi
 	docker compose run --rm --no-deps backend python scripts/reset_evren_qdrant.py
 
-# The one-command "wipe everything app-level and hand me a fresh system"
-# entry point -- irreversible, so it requires an explicit CONFIRM=yes
-# rather than running on a bare `make reset`. Ends by restarting the
-# backend so app.lifespan's own seeding chain (companies -> users -> units)
-# repopulates a clean demo company/root/admin/manager/employee set.
+# "Her şeyi uygulama düzeyinde sil ve bana temiz bir sistem ver" tek-komut
+# girişi -- geri alınamaz, bu yüzden bare `make reset` yerine açık CONFIRM=yes
+# ister. Sonunda backend'i yeniden başlatır; lifespan seed zinciri temiz bir
+# demo şirket/root/admin/manager/employee setini yeniden doldurur.
 reset:
 	@if [ "$(CONFIRM)" != "yes" ]; then \
 		echo "This permanently deletes ALL application data: companies, users,"; \

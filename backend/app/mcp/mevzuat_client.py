@@ -152,3 +152,84 @@ async def resolve_and_fetch(
     if not text:
         return None
     return document_id, text
+
+
+async def search_by_phrase(query: str, page_size: int = 5) -> Optional[str]:
+    """Bir konu/soru string'iyle mevzuat.gov.tr'de tam metin araması yap.
+
+    `resolve_mevzuat_id`'nin numaraya göre araması yalnızca `mevzuat_no`
+    filtresini kullanıyordu, bu yüzden bir başlık dışı konu sorgusuyla hiç
+    işe yaramazdı. Bu fonksiyon farklı bir parametre setini kullanır:
+    `phrase` (içerikte tam metin arama, Solr sözdizimi) ve
+    `basliktaAra=False` -- sunucu `basliktaAra` için varsayılan olarak
+    `True` kullanır (yalnızca başlıkta arar), bu yüzden açıkça `False`
+    verilmezse bir konu sorgusu neredeyse hiçbir zaman eşleşmez.
+
+    Args:
+        query: Anahtar kelime yoğun bir konu/soru string'i (örn.
+            `_build_mevzuat_query`'nin ürettiği).
+        page_size: İstenecek sonuç sayısı.
+
+    Returns:
+        En iyi eşleşen mevzuatın doküman kimliği, ya da hiçbir şey
+        eşleşmezse None.
+    """
+    result = await mcp_manager.call_tool(
+        MEVZUAT_SERVER,
+        "search_mevzuat",
+        {"phrase": query, "basliktaAra": False, "page_size": page_size},
+    )
+    return pick_document_id(text_of(result))
+
+
+async def excerpt_within(
+    mevzuat_id: str, keyword: str, max_results: int = 5
+) -> str:
+    """Bir mevzuatın içinden, sorguyla eşleşen pasajları getir.
+
+    Tam metni çekip sabit bir karakter sayısına kırpmak (`fetch_mevzuat_text`
+    + kırpma) uzun bir kanunda (657 gibi ~500k karakter) neredeyse her zaman
+    ilgili maddeyi değil, başlangıç hükümlerini döndürür. Bu, sunucunun
+    kendi içerik-içi arama aracını kullanarak gerçekten ilgili pasajı hedefler.
+
+    Args:
+        mevzuat_id: `search_by_phrase` tarafından çözümlenen doküman kimliği.
+        keyword: İçeride aranacak sorgu.
+        max_results: Döndürülecek maksimum pasaj sayısı.
+
+    Returns:
+        Eşleşen pasajlar, ya da hiçbiri yoksa boş bir dize.
+    """
+    result = await mcp_manager.call_tool(
+        MEVZUAT_SERVER,
+        "search_within_mevzuat",
+        {"mevzuat_id": mevzuat_id, "keyword": keyword, "max_results": max_results},
+    )
+    return text_of(result).strip()
+
+
+async def search_and_excerpt(
+    query: str, max_results: int = 5
+) -> Optional[tuple[str, str]]:
+    """Bir konu sorgusunu mevzuata çözümle, sonra içinden hedefli alıntı çek.
+
+    `resolve_and_fetch`'in konu-sorgusu eşdeğeri: `search_by_phrase` +
+    `excerpt_within`'i zincirler (2 MCP round-trip, `resolve_and_fetch`'in
+    en kötü durumdaki 3'ünden az). Eşleşen mevzuat bulunsa bile içinde
+    sorguyla örtüşen bir pasaj yoksa None döner -- tam metne düşmek, bu
+    fonksiyonun var olma nedenini (hedefli alıntı) geçersiz kılardı.
+
+    Args:
+        query: Anahtar kelime yoğun bir konu/soru string'i.
+        max_results: `excerpt_within`'e iletilen pasaj sınırı.
+
+    Returns:
+        Doküman kimliği ve eşleşen pasajlar, ya da hiçbir eşleşme yoksa None.
+    """
+    document_id = await search_by_phrase(query)
+    if document_id is None:
+        return None
+    excerpt = await excerpt_within(document_id, query, max_results)
+    if not excerpt:
+        return None
+    return document_id, excerpt

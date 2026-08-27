@@ -3,6 +3,191 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Değiştirildi
+- **İmza tespiti doğruluğu gerçek korpusta ölçüldü ve düzeltildi.**
+  `detect_marks`'ın (`marks.py`) imza recall'ı, elle etiketlenmiş 23
+  belgelik gerçek korpusta (`datasets/resmi_yazisma/ocr_ground_truth.json`)
+  %50 çıktı (16 gerçek imzadan 8'i kaçırılıyordu) -- kök neden,
+  `_MAX_STROKE_RUN_DENSITY=1.5` eşiğinin, 3 farklı imza sahibinin gerçek
+  imzalarını (ölçülen run_density 1.62-2.33) sistematik olarak
+  dışlamasıydı. 2.3'e yükseltildi: recall %94'e çıktı (15/16), kesinlik
+  1.00'de sabit kaldı (yeni yanlış pozitif yok). Ayrıca `scripts/
+  evaluate_marks.py`'nin kendi ölçüm korpusu 5 "Class A" belgeyi (sahte OCR
+  metin katmanlı taramalar) sessizce atlıyordu -- düzeltildi
+  (`is_scanned_text_layer` de kontrol edilir oldu), gerçek 23 belgenin
+  tamamı artık ölçülüyor. Ölçülen sayı yeni bir `real_corpus` pytest
+  marker'ıyla (`make test-corpus`) sabitlendi, bir daha sessizce
+  gerilemeyecek.
+
+### Eklendi
+- **NER PoC script'i (`scripts/ner_poc.py`).** `entities[]` alanı için ayrı bir
+  dedicated NER modelinin (Türkçe BERT tabanlı) mevcut LLM çıktısına karşı
+  nitel karşılaştırması -- backend'in `requirements.txt`'ine eklenmez, ayrı
+  bir venv'de çalışır. Bulgu: dedicated model mevcut LLM round-trip'ini
+  KALDIRMAZ (diğer ~11 alan için o çağrı zaten gerekli) ve tarih/sayı gibi
+  alanları yakalamıyor (yalnızca PER/ORG/LOC) -- bu yüzden gecikme/maliyet
+  düşürmek için değil, yalnızca şema sadeleştirmek isteniyorsa değerli olabilir.
+
+### Düzeltildi
+- **Sohbette taslak/revizyon güven skorunun erken görünmesi.** Canlı yanıtın
+  metni yazma animasyonuyla açılırken yapılandırılmış taslak kontrol özeti artık
+  önceden render edilmiyor; mesaj tamamlandıktan sonra metnin altında beliriyor.
+  Final sonuçtan hemen sonra yapılan sunucu geçmişi yenilemesi aynı mesajdaki
+  canlı animasyon bayrağını artık düşürmüyor. Kalıcı geçmiş mesajları ve
+  azaltılmış hareket tercihi gecikmeden gösterilmeye devam ediyor.
+- **Taslak güven özeti kompakt ve genişletilebilir hale getirildi.** Kapalı
+  görünümde güven skoru, “İndir” eylemi ve durum rozeti kalıyor. “İndir” Word
+  veya PDF biçimini soran bir menü açıyor; genişletilen gövdede skor dökümü,
+  kontrol notları ve mevcut yönlendirme kontrolleri gösteriliyor.
+- **`scripts/evaluate_extraction.py`'nin bozuk import'u.** Silinmiş
+  `app.ai.agents.metadata.MetadataAgent`'ı import ettiği için
+  `ModuleNotFoundError` ile çöküyordu (commit `11823e8b` sonrası
+  güncellenmemiş kalmıştı). `ClassifierAgent` + `DocumentAnalysisOutput`'a
+  taşındı -- `analyze_node`'un bugün kullandığı aynı birleşik
+  sınıflandırma+alan-çıkarımı çağrısı. Doğrulandı: script artık uçtan uca
+  çalışıyor (`datasets/sample` üzerinde %88.1 toplam doğruluk).
+
+### Değiştirildi
+- **Belge analizinde LOCAL_MODE=false için hızlı-katman-önce cascade.**
+  `analyze_node` artık Evren/cloud modunda (LOCAL_MODE=false) önce `llm-fast`
+  katmanını deniyor, sonucu kendi belge türü için zorunlu bir alanı eksik
+  bırakırsa `llm-large`'a yükseliyor (`_extract_with_gap_fill_cascade`) --
+  bugüne kadarki, yalnızca *exception*'da yükselen ve hep kalite katmanıyla
+  başlayan merdivenin yerine. 12 belgelik örnek korpus üzerinde ölçüldü
+  (`scripts/evaluate_analysis_cascade.py`, iki bağımsız koşu): doğrulukta
+  hiçbir kayıp yok (recall aynı, document_type doğruluğu 11/12 → 12/12),
+  hızda ölçülebilir bir bedel yok (%67 belgede yükseltme gerekti, kalan
+  %33'te tek başına yeterliydi). Ollama (LOCAL_MODE=true) davranışı
+  değişmedi.
+
+### Düzeltildi
+- **Belge grafiğinde `KeyError` çökmesi.** `knowledge_graph.py`'deki
+  `ensure_entity`/`ensure_konu`, `resolve_entities()`'in bilinçli olarak
+  atladığı (boş/None'a çözülen) ham bir entity dizgesine (örn. çıplak bir
+  yıl "2025") koşulsuz sözlük erişimi yapıyordu; `GET /document-graph`
+  endpoint'i böyle bir belge için 500 dönüyordu. Artık bu tür mentionlar
+  sessizce atlanıyor.
+
+## [3.57]
+### Eklendi
+- Canlı mevzuat sorguları (mevzuat.gov.tr) için MCP entegrasyonu, dayanıklılık/önbellek mekanizması ve gecikme metrikleri.
+- Belge analiz grafiğinde (`document_analysis_graph.py`) canlı mevzuat zenginleştirmesi.
+- Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
+- Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
+- **Taslağı Word ve PDF olarak indirme.** `GET /api/v1/drafts/{id}/export?fmt=docx|pdf`
+  taslak metnini 12 punto Times New Roman ile bir belgeye dönüştürüp `attachment`
+  olarak döndürür. PDF'te Türkçe glif kapsamı için Times New Roman metriğine denk
+  bir serif TTF (Liberation Serif) çalışma anında kaydedilir (`fonts-liberation`
+  her iki backend imajına eklendi). Taslaklar sayfası ve sohbet taslak özetine
+  Word/PDF indirme eylemleri eklendi.
+- **Asistan düğümüne regex/birebir belge arama aracı** (`search_document_regex`).
+  Anlamsal `search_document`'in zayıf kaldığı kesin dizge/sayı/tarih/atıf-kodu
+  aramaları ve "kaç kez geçiyor" sorguları için belge metnini satır satır tarar,
+  `[s. N]` atfıyla döndürür.
+- **Sohbette bağlam penceresi kullanım halkası.** Yanıtın `details.context_usage`
+  alanı asistan turunun bağlam penceresini nasıl kullandığını (sistem yönergesi,
+  belge bağlamı, geçmiş özeti, sohbet geçmişi, güncel mesaj, ayrılan pay) gerçek
+  token sayılarıyla döker; sohbette çalışma modunun altında yalnızca bir halka
+  duruyor, tıklanınca kırılımı taşıyan dar bir popup açılıyor. Değer değişince
+  halka ve yüzde animasyonlu yükselip iniyor.
+- **Sohbeti sıkıştırma (compact).** `POST /api/v1/chat/sessions/{id}/compact`
+  birebir tutulan geçmiş penceresini yuvarlanan özete katlar (son 2 turu birebir
+  bırakır), bağlam penceresinde yer açar. Popup'taki "Bağlamı sıkıştır" düğmesi
+  çağırır; sırasında sohbet kilitlenir ve mesaj alanında "Sohbet sıkıştırılıyor…"
+  görünür. Kullanıcı sıkıştırdıktan sonra o turlar asist adımına yalnızca özet
+  olarak gider.
+
+### Değiştirildi
+- **Bağlam penceresi artık aktif sağlayıcıya göre boyutlanıyor.** Sabit
+  `OLLAMA_NUM_CTX` (8192) yerine `BaseLLMClient.context_window`: Ollama'da
+  `num_ctx`, Evren'de yeni `EVREN_NUM_CTX` (varsayılan 262144). `LOCAL_MODE=false`
+  iken assist adımının geçmiş penceresi bütçesi büyür ve sohbetteki bağlam
+  göstergesi doğru toplamı gösterir.
+- Sohbet bağlam halkası artık animasyonlu: değer her tur değiştiğinde yumuşakça
+  dolup boşalır (yaylarda CSS geçişi, yüzdede rAF tween; `prefers-reduced-motion`
+  altında kapalı).
+- Çıktı guardrail'i (`output_gate`) artık politikadaki `output_groundedness_threshold`
+  değerini uyguluyor: dayanaklı iddia payı eşiği geçen bir yanıt olduğu gibi
+  bırakılır. Önceden, MCP mevzuat metninden alınıp yığında bulunan ama
+  token-örtüşme eşleştiricisinin kaçırdığı tek bir ifade bile tüm yanıtı
+  `[Doğrulanamayan ifade kaldırıldı]` ile deliyordu.
+- Revize turunda önceki sürümün birim önerisi (`destination` /
+  `destination_unit_id` / `destination_justification`) korunuyor; artık her
+  revizyon "Hedef birim"i sıfırlamıyor.
+
+### Düzeltildi
+- Sohbet geçmişi kenar çubuğunda "Daha eski" grubundaki tarih (`14 Ağustos`)
+  ikonun altına kayıyordu (eski, elle yazılmış grid override'ı).
+- Evrak kütüphanesinde analiz süresi göstergesi sadeleştirildi
+  (`12 saniyedir analiz ediliyor` → `Analiz ediliyor · 3 sn`).
+- "Gelen Evraklar" gibi kısa içerikli sekmeye geçince başlık/sekme barı
+  yatayda zıplıyordu (`scrollbar-gutter: stable`).
+- HITL eksik-bilgi kartında imza adı ve unvanı soruları aynı
+  "Ahmet Yılmaz / Daire Başkanı" örneğini gösteriyordu; ayrıldı. Var olmayan
+  bir "Sen karar ver" kontrolüne yönlendiren yardım cümlesi kaldırıldı.
+- Backend test coverage kapısı (`--cov-fail-under=86`) %85.60'ta tıkanmıştı;
+  üç düşük-kapsamlı ama gerçekten test edilmeye değer dosyaya (`sparse_
+  encoder.py` -- saf BM25 matematiği, `core/authz/cache.py` -- hiç test
+  edilmemiş yetkilendirme karar önbelleği, `chat_recorder.py` -- kardeş
+  kaydedicilerin zaten kurulu deseniyle) gerçek davranış testleri eklendi.
+  %86.05'e çıktı (#298).
+
+### Düzeltildi
+- `datasets/sample_benchmark/` dizini gerçekte `datasets/sample/` adıyla
+  bekleniyordu (`test_compliance.py`, `field_parser.py`, altı
+  `scripts/evaluate_*`/`build_evrak_eval_set.py` betiği ve dizinin kendi 12
+  `.md` dosyasının YAML frontmatter'ı dahil ~15 referans) -- 43cd268a'da
+  külliyat `sample_benchmark` adıyla eklendiğinde, ondan önce var olup artık
+  hiçbir dal ucunda bulunmayan eski `datasets/sample/` (d9e0e237) hiç
+  güncellenmemişti. Dizin `datasets/sample/` olarak yeniden adlandırıldı
+  (`git mv`), başka hiçbir dosya değişmedi (#291).
+- `backend/tests/unit/api/openapi.snapshot.json` bayattı -- `root_router.py`
+  (`/root/users/insights` vb.) eklendiğinde şema değişmişti ama snapshot hiç
+  yeniden üretilmemişti. `KACHOW_UPDATE_OPENAPI_SNAPSHOT=1` ile yeniden
+  üretildi, `frontend/src/api/generated.ts` `npm run api:types` ile
+  senkronlandı (#296).
+
+### Değiştirildi
+- `LOCAL_MODE=false` (Evren/bulut) iken niyet (intent) yönlendirmesinde LLM
+  tie-break'i artık yalnızca belirsizken değil, füzyon zaten kararlı bir
+  sonuca varmış olsa bile her zaman çalışıp sonucu doğruluyor/geçersiz
+  kılıyor (`planner.py::_resolve_intent`). Semantik prototip katmanı
+  `LOCAL_MODE=false`'ta zaten devre dışı (aktif embedding modeli committed
+  vektörlerin damgasıyla -- Ollama'nın `nomic-embed-text`'i -- uyuşmuyor),
+  bu yüzden kendinden emin ama yanlış bir sözcüksel okumayı düzeltecek
+  hiçbir mekanizma kalmıyordu; LLM artık o "ikinci görüş" rolünü üstleniyor
+  (#293). Bulut modunda her sohbet turuna bir sınıflandırma çağrısı
+  ekliyor, bilinçli bir maliyet.
+
+## [3.56]
+### Düzeltildi
+- **DB bağlantı havuzu tükenmesi kaynaklı çökme (#288).** Belirli bir yükten
+  sonra uygulama tamamen yanıt veremez hale geliyordu: frontend'de sayfalar
+  sonsuz dönüyor, belge listesi boş görünüyordu. Kök neden veri kaybı değil,
+  saf kaynak tükenmesiydi:
+  - `create_async_engine` havuz ayarları olmadan çağrılıyordu → SQLAlchemy
+    varsayılanı yalnızca 5 + 10 = 15 bağlantı. Artık ayarlanabilir
+    (`settings.DB_POOL_SIZE`/`DB_MAX_OVERFLOW`/`DB_POOL_TIMEOUT`/
+    `DB_POOL_RECYCLE_SECONDS`; varsayılan 20 + 20).
+  - `get_db` bir `yield`-bağımlılığı olduğu için tuttuğu bağlantı yalnızca
+    HTTP yanıtı tümüyle gönderildikten sonra iade ediliyordu. `POST
+    /chat/stream`, `POST /chat/message` ve auth (`get_current_user`), tüm
+    LangGraph çalışması (dakikalarca, çok sayıda LLM çağrısı) boyunca bir
+    bağlantıyı `idle in transaction` tutuyordu. `get_current_user` artık
+    `Depends(get_db)` yerine kısa ömürlü `request_tenant_session()`
+    kullanıyor; sohbet uçları preflight DB işini (evrak erişimi + revizyon
+    taslağı çözümü) akış/uzun-iş başlamadan biten bir oturumda yapıyor.
+  - Postgres tarafı emniyet ağı: uygulamanın çalışma zamanı bağlantısına
+    `idle_in_transaction_session_timeout` (varsayılan 60 sn) uygulanıyor --
+    bir bağlantı sızıntısı 30 dakika yerine ~1 dakikada kendini toparlıyor.
+
+### Eklendi
+- DB bağlantı havuzunun doygunluğu artık gözlemlenebilir: `settings.
+  DB_POOL_MONITOR_INTERVAL_SECONDS` (varsayılan 30 sn) aralığıyla periyodik
+  loglanıyor (kullanılan oran %80'i geçince WARNING), ve `GET
+  /health?deep=true` yanıtına `db_pool` alanı eklendi.
+
+## [3.55]
 ### Eklendi
 - (#284) `scripts/evaluate_yazisma_vaka_seti.py`: gelen evrak-karar-cevap
   kayıtlarını şema, karar/itiraz kotası, PII, mevzuat doğrulama izi, olgu
@@ -357,6 +542,26 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Sohbete evrak yüklenirken tüm ekranı kaplayan analiz görünümü kaldırıldı;
   yükleme ve analiz ilerlemesi artık konuşma içinde kompakt bir durum mesajı
   olarak gösteriliyor.
+- Taslak ve revizyon akışları arasındaki tutarsızlıklar giderildi (#282):
+  taslak turundaki eksik-bilgi kapısında verilen cevaplar ve "Sen karar ver"
+  ertelemeleri artık `DraftVersion` üzerinde taşınıyor
+  ([focus.py](backend/app/ai/session/focus.py),
+  [planning_graph.py](backend/app/ai/workflows/planning_graph.py)), böylece
+  sonraki bir revizyon turu aynı yer tutucuyu tekrar sormuyor;
+  `revise_graph.verify_node` artık taslak akışıyla aynı `instruction_haystack`'i
+  (önceki turlar + yerleşmiş yazım briefi) doğrulayıcıya geçiyor, dolayısıyla
+  daha önce verilmiş bir isim/kurum revizyonda `dayanaksiz_iddia` olarak
+  puanlanmıyor ([revise_graph.py](backend/app/ai/workflows/revise_graph.py),
+  [revise.py](backend/app/ai/workflows/revise.py)). Her iki akışın paylaştığı
+  eksik-alan sorusu artık her alan için "bu alan nedir / neden gerekli"
+  açıklaması ve mümkünse bir örnek içeriyor
+  ([missing_info.py](backend/app/ai/verification/missing_info.py)).
+- Asistan, yüklü evraktan özet/bilgi istendiğinde artık sahip olduğu araçların
+  adını ("`get_document_details` aracını kullanabilirim" gibi) kullanıcıya
+  açıklamıyor ve "görmek ister misiniz?" diye izin sormuyor; salt-okunur
+  isteği doğrudan yerine getirip sonucu sunuyor. Bir sonraki akışa devretme /
+  aktarım gibi bağlayıcı işlemlerde onay davranışı korunuyor
+  ([assistant.md](backend/app/ai/prompts/templates/assistant.md)).
 
 ## [3.54.0] - 2026-08-24
 İki kullanıcı bildirimi: gerçek taranmış belgelerde `İmza sahibi`/`İmza

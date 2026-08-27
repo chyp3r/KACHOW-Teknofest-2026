@@ -58,17 +58,49 @@ def _clear_overrides():
     app.dependency_overrides.clear()
 
 
+import contextlib
+
+import app.domains.chat.router as _chat_router
+
+
+@contextlib.asynccontextmanager
+async def _null_tenant_session():
+    """`request_tenant_session` stand-in: no real DB, yields a dummy session."""
+    yield None
+
+
+def _stub_chat_preflight(monkeypatch, *, document=None, draft=None):
+    """Wire /chat/{message,stream} preflight to mock repositories.
+
+    The chat endpoints no longer take repository ``Depends`` -- they open a
+    short-lived ``request_tenant_session()`` and build the repos inline so the
+    connection is released before the (minutes-long) planning graph runs
+    (#288). Tests patch those module symbols instead of ``dependency_overrides``.
+
+    Returns ``(document_repository, draft_repository)`` AsyncMocks.
+    """
+    document_repository = AsyncMock()
+    document_repository.get_by_id.return_value = document
+    draft_repository = AsyncMock()
+    draft_repository.get_by_id.return_value = draft
+    monkeypatch.setattr(_chat_router, "request_tenant_session", _null_tenant_session)
+    monkeypatch.setattr(_chat_router, "DocumentRepository", lambda _db: document_repository)
+    monkeypatch.setattr(_chat_router, "DraftRepository", lambda _db: draft_repository)
+    return document_repository, draft_repository
+
+
 # ==========================================
 # /chat -- document_id ownership
 # ==========================================
-def test_chat_message_refuses_a_document_id_owned_by_another_user():
+def test_chat_message_refuses_a_document_id_owned_by_another_user(monkeypatch):
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-b")
-    document_repository = AsyncMock()
-    document_repository.get_by_id.return_value = DocumentModel(
-        company_id="company-1",
-        id="uploads/a-owns-this.pdf", owner_id="user-a", file_name="a.pdf"
+    document_repository, _ = _stub_chat_preflight(
+        monkeypatch,
+        document=DocumentModel(
+            company_id="company-1",
+            id="uploads/a-owns-this.pdf", owner_id="user-a", file_name="a.pdf"
+        ),
     )
-    app.dependency_overrides[get_document_repository] = lambda: document_repository
     chat_service = AsyncMock()
     app.dependency_overrides[get_chat_service] = lambda: chat_service
 
@@ -82,16 +114,17 @@ def test_chat_message_refuses_a_document_id_owned_by_another_user():
     document_repository.get_by_id.assert_awaited_once_with("uploads/a-owns-this.pdf", "company-1")
 
 
-def test_chat_message_allows_a_document_id_the_caller_owns():
+def test_chat_message_allows_a_document_id_the_caller_owns(monkeypatch):
     from app.domains.chat.schema.chat_schema import ChatMessageResponse
 
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-a")
-    document_repository = AsyncMock()
-    document_repository.get_by_id.return_value = DocumentModel(
-        company_id="company-1",
-        id="uploads/mine.pdf", owner_id="user-a", file_name="mine.pdf"
+    _stub_chat_preflight(
+        monkeypatch,
+        document=DocumentModel(
+            company_id="company-1",
+            id="uploads/mine.pdf", owner_id="user-a", file_name="mine.pdf"
+        ),
     )
-    app.dependency_overrides[get_document_repository] = lambda: document_repository
     chat_service = AsyncMock()
     chat_service.handle_message.return_value = ChatMessageResponse(
         reply="İşte özet.", workflow_status="COMPLETED", session_id="user-a:s1"
@@ -107,16 +140,17 @@ def test_chat_message_allows_a_document_id_the_caller_owns():
     chat_service.handle_message.assert_awaited_once()
 
 
-def test_chat_message_allows_an_admin_to_reach_a_document_it_does_not_own():
+def test_chat_message_allows_an_admin_to_reach_a_document_it_does_not_own(monkeypatch):
     from app.domains.chat.schema.chat_schema import ChatMessageResponse
 
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user("admin-x", role="admin")
-    document_repository = AsyncMock()
-    document_repository.get_by_id.return_value = DocumentModel(
-        company_id="company-1",
-        id="uploads/a-owns-this.pdf", owner_id="user-a", file_name="a.pdf"
+    _stub_chat_preflight(
+        monkeypatch,
+        document=DocumentModel(
+            company_id="company-1",
+            id="uploads/a-owns-this.pdf", owner_id="user-a", file_name="a.pdf"
+        ),
     )
-    app.dependency_overrides[get_document_repository] = lambda: document_repository
     chat_service = AsyncMock()
     chat_service.handle_message.return_value = ChatMessageResponse(
         reply="İşte özet.", workflow_status="COMPLETED", session_id="admin-x:s1"
@@ -132,16 +166,17 @@ def test_chat_message_allows_an_admin_to_reach_a_document_it_does_not_own():
     chat_service.handle_message.assert_awaited_once()
 
 
-def test_chat_message_allows_a_manager_to_reach_a_document_it_does_not_own():
+def test_chat_message_allows_a_manager_to_reach_a_document_it_does_not_own(monkeypatch):
     from app.domains.chat.schema.chat_schema import ChatMessageResponse
 
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user("mgr-x", role="manager")
-    document_repository = AsyncMock()
-    document_repository.get_by_id.return_value = DocumentModel(
-        company_id="company-1",
-        id="uploads/a-owns-this.pdf", owner_id="user-a", file_name="a.pdf"
+    _stub_chat_preflight(
+        monkeypatch,
+        document=DocumentModel(
+            company_id="company-1",
+            id="uploads/a-owns-this.pdf", owner_id="user-a", file_name="a.pdf"
+        ),
     )
-    app.dependency_overrides[get_document_repository] = lambda: document_repository
     chat_service = AsyncMock()
     chat_service.handle_message.return_value = ChatMessageResponse(
         reply="İşte özet.", workflow_status="COMPLETED", session_id="mgr-x:s1"
@@ -160,13 +195,9 @@ def test_chat_message_allows_a_manager_to_reach_a_document_it_does_not_own():
 # ==========================================
 # /chat -- draft_id update authorization
 # ==========================================
-def test_chat_message_refuses_a_draft_owned_by_another_employee():
+def test_chat_message_refuses_a_draft_owned_by_another_employee(monkeypatch):
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-b")
-    document_repository = AsyncMock()
-    app.dependency_overrides[get_document_repository] = lambda: document_repository
-    draft_repository = AsyncMock()
-    draft_repository.get_by_id.return_value = _draft(user_id="user-a")
-    app.dependency_overrides[get_draft_repository] = lambda: draft_repository
+    _stub_chat_preflight(monkeypatch, draft=_draft(user_id="user-a"))
     chat_service = AsyncMock()
     app.dependency_overrides[get_chat_service] = lambda: chat_service
 
@@ -179,16 +210,12 @@ def test_chat_message_refuses_a_draft_owned_by_another_employee():
     chat_service.handle_message.assert_not_called()
 
 
-def test_chat_message_passes_an_authorized_revision_draft_to_the_service():
+def test_chat_message_passes_an_authorized_revision_draft_to_the_service(monkeypatch):
     from app.domains.chat.schema.chat_schema import ChatMessageResponse
 
     app.dependency_overrides[require_auth_if_enabled] = lambda: _user("user-a")
-    document_repository = AsyncMock()
-    app.dependency_overrides[get_document_repository] = lambda: document_repository
-    draft_repository = AsyncMock()
     draft = _draft(user_id="user-a")
-    draft_repository.get_by_id.return_value = draft
-    app.dependency_overrides[get_draft_repository] = lambda: draft_repository
+    _stub_chat_preflight(monkeypatch, draft=draft)
     chat_service = AsyncMock()
     chat_service.handle_message.return_value = ChatMessageResponse(
         reply="Taslak revize edildi.", workflow_status="COMPLETED", session_id="user-a:s1"

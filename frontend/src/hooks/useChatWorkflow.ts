@@ -4,6 +4,7 @@ import { queryKeys } from "../query/queryKeys";
 import { chatService } from "../services/chatService";
 import type {
   ChatMessage,
+  ContextUsage,
   GuardrailEvent,
   InterruptState,
   PersistedChatMessage,
@@ -228,6 +229,33 @@ function toChatMessages(items: PersistedChatMessage[]): ChatMessage[] {
   return messages;
 }
 
+function preserveLatestLiveAnimation(
+  hydratedMessages: ChatMessage[],
+  currentMessages: ChatMessage[],
+): ChatMessage[] {
+  const liveMessage = [...currentMessages]
+    .reverse()
+    .find((message) => message.sender === "assistant" && message.animate);
+  if (!liveMessage) return hydratedMessages;
+
+  let matchingIndex = -1;
+  for (let index = hydratedMessages.length - 1; index >= 0; index -= 1) {
+    const message = hydratedMessages[index];
+    if (
+      message?.sender === liveMessage.sender &&
+      message.text === liveMessage.text
+    ) {
+      matchingIndex = index;
+      break;
+    }
+  }
+  if (matchingIndex < 0) return hydratedMessages;
+
+  return hydratedMessages.map((message, index) =>
+    index === matchingIndex ? { ...message, animate: true } : message,
+  );
+}
+
 export function useChatWorkflow(
   selectedDocument: DocumentMetadata | null,
   userId: string,
@@ -237,6 +265,10 @@ export function useChatWorkflow(
   const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
+  const [compacting, setCompacting] = useState(false);
+  // Sıkıştırma sonrası backend'in döndürdüğü döküm -- bir sonraki assist turu
+  // kendi context_usage'ını üretene kadar gösterge bunu kullanır.
+  const [compactUsage, setCompactUsage] = useState<ContextUsage | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [clientId, setClientId] = useState(() =>
     activeSessionId ? clientSessionId(activeSessionId, userId) : createClientSessionId(),
@@ -383,9 +415,15 @@ export function useChatWorkflow(
     // already have is that stale race, not a genuine "history shrank"
     // signal (chat history is append-only) -- session switches always
     // start `messages` at `[]` first (see the effect above), so a real
-    // hydration is never mistaken for one of these.
+    // hydration is never mistaken for one of these. An equal/newer read may
+    // replace the local row to add its persisted id, but must keep the latest
+    // live row's transient animation flag until MessageList finishes revealing
+    // it; otherwise its draft metadata appears before the reply text.
     const items = messagesQuery.data.items;
-    setMessages((previous) => (items.length >= previous.length ? toChatMessages(items) : previous));
+    setMessages((previous) => {
+      if (items.length < previous.length) return previous;
+      return preserveLatestLiveAnimation(toChatMessages(items), previous);
+    });
   }, [messagesQuery.data]);
 
   // Rehydrates the workflow stepper's plan/order from the last persisted
@@ -656,9 +694,11 @@ export function useChatWorkflow(
   );
 
   const send = useCallback(async (text: string, reasoningLevel: ReasoningLevel, useDocument: boolean, documentIdOverride?: string, draftId?: string | null) => {
-    if (!text.trim() || loading || activeRequest.current) return;
+    if (!text.trim() || loading || compacting || activeRequest.current) return;
     cancelledThreadId.current = null;
     setLoading(true);
+    // Yeni tur kendi context_usage'ını üretecek; sıkıştırma anlık görüntüsünü bırak.
+    setCompactUsage(null);
     setPendingInterrupt(null);
     resetFlow();
     setMessages((previous) => [...previous, { sender: "user", text: text.trim() }]);
@@ -673,7 +713,7 @@ export function useChatWorkflow(
       if (activeRequest.current === controller) activeRequest.current = null;
       setLoading(false);
     }
-  }, [clientId, handleEvent, loading, resetFlow, selectedDocument]);
+  }, [clientId, compacting, handleEvent, loading, resetFlow, selectedDocument]);
 
   const resume = useCallback(async (action: "answer" | "approve" | "revise" | "reject" | "select", answers: Record<string, string | string[]>, instructions: string, reason?: string) => {
     if (!threadId || !pendingInterrupt || loading || activeRequest.current) return;
@@ -787,6 +827,36 @@ export function useChatWorkflow(
   }, [clientId, refreshServerState, resetFlow, userId]);
   const addUploadMessage = useCallback((fileName: string) => setMessages((previous) => [...previous, { sender: "assistant", text: `“${fileName}” evrakı yüklendi ve analiz edildi.` }]), []);
 
+  // Sohbeti sıkıştır: birebir geçmiş penceresini yuvarlanan özete katlar,
+  // bağlam penceresinde yer açar. Sırasında sohbet kilitlenir (compacting).
+  const compact = useCallback(async () => {
+    const resolvedThreadId = threadIdRef.current;
+    if (!resolvedThreadId || compacting || loading || activeRequest.current) return;
+    setCompacting(true);
+    try {
+      const result = await chatService.compact(resolvedThreadId);
+      if (result.context_usage) setCompactUsage(result.context_usage);
+      refreshServerState(resolvedThreadId);
+    } catch {
+      // Sessiz geç: kullanıcı tekrar deneyebilir.
+    } finally {
+      setCompacting(false);
+    }
+  }, [compacting, loading, refreshServerState]);
+
+  // Bağlam göstergesinin okuduğu döküm: sıkıştırma anlık görüntüsü varsa o,
+  // yoksa son assist turunun details.context_usage'ı.
+  let contextUsage: ContextUsage | null = compactUsage;
+  if (!contextUsage) {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const candidate = messages[index]?.details?.context_usage as ContextUsage | undefined;
+      if (candidate && typeof candidate.total === "number") {
+        contextUsage = candidate;
+        break;
+      }
+    }
+  }
+
   return {
     sessions: sessionsQuery.data?.items ?? [],
     sessionsLoading: sessionsQuery.isLoading,
@@ -797,6 +867,9 @@ export function useChatWorkflow(
     historyError: messagesQuery.error instanceof Error ? messagesQuery.error.message : stateQuery.error instanceof Error ? stateQuery.error.message : null,
     messages,
     loading,
+    compacting,
+    contextUsage,
+    compact,
     streamingText,
     pendingInterrupt,
     nodeStatus,

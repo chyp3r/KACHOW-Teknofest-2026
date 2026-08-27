@@ -1,16 +1,18 @@
 """Belge analizi için MCP-first mevzuat getirimi.
 
-`mevzuat-mcp`, bir *katalog* araması (`search_mevzuat`, kanun numarası veya
-başlığa göre) ve tam metin getirimi (`get_mevzuat_content`) sunar -- içerik/
-konu araması değil. `_build_mevzuat_query` (document_analysis_graph.py),
-anahtar kelime yoğun bir *konu* dizesi oluşturur; bu, katalog başlık araması
-için yanlış bir biçimdir. Dolayısıyla buradaki "MCP-first" şu anlama gelir:
-committed korpusun zaten barındırdığı aynı küçük, derlenmiş kanun kümesinin
-güncel metnini (numaraya göre, güvenilir arama yolu -- bkz.
-`app.mcp.mevzuat_client`) getir, sonra bu canlı metni yerel retriever'ın
-kullanacağı aynı sorguyla, getirimden taze oluşturulan bellek içi bir BM25
-indeksi üzerinden sırala. `HybridRetriever` (Qdrant, dense+sparse) yerel
-yedek olarak kalır ve `MEVZUAT_SOURCE="local"` iken tek kaynaktır.
+`mevzuat-mcp`'nin `search_mevzuat`'ı hem numara/başlık filtresini hem de
+içerikte tam metin aramasını (`phrase`, Solr sözdizimi) destekler -- ama bu
+modül bilinçli olarak yalnızca numaraya göre çözümleme kullanır (bkz.
+`app.mcp.mevzuat_client.resolve_and_fetch`), *konu* bazlı canlı aramayı
+değil. Sebep API sınırı değil, kapsam: burası yalnızca boot-zamanında
+`CURATED_LEGISLATION`'ı ısıtan yol, `LOCAL_MODE`'dan bağımsız olarak her
+zaman çalışır ve `retrieve()`'i asla ağ G/Ç yapmayan, tur-başına bedava bir
+işlem olarak tutar (aşağıya bakın). İstek başına konu bazlı canlı arama
+(`LOCAL_MODE=false` iken) `document_analysis_graph.retrieve_mevzuat_node`'da
+ayrı, açıkça kapılı bir adımdır -- bu modülün sözleşmesini bozmadan.
+
+`HybridRetriever` (Qdrant, dense+sparse) yerel yedek olarak kalır ve
+`MEVZUAT_SOURCE="local"` iken tek kaynaktır.
 
 Uyumluluğa (compliance) hiç dokunmaz. `check_required_fields`, sabit kodlu
 madde numaralarına sahip bir kural tablosu üzerinde küme çıkarmadır; bu

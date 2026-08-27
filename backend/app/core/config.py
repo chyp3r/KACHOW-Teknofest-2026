@@ -43,6 +43,31 @@ class Settings(BaseSettings):
     #: -- gerçek bir dağıtımda asla bu değer olması amaçlanmamıştır.
     KACHOW_APP_DB_PASSWORD: str = "kachow_app_dev_only"
 
+    #: SQLAlchemy async engine havuz ayarları. Ayarlanmadıkları için
+    #: kod tabanı uzun süre SQLAlchemy varsayılanlarıyla (5 + 10 = 15
+    #: bağlantı, 30 sn bekleme) çalıştı -- birkaç eşzamanlı, dakikalarca
+    #: süren sohbet/analiz isteği (her biri bir bağlantıyı `idle in
+    #: transaction` tutuyordu) havuzu tüketip diğer her isteği zaman
+    #: aşımına uğratıyordu (bkz. #288).
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 20
+    DB_POOL_TIMEOUT: float = 30.0
+    #: Bağlantıları bu yaştan sonra sessizce geri dönüştür -- uzun ömürlü
+    #: boşta bağlantıların bir load balancer / Postgres tarafından
+    #: koparılıp havuzda ölü kalmasını önler.
+    DB_POOL_RECYCLE_SECONDS: int = 1800
+    #: Postgres tarafı emniyet ağı (yalnızca uygulamanın çalışma zamanı
+    #: bağlantısına uygulanır, owner bağlantısına değil): bir bağlantı bu
+    #: kadar milisaniye boyunca `idle in transaction` kalırsa Postgres onu
+    #: koparır. Bir bağlantı sızıntısı 30 dakika yerine ~1 dakikada
+    #: kendini toparlar, yani yığılma tüm uygulamayı düşürmek yerine
+    #: kısmi bozulmayla atlatılır. 0 devre dışı bırakır.
+    DB_IDLE_IN_TXN_TIMEOUT_MS: int = 60000
+    #: Havuz doygunluğunu periyodik loglayan arka plan görevi (bkz.
+    #: `app.lifespan`). Saniye cinsinden aralık; 0 devre dışı bırakır.
+    #: Kullanılan bağlantı oranı %80'i geçtiğinde WARNING loglar.
+    DB_POOL_MONITOR_INTERVAL_SECONDS: int = 30
+
     #: LangGraph'ın AsyncPostgresSaver'ı, planlama grafiğinde HITL'i (eksik
     #: bilgi istekleri) destekler. Başlangıçta en iyi çaba: False
     #: olduğunda veya Postgres ulaşılamaz olduğunda, grafikler bir
@@ -364,6 +389,12 @@ class Settings(BaseSettings):
     #: donanımda uzun süren üretimler 1800s'ye kadar sürebilir.
     EVREN_REQUEST_TIMEOUT_SECONDS: float = 1800.0
 
+    #: Evren'in bağlam penceresi (llm-large). Yerel Ollama'nın 8192'sinin
+    #: aksine çok daha geniştir; bağlam bütçesi ve sohbetteki bağlam
+    #: göstergesi LOCAL_MODE=False iken bu değere göre boyutlanır (bkz.
+    #: ``BaseLLMClient.context_window``).
+    EVREN_NUM_CTX: int = 262144
+
     #: Takım başına izole edilmiş, Evren'in özel Qdrant kümesi
     #: (evren-vektor.ssyz.org.tr). LOCAL_MODE=False olduğunda QDRANT_URL
     #: yerine kullanılır.
@@ -419,6 +450,13 @@ class Settings(BaseSettings):
     #: `monitoring/dashboards/company_dashboard.json`), şirkete göre
     #: değiştiği için burada gömülü değil, analitik servisi tarafından eklenir.
     GRAFANA_URL: str = "http://localhost:3001"
+
+    #: `GET /root/users/insights`'in global token-kullanım panelini beslediği
+    #: Prometheus HTTP API taban adresi. Varsayılan host-facing'dir; Docker
+    #: altında `compose.yml` bunu `http://prometheus:9090` ile geçersiz kılar
+    #: (QDRANT_URL/REDIS_URL ile aynı desen). Ulaşılamazsa panel sessizce boş
+    #: döner -- bkz. `app.observability.prometheus_query`.
+    PROMETHEUS_URL: str = "http://localhost:9090"
 
     #: Altyapı düzeyi izleme için OTLP/gRPC toplayıcı uç noktası (örn.
     #: `http://jaeger:4317`) -- bkz. `app/observability/otel.py`. `None`
@@ -494,6 +532,17 @@ class Settings(BaseSettings):
     #: Bir arama üzerinde tavan. Devlet sitesi hiçbir hız sınırı yayınlamaz
     #: ve asistan onu bekleyerek bir sohbet turunu durduramaz.
     MEVZUAT_MCP_TIMEOUT_SECONDS: float = 25.0
+    #: `MEVZUAT_MCP_TIMEOUT_SECONDS`'tan bilinçli olarak daha küçük.
+    #: Asistanın canlı aracı 25s'lik kendi tam bütçesine sahip tek bir
+    #: sohbet turu adımı iken, evrak analizindeki canlı eskalasyon
+    #: (`retrieve_mevzuat_node`) mevcut `mevzuat_retriever.retrieve(...)`
+    #: çağrısıyla aynı düğüm bütçesini paylaşıyor -- ve o bütçe `fast`
+    #: seviyesinde yalnızca 15s'ye kadar iniyor (`BudgetPolicy.node_seconds`
+    #: `retrieve_mevzuat` × reasoning_levels.py'nin `fast` çarpanı). Bu
+    #: bütçeyi aşmak `NodeBudgetExceeded` fırlatıp düğümü zarifçe değil,
+    #: doğrudan iptal ediyor (bkz. app.ai.workflows.resilience.node_timeout),
+    #: bu yüzden ayrı ve daha dar bir tavan gerekiyor.
+    MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS: float = 10.0
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", case_sensitive=True, extra="ignore"

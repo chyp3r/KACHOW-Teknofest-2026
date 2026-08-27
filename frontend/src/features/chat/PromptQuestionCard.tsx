@@ -100,6 +100,15 @@ export function PromptQuestionCard({
     advance({ ...answers });
   };
 
+  const exampleValue = (question.example ?? "").trim();
+  const freeTextValue = freeText[question.key] ?? (hasOptions ? "" : typeof value === "string" ? value : "");
+  const canAcceptExample = Boolean(exampleValue) && !freeTextValue.trim();
+
+  const acceptExample = () => {
+    if (loading || !exampleValue) return;
+    setFreeText((previous) => ({ ...previous, [question.key]: exampleValue }));
+  };
+
   return (
     <div className="prompt-question-card">
       {(title || intro) && (
@@ -224,13 +233,30 @@ export function PromptQuestionCard({
             <Input
               autoFocus
               disabled={loading}
-              value={freeText[question.key] ?? (hasOptions ? "" : (typeof value === "string" ? value : ""))}
-              placeholder={question.example ?? ""}
+              value={freeTextValue}
+              placeholder={exampleValue}
+              onKeyDown={(event) => {
+                if (event.key === "Tab" && !event.shiftKey && canAcceptExample) {
+                  event.preventDefault();
+                  acceptExample();
+                }
+              }}
               onChange={(event) =>
                 setFreeText((previous) => ({ ...previous, [question.key]: event.target.value }))
               }
               aria-label={question.header || question.question}
             />
+            {canAcceptExample && (
+              <button
+                type="button"
+                className="prompt-question-example-hint"
+                disabled={loading}
+                onClick={acceptExample}
+              >
+                Öneri: <strong>{exampleValue}</strong>
+                <span className="prompt-question-example-key" aria-hidden="true">Tab</span>
+              </button>
+            )}
             <div className="prompt-question-nav">
               <Button
                 type="button"

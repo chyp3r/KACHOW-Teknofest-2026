@@ -1,6 +1,6 @@
 """Unit tests for the output-side guardrail gate."""
 
-from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
+from app.ai.guardrails.llm_nuance import GroundednessJudgeVerdict, GuardrailJudgeVerdict
 from app.ai.guardrails.output_gate import FALLBACK_REPLY, classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.core.enums.sensitivity_level import SensitivityLevel
@@ -63,10 +63,148 @@ def test_an_ungrounded_document_number_is_redacted():
     assert "doğrulanamayan ifade kaldırıldı" in "".join(verdict.reasons)
 
 
+def test_the_whole_ungrounded_sentence_is_removed_and_surfaced():
+    """A sentence carrying an ungrounded claim is dropped entirely (not just
+    the number spliced out), replaced with the marker, and the removed
+    sentence is surfaced in ``reasons`` so the "Maskelendi" alert can show
+    which sentence went and why."""
+    reply = (
+        "Merhaba. E-99999999-903-9999 sayılı yazınıza istinaden işleminiz "
+        "tamamlanmıştır. İyi çalışmalar."
+    )
+    verdict = evaluate_response(reply, source_materials="Konu: İzin Talebi")
+    assert verdict.action == "redact"
+    assert "E-99999999-903-9999" not in verdict.text
+    assert "sayılı yazınıza istinaden" not in verdict.text
+    assert "[Bu bilgi doğrulanamadığı için kaldırıldı]" in verdict.text
+    # The clean sentences around it survive.
+    assert "Merhaba." in verdict.text
+    assert "İyi çalışmalar." in verdict.text
+    # The removed sentence is reported verbatim on its own reason line.
+    assert any(
+        reason.startswith("Kaldırılan cümle:")
+        and "E-99999999-903-9999 sayılı yazınıza istinaden" in reason
+        for reason in verdict.reasons
+    )
+
+
+def test_a_mostly_grounded_reply_is_left_uncensored_above_the_threshold():
+    """MCP mevzuat aracından gelen ve yığında bulunan bir yanıtta, token
+    örtüşmesi ya da alıntı sınırı yüzünden birkaç ifade eşleşmese bile büyük
+    ölçüde kaynaklı yanıt olduğu gibi geçer -- cümleleri
+    ``[Bu bilgi doğrulanamadığı için kaldırıldı]`` ile değiştirilmez."""
+    source = (
+        "657 sayılı Devlet Memurları Kanunu madde 125, madde 126 ve madde 127 "
+        "disiplin cezalarını düzenler. Yürürlük tarihi 23.07.1965."
+    )
+    reply = (
+        "657 sayılı Kanun'un madde 125, madde 126 ve madde 127 hükümleri "
+        "uyarınca (yürürlük 23.07.1965), ayrıca madde 999 kapsamında işlem yapılır."
+    )
+    verdict = evaluate_response(reply, source_materials=source)
+    assert verdict.action == "pass"
+    assert verdict.text == reply
+
+
+def test_a_reply_that_is_mostly_ungrounded_is_still_redacted():
+    source = "657 sayılı Kanun madde 125 disiplin cezalarını düzenler."
+    reply = "madde 500, madde 600 ve madde 700 kapsamında ceza verilir."
+    verdict = evaluate_response(reply, source_materials=source)
+    assert verdict.action == "redact"
+    assert "doğrulanamayan ifade kaldırıldı" in "".join(verdict.reasons)
+
+
 def test_a_reply_with_nothing_to_check_against_is_not_flagged_as_fabrication():
     """No source materials is a legitimate state (no document, no tool
     calls this turn) -- it must not read as 'everything is ungrounded'."""
     verdict = evaluate_response("Merhaba, size nasıl yardımcı olabilirim?")
+    assert verdict.action == "pass"
+
+
+# ==========================================
+# LLM groundedness judge (plain-sentence document hallucination)
+# ==========================================
+def _grounded(**overrides) -> GroundednessJudgeVerdict:
+    fields = dict(grounded=True, confidence=0.9, ungrounded_sentences=[], reason="Tümü dayanaklı.")
+    fields.update(overrides)
+    return GroundednessJudgeVerdict(**fields)
+
+
+def test_a_grounded_verdict_leaves_the_reply_untouched():
+    reply = "Evrak bir izin talebidir ve üç sayfadan oluşur."
+    verdict = evaluate_response(reply, source_materials="izin talebi", groundedness_verdict=_grounded())
+    assert verdict.action == "pass"
+    assert verdict.text == reply
+
+
+def test_the_judge_removes_a_plain_sentence_the_pattern_check_cannot_see():
+    """No number, no date, no institution suffix -- pure prose the
+    deterministic groundedness check never looks at. The judge names it, the
+    gate drops the whole sentence and surfaces it."""
+    reply = (
+        "Evrak bir izin talebidir. Talep, acil bir aile sağlığı durumu "
+        "gerekçesiyle sunulmuştur. Başka bir sorunuz olursa yardımcı olabilirim."
+    )
+    verdict = evaluate_response(
+        reply,
+        source_materials="Konu: Yıllık izin talebi.",
+        groundedness_verdict=_grounded(
+            grounded=False,
+            confidence=0.9,
+            ungrounded_sentences=[
+                "Talep, acil bir aile sağlığı durumu gerekçesiyle sunulmuştur."
+            ],
+            reason="İzin gerekçesi kaynakta yok.",
+        ),
+    )
+    assert verdict.action == "redact"
+    assert "aile sağlığı durumu" not in verdict.text
+    assert "[Bu bilgi doğrulanamadığı için kaldırıldı]" in verdict.text
+    assert "Evrak bir izin talebidir." in verdict.text
+    assert "Başka bir sorunuz olursa" in verdict.text
+    assert any(
+        reason.startswith("Kaldırılan cümle:") and "aile sağlığı durumu" in reason
+        for reason in verdict.reasons
+    )
+    assert any("model değerlendirmesi" in reason for reason in verdict.reasons)
+    assert classify_reason_kind(verdict.reasons) == "groundedness"
+
+
+def test_a_low_confidence_judge_verdict_does_not_touch_the_reply():
+    reply = "Evrakta acil bir aile durumu gerekçe olarak gösterilmiş."
+    verdict = evaluate_response(
+        reply,
+        source_materials="izin talebi",
+        groundedness_verdict=_grounded(
+            grounded=False, confidence=0.4, ungrounded_sentences=[reply], reason="şüpheli"
+        ),
+    )
+    assert verdict.action == "pass"
+    assert verdict.text == reply
+
+
+def test_a_flagged_verdict_with_no_locatable_sentence_truncates_the_reply():
+    """The judge said ungrounded but named no sentence we can find -- fall
+    back to the safe notice rather than passing the reply through."""
+    reply = "Evrakta pek çok ayrıntı bulunuyor ve bunların hepsi önemlidir."
+    verdict = evaluate_response(
+        reply,
+        source_materials="Konu: izin",
+        groundedness_verdict=_grounded(
+            grounded=False,
+            confidence=0.95,
+            ungrounded_sentences=["tamamen alakasız, yanıtta hiç geçmeyen bir cümle"],
+            reason="Yanıt evrakta olmayan ayrıntılar uyduruyor.",
+        ),
+    )
+    assert verdict.action == "redact"
+    assert "doğrulanamayan evrak bilgisi" in "".join(verdict.reasons)
+    assert reply != verdict.text
+
+
+def test_no_groundedness_verdict_is_a_no_op():
+    reply = "Evrakta acil bir aile durumu gerekçe olarak gösterilmiş."
+    verdict = evaluate_response(reply, source_materials="izin talebi", groundedness_verdict=None)
     assert verdict.action == "pass"
 
 
@@ -92,7 +230,7 @@ def test_pii_from_an_unmarked_document_is_masked_not_blocked():
     )
     assert verdict.action == "redact"
     assert "0532 123 45 67" not in verdict.text
-    assert "pii bulgusu maskelendi" in "".join(verdict.reasons)
+    assert "PII bulgusu maskelendi" in "".join(verdict.reasons)
 
 
 def test_pii_from_a_gizli_document_with_no_clearance_is_blocked():
@@ -278,9 +416,70 @@ def test_classify_reason_kind_picks_groundedness():
     assert classify_reason_kind(["1 doğrulanamayan ifade kaldırıldı"]) == "groundedness"
 
 
+def test_classify_reason_kind_ignores_the_removed_sentence_lines():
+    """A removed sentence is free model text -- a stray "pii" or "yetkisiz"
+    word inside it must not flip the event's classified kind."""
+    reasons = [
+        "1 doğrulanamayan ifade kaldırıldı",
+        'Kaldırılan cümle: "Yetkisiz erişim nedeniyle PII paylaşılamaz."',
+    ]
+    assert classify_reason_kind(reasons) == "groundedness"
+
+
 def test_classify_reason_kind_picks_injection():
     assert classify_reason_kind(["prompt_leak_or_injection_echo"]) == "injection"
 
 
 def test_classify_reason_kind_falls_back_to_output_gate():
     assert classify_reason_kind([]) == "output_gate"
+
+
+# ==========================================
+# The KAYNAKLAR sources block must survive redaction intact
+# ==========================================
+_WITH_SOURCES = (
+    "Mesleği Yeminli Mali Müşavir'dir [1]. Görev süresi 12.03.2029'a kadardır [2].\n\n"
+    "KAYNAKLAR:\n"
+    "[1] (s. 1) Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır.\n"
+    "[2] (s. 4) Görev bitiş tarihi belirtilmemiştir."
+)
+
+
+def test_the_sources_block_is_never_chopped_by_sentence_redaction():
+    """Observed in production: sentence-level removal cut through the block's
+    own structured lines, producing `[2] (s. [Bu bilgi doğrulanamadığı için
+    kaldırıldı]`. The block is verbatim source text -- grounded by
+    construction -- and machine-parsed, so redaction must not enter it."""
+    verdict = evaluate_response(_WITH_SOURCES, source_materials="Konu: İzin talebi.")
+
+    assert "KAYNAKLAR:" in verdict.text
+    assert "[1] (s. 1) Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır." in verdict.text
+    assert "[2] (s. 4) Görev bitiş tarihi belirtilmemiştir." in verdict.text
+    # Whatever happened above it, no marker landed inside the block.
+    block = verdict.text[verdict.text.index("KAYNAKLAR:") :]
+    assert "[Bu bilgi doğrulanamadığı için kaldırıldı]" not in block
+
+
+def test_redaction_still_applies_to_the_prose_above_the_block():
+    verdict = evaluate_response(_WITH_SOURCES, source_materials="Konu: İzin talebi.")
+
+    assert verdict.action == "redact"
+    prose = verdict.text[: verdict.text.index("KAYNAKLAR:")]
+    assert "12.03.2029" not in prose
+
+
+def test_a_fully_grounded_reply_with_a_block_passes_untouched():
+    source = (
+        "Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır. "
+        "Görev bitiş tarihi belirtilmemiştir."
+    )
+    reply = (
+        "Mesleği Yeminli Mali Müşavir'dir [1].\n\n"
+        "KAYNAKLAR:\n"
+        "[1] (s. 1) Cemal KISA, yeminli mali müşavir olarak görev yapmaktadır."
+    )
+
+    verdict = evaluate_response(reply, source_materials=source)
+
+    assert verdict.action == "pass"
+    assert verdict.text == reply

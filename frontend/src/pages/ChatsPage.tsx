@@ -5,16 +5,19 @@ import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
 import { ConversationHistoryDrawer } from "../features/chat/ConversationHistoryDrawer";
+import { guardrailDecisionLabel, formatGuardrailReason } from "../features/chat/guardrailLabels";
 import { MessageList } from "../features/chat/MessageList";
+import { SourcePeekDrawer, type CitationTarget } from "../features/chat/SourcePeekDrawer";
 import type {
   ChatMessage,
   ChatSession,
+  ContextUsage,
   GuardrailEvent,
   InterruptState,
   ToolCallEvent,
   WorkflowNodeStatus,
 } from "../types/chat";
-import type { DocumentMetadata, ReasoningLevel } from "../types/documents";
+import type { DocumentMetadata, DocumentText, ReasoningLevel } from "../types/documents";
 import { useDrafts } from "../hooks/useDrafts";
 import { Button } from "../components/Button";
 import { Alert, Spinner } from "../components/Surface";
@@ -30,9 +33,13 @@ export function ChatsPage({
   historyError,
   documentError,
   selectedDocument,
+  documentText,
   messages,
   streamingText,
   loading,
+  compacting,
+  contextUsage,
+  onCompact,
   guardrailEvents,
   interrupt,
   workflowOpen,
@@ -71,9 +78,17 @@ export function ChatsPage({
   historyError: string | null;
   documentError?: string | null;
   selectedDocument: DocumentMetadata | null;
+  // Extracted page text for `selectedDocument`, already fetched by
+  // useDocuments for whatever document is attached -- backs the source
+  // view a page citation opens. Null while it loads or when nothing is
+  // attached, in which case citations still render, just inertly.
+  documentText?: DocumentText | null;
   messages: ChatMessage[];
   streamingText: string;
   loading: boolean;
+  compacting: boolean;
+  contextUsage: ContextUsage | null;
+  onCompact: () => void | Promise<void>;
   guardrailEvents: GuardrailEvent[];
   interrupt: InterruptState | null;
   workflowOpen: boolean;
@@ -125,6 +140,8 @@ export function ChatsPage({
     ?? null;
   const [promptTemplate, setPromptTemplate] = useState<string | null>(null);
   const historyTriggerRef = useRef<HTMLButtonElement>(null);
+  // The page citation the reader clicked, if any -- see SourcePeekDrawer.
+  const [citationTarget, setCitationTarget] = useState<CitationTarget | null>(null);
 
   useEffect(() => {
     if (requestedDraftId) setSelectedDraftId(requestedDraftId);
@@ -192,7 +209,6 @@ export function ChatsPage({
         <ConversationHistoryDrawer
           sessions={sessions}
           activeSessionId={activeSessionId}
-          activeMessages={messages}
           loading={sessionsLoading}
           refreshing={sessionsRefreshing}
           error={sessionsError}
@@ -203,6 +219,13 @@ export function ChatsPage({
           onOpenSession={openSession}
         />
       )}
+      <SourcePeekDrawer
+        target={citationTarget}
+        pages={documentText?.pages ?? null}
+        documentName={selectedDocument?.file_name}
+        loading={Boolean(selectedDocument) && !documentText}
+        onClose={() => setCitationTarget(null)}
+      />
       <div className="chat-workspace">
         <div className="chat-content">
         {historyError && !historyOpen && (
@@ -217,15 +240,44 @@ export function ChatsPage({
         {historyLoading && <div className="processing-line"><Spinner label="Sohbet yükleniyor" />Sohbet yükleniyor…</div>}
         {guardrailEvents.length > 0 && (
           <div className="chat-guardrail-stack">
-            {guardrailEvents.map((guardrail, index) => (
-              <Alert
-                variant={guardrail.decision === "blocked" ? "error" : "warning"}
-                title={`Güvenlik kontrolü: ${guardrail.decision}`}
-                key={`${guardrail.stage}-${guardrail.kind}-${index}`}
-              >
-                <span>{guardrail.reasons.join(" · ")}</span>
-              </Alert>
-            ))}
+            {guardrailEvents.map((guardrail, index) => {
+              const summary = guardrail.reasons.filter(
+                (reason) => !reason.startsWith("Kaldırılan cümle:"),
+              );
+              const removed = guardrail.reasons
+                .filter((reason) => reason.startsWith("Kaldırılan cümle:"))
+                .map((reason) => reason.replace(/^Kaldırılan cümle:\s*/, ""));
+              return (
+                <Alert
+                  variant={guardrail.decision === "blocked" ? "error" : "warning"}
+                  title={`Güvenlik kontrolü: ${guardrailDecisionLabel(guardrail.decision)}`}
+                  key={`${guardrail.stage}-${guardrail.kind}-${index}`}
+                >
+                  <div className="chat-guardrail-reasons">
+                    {summary.length > 0 && (
+                      <p>{summary.map(formatGuardrailReason).join(" · ")}</p>
+                    )}
+                    {/* Collapsed by default. Listing the removed sentences
+                        inline made the alert taller than the space above the
+                        chat, so it was clipped and had to be scrolled -- the
+                        summary is what matters at a glance, the sentences are
+                        for whoever wants them. */}
+                    {removed.length > 0 && (
+                      <details className="chat-guardrail-removed">
+                        <summary>
+                          Kaldırılan {removed.length} cümleyi göster
+                        </summary>
+                        <ul>
+                          {removed.map((sentence, i) => (
+                            <li key={i}>{sentence}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                </Alert>
+              );
+            })}
           </div>
         )}
         <MessageList
@@ -255,6 +307,9 @@ export function ChatsPage({
           sessionId={activeSessionId}
           onCancel={onCancel}
           onRetryFast={retryFast}
+          // Only offer the source view when there is a document to open it
+          // against; otherwise citations stay plain labels.
+          onCitationClick={selectedDocument ? setCitationTarget : undefined}
         />
         </div>
         <div className="composer-dock">
@@ -273,6 +328,9 @@ export function ChatsPage({
               selectedDocument={selectedDocument}
               selectedDraft={selectedDraft}
               loading={loading}
+              compacting={compacting}
+              contextUsage={contextUsage}
+              onCompact={onCompact}
               onSelectDocument={(document) => { setSelectedDraftId(null); onSelectDocument(document); }}
               onSelectDraft={(draft) => {
                 onClearDocument();

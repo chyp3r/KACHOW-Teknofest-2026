@@ -28,7 +28,22 @@ data:
   REDIS_URL: "redis://redis:6379/0"
   POSTGRES_DB: "kachow"
 
-  # -- Ollama --
+  # -- LOCAL_MODE -- the single switch that picks the whole AI provider
+  # stack (see app.core.config.Settings.LOCAL_MODE's own docstring):
+  # false -> Evren API + Evren's own Qdrant cluster, everywhere (chat,
+  # evrak analizi, taslak). This is what makes canlı mevzuat-mcp aramasını
+  # her aşamada anlamlı kılan şey -- yerel modda mevzuat aramasının
+  # kullanıcı deneyimini bozacak kadar yavaş ölçülmesi üzerine seçildi
+  # (bkz. app.ai.tools.mevzuat_tools.build_live_legislation_tools'un kendi
+  # yorumu). EDIT ÖNCESİ ZORUNLU OKU: bu, backend'i Evren kimlik
+  # bilgilerine bağımlı kılar -- secrets.yaml'daki EVREN_API_KEY/
+  # EVREN_QDRANT_API_KEY placeholder'ları gerçek değerlerle doldurulmadan
+  # uygulanırsa backend Evren'e bağlanamaz. Hazır değilse tek satırlık
+  # geri dönüş: bu değeri "true" yap -- canlı MCP kapalı kalır (yalnızca
+  # boot'taki curated 7 kanunu ısıtır), diğer her ayar zararsızdır.
+  LOCAL_MODE: "false"
+
+  # -- Ollama -- yalnızca LOCAL_MODE=true iken okunur.
   # Cluster/host-specific, same as namespace.yaml's allow-backend-ollama-
   # egress placeholder -- EDIT before applying. host.docker.internal (the
   # compose.yml dev default) does not resolve inside a Pod.
@@ -42,19 +57,36 @@ data:
   OLLAMA_FAST_MODEL: ""
   OLLAMA_EMBEDDING_MODEL: "nomic-embed-text:latest"
 
+  # -- Evren -- yalnızca LOCAL_MODE=false iken okunur. API anahtarları
+  # (EVREN_API_KEY, EVREN_QDRANT_API_KEY) secrets.yaml'da -- bunlar sır
+  # değil, model/host seçimleri, o yüzden burada duruyorlar.
+  # EVREN_QDRANT_URL host-specific -- EDIT before applying, aynı
+  # OLLAMA_BASE_URL gibi. .env.example'daki gerçek biçimle aynı: HTTPS,
+  # açık port yok (443'e reverse-proxy'lenir, ham Qdrant portu 6333 değil).
+  EVREN_QDRANT_URL: "https://evren-vektor.example.internal/"
+
   # -- AI workflow timeouts (seconds) -- same defaults as .env.example --
   AI_WORKFLOW_TIMEOUT_SECONDS: "480"
   REVISION_RERETRIEVAL_TIMEOUT_SECONDS: "10"
   DRAFT_JUDGE_TIMEOUT_SECONDS: "30"
   GUARDRAIL_JUDGE_TIMEOUT_SECONDS: "15"
   MEVZUAT_MCP_TIMEOUT_SECONDS: "25"
+  # LOCAL_MODE=false iken evrak analizindeki canlı mevzuat eskalasyonunun
+  # tavanı -- retrieve_mevzuat node budget'ının bir kısmını paylaşır, bu
+  # yüzden MEVZUAT_MCP_TIMEOUT_SECONDS'tan bilinçli olarak daha küçük
+  # (bkz. app.core.config.Settings.MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS).
+  MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS: "10"
 
-  # -- Legislation source -- local (commit-committed corpus) matches
-  # backend.prod.Dockerfile's default WITH_MEVZUAT_MCP=0 build (no
-  # Chromium/mevzuat-mcp baked in); flip both together, not just this one,
-  # or every lookup pays a doomed MCP attempt before falling back.
-  MEVZUAT_SOURCE: "local"
-  MEVZUAT_MCP_ENABLED: "false"
+  # -- Legislation source -- mcp (canlı mevzuat.gov.tr + boot-warm curated 7)
+  # backend.prod.Dockerfile'ın --build-arg WITH_MEVZUAT_MCP=1 ile kurulmuş
+  # olmasını gerektirir (Chromium + mevzuat-mcp'yi imaja ekler); ikisini
+  # birlikte çevirin, yalnızca bunu değil, yoksa her arama başarısız bir
+  # MCP denemesinden sonra yerel korpusa düşer. MEVZUAT_MCP_COMMAND, o
+  # build stage'inin gerçek kurulum yolu -- yoksa çıplak "mevzuat-mcp"
+  # PATH'te değildir.
+  MEVZUAT_SOURCE: "mcp"
+  MEVZUAT_MCP_ENABLED: "true"
+  MEVZUAT_MCP_COMMAND: "/tmp/mcpvenv/bin/mevzuat-mcp"
 
   # -- Storage backend -- see this file's own top comment.
   STORAGE_TYPE: "local"

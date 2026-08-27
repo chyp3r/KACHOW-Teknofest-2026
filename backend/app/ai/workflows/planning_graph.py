@@ -15,8 +15,9 @@ from app.ai.agents.guardrail_judge import GuardrailJudgeAgent
 from app.ai.agents.memory_summarizer import MemorySummarizerAgent
 from app.ai.context import ContextBlock, ContextBuilder, TokenBudget, select_history_window
 from app.ai.context.compress import truncate_with_marker
+from app.ai.context.usage import compute_context_usage
 from app.ai.embeddings.models import BaseEmbeddingsClient
-from app.ai.guardrails.llm_nuance import judge_output_leakage
+from app.ai.guardrails.llm_nuance import judge_output_leakage, judge_reply_groundedness
 from app.ai.guardrails.output_gate import classify_reason_kind, evaluate_response
 from app.ai.guardrails.sensitivity import SensitivityAssessment, assessment_from_analysis
 from app.ai.identity.company_profile import CompanyProfile, ProfileProvider
@@ -30,6 +31,7 @@ from app.ai.retrieval.sparse_encoder import SparseBM25Encoder
 from app.ai.semantic.prototype_matcher import PrototypeMatcher
 from app.ai.tools.document_tools import ToolResult, build_assistant_tools
 from app.ai.tools.handoff_tools import build_handoff_tools
+from app.ai.tools.routing_tools import build_routing_tools
 from app.ai.tools.transfer_tools import build_transfer_tools
 from app.ai.verification import InfoQuestion, apply_answers, verify_draft
 from app.ai.workflows.events import (
@@ -476,6 +478,61 @@ def _mevzuat_context(classification: dict[str, Any]) -> str:
             parts.append(f"[MEVZUAT] {item['mevzuat']}: {item.get('aciklama', '')}")
 
     return "\n\n".join(parts)
+
+
+#: Yüklü evrak bu turda değiştiğinde ``document_context``'in başına eklenen
+#: uyarı. Konuşma geçmişi ve hafıza özeti hâlâ eski evrağı anlatır; bu
+#: olmadan model onları bu turdaki evrak hakkında doğruymuş gibi kullanıp
+#: eski evrakla ilgili cevap veriyordu.
+_DOCUMENT_SWITCHED_NOTE = (
+    "DİKKAT: Bu turda yüklü olan belge, önceki turlarda konuşulan belgeden "
+    "FARKLI bir belgedir. Konuşma geçmişindeki ve hafıza özetindeki belgeye "
+    "özgü bilgiler (içerik, konu, tarih, sayı, taraflar, bulgular, uygunluk "
+    "durumu) BAŞKA bir belgeye aittir; onları bu belge için doğru varsayma. "
+    "Kullanıcının bu turdaki sorusunu yalnızca aşağıdaki özete ve bu turda "
+    "araçlarla getirdiğin bilgilere dayanarak yanıtla; gereken bilgiyi bu "
+    "belge için yeniden getir."
+)
+
+
+def _assist_document_context(
+    summary: str | None,
+    *,
+    document_id: str | None,
+    prior_document_id: str | None,
+) -> str:
+    """``AssistantAgent.run_stream``'in "## Bu Turda Yüklenmiş Belge" bloğunu render eder.
+
+    Args:
+        summary: Bu turun evrağının analiz özeti (``analysis["summary"]``).
+        document_id: Bu turda yüklü evrak, varsa.
+        prior_document_id: Önceki turların aktif evrağı
+            (``focus.active_document_id``) -- ``focus_node`` turun sonuna
+            kadar güncellenmediği için ``_run_assist`` sırasında hâlâ bir
+            önceki turun değerini taşır. ``document_id``'den farklıysa,
+            kullanıcı sohbet ortasında evrağı değiştirmiş demektir ve
+            bloğun başına :data:`_DOCUMENT_SWITCHED_NOTE` eklenir.
+
+    Returns:
+        Sistem prompt'una gömülecek metin.
+    """
+    if not document_id:
+        return "(Bu turda yüklenmiş bir belge yok.)"
+
+    # Özetin ne OLMADIĞI açıkça yazılır: bu blok eskiden yalnızca özeti
+    # veriyordu ve model, evrakta hiç arama yapmadan doğrudan özetten (ya da
+    # özetin çevresini kendi uydurarak) cevap yazıyordu. Özet yalnızca
+    # "elimde ne var" bilgisidir; içerik sorularının kaynağı evrakın kendisi.
+    context = (
+        f"Bir belge yüklü. Özet: {summary or 'Özet mevcut değil.'}\n"
+        "Bu özet, belgenin ne olduğunu bilmen içindir; içeriğe dair soruların "
+        "CEVAP KAYNAĞI DEĞİLDİR. Belgenin içeriği, üst verisi veya herhangi bir "
+        "ayrıntısı sorulduğunda önce ilgili aracı çağırıp bilgiyi evrakın "
+        "kendisinden getir; özete dayanarak cevap yazma."
+    )
+    if prior_document_id and prior_document_id != document_id:
+        return f"{_DOCUMENT_SWITCHED_NOTE}\n\n{context}"
+    return context
 
 
 def _prior_turns(state: PlanningState, limit: int) -> list[dict[str, str]]:
@@ -1124,12 +1181,16 @@ def create_planning_graph(
         requester_clearance = (
             SensitivityLevel(requester_clearance_raw) if requester_clearance_raw else None
         )
-        document_context = "(Bu turda yüklenmiş bir belge yok.)"
-        if document_id:
-            document_context = (
-                f"Bir belge yüklü. Özet: {analysis.get('summary') or 'Özet mevcut değil.'}\n"
-                "Detay veya belge içeriği gerekiyorsa ilgili aracı çağır."
-            )
+        # `focus.active_document_id` bu turun sonundaki `focus_node`'a kadar
+        # güncellenmez (bkz. focus_node docstring), yani burada hâlâ bir
+        # önceki turun evrağını taşır -- kullanıcı sohbet ortasında evrağı
+        # değiştirip değiştirmediğini anlamak için tam da istediğimiz değer.
+        prior_document_id = (state.get("focus") or SessionFocus()).active_document_id
+        document_context = _assist_document_context(
+            analysis.get("summary"),
+            document_id=document_id,
+            prior_document_id=prior_document_id,
+        )
 
         # A message that resolved to `assist` *because* it's plain small talk
         # (a greeting, a courtesy, a sign-off) and nothing else -- not one
@@ -1160,8 +1221,13 @@ def create_planning_graph(
         fixed_cost = llm_client.count_tokens(
             assistant_agent.system_prompt
         ) + llm_client.count_tokens(state["input_text"])
+        # Aktif sağlayıcının gerçek bağlam penceresi: yerel Ollama'da
+        # OLLAMA_NUM_CTX (8192), Evren'de EVREN_NUM_CTX (262144). Hem
+        # geçmiş penceresi bütçesi hem de sohbetteki bağlam göstergesi buna
+        # göre boyutlanır (bkz. BaseLLMClient.context_window).
+        context_window = llm_client.context_window
         context_budget = TokenBudget(
-            total=settings.OLLAMA_NUM_CTX,
+            total=context_window,
             reserved_for_completion=ASSIST_COMPLETION_RESERVE_TOKENS + fixed_cost,
         )
 
@@ -1192,8 +1258,16 @@ def create_planning_graph(
         )
 
         remaining_for_history = context_budget.available - assembled.total_tokens
+        # Kullanıcı bağlamı elle sıkıştırdıysa (ChatService.compact_session)
+        # ``history_summarized_through`` ileri alınır; özetlenmiş turlar artık
+        # birebir pencereye girmez, yalnızca `history_summary`'de yaşar.
+        # Otomatik konsolidasyon zaten bu işareti steady-state'te ~son
+        # HISTORY_WINDOW turuna denk tutar, bu yüzden sıradan turda etki
+        # nötrdür.
+        _compacted_through = max(0, int(state.get("history_summarized_through") or 0))
+        _windowable_history = _prior_turns(state, HISTORY_RAW_CAP)[_compacted_through:]
         history = select_history_window(
-            _prior_turns(state, HISTORY_RAW_CAP),
+            _windowable_history,
             remaining_for_history,
             llm_client.count_tokens,
             min_turns=0 if is_small_talk_turn else 2,
@@ -1208,6 +1282,22 @@ def create_planning_graph(
                 assembled.compressed,
                 len(history),
             )
+
+        # Bağlam penceresi doluluk dökümü -- frontend'in sohbet alanındaki
+        # dairesel göstergesini besler. Modelin gerçekten kullandığı bütçe
+        # kalemleriyle birebir; ChatService.compact_session ile aynı
+        # yardımcıyı paylaşır (bkz. app.ai.context.usage).
+        context_usage = compute_context_usage(
+            llm_client,
+            system_prompt=assistant_agent.system_prompt,
+            input_text=state["input_text"],
+            document_context=assembled.get("document_context") if document_id else "",
+            history_summary=(
+                "" if is_small_talk_turn else (assembled.get("history_summary") or "")
+            ),
+            history_turns=history,
+            reserved_tokens=ASSIST_COMPLETION_RESERVE_TOKENS,
+        )
 
         referenced_anchor: dict[str, str] = {}
 
@@ -1276,6 +1366,23 @@ def create_planning_graph(
             ),
         ]
 
+        # "Birim Yönlendirme" (assistant.md 4. yetenek) sohbette doğrudan bir
+        # soru olarak da sorulabilsin diye -- _step_routing ile aynı
+        # routing_graph'ı çalıştırır, salt-okunur (bkz. routing_tools).
+        _assist_focus = state.get("focus") or SessionFocus()
+        tools = [
+            *tools,
+            *build_routing_tools(
+                company_id=state.get("company_id"),
+                routing_graph=routing_graph,
+                active_draft_text=(
+                    _assist_focus.active_draft.text if _assist_focus.active_draft else ""
+                ),
+                document_text=cached.get("extracted_text", "") if document_id else "",
+                config=config,
+            ),
+        ]
+
         profile = await _resolve_profile(state.get("company_id"))
 
         chunks: list[str] = []
@@ -1294,6 +1401,11 @@ def create_planning_graph(
                     agent_identity=format_agent_identity(profile),
                     user_display_name=format_user_address(state.get("user_display_name")),
                     tools=tools,
+                    # Bir belge ekliyse ve bu tur düz bir selamlama değilse,
+                    # model hiç arama yapmadan (ya da bütçesini tüketmeden
+                    # "bulamadım" diyerek) cevap yazamaz -- bkz.
+                    # AssistantAgent._final_answer_nudge.
+                    require_retrieval=bool(document_id) and not is_small_talk_turn,
                     config=config,
                     node="assist",
                 ):
@@ -1319,6 +1431,20 @@ def create_planning_graph(
                     source_summary=analysis.get("summary", ""),
                 )
 
+            # Düz-cümle evrak halüsinasyonu için LLM dayanaklılık hakemi --
+            # yalnızca bir belge eklendiğinde ve bu tur bir selamlama/nezaket
+            # ifadesi değilken sorulur (küçük sohbette yargılanacak bir evrak
+            # iddiası yoktur). Kalıp-bazlı groundedness_report'un yakaladığı
+            # tipli iddialardan ayrı; ikisi output_gate'te birleşir.
+            groundedness_verdict = None
+            if document_id and not is_small_talk_turn and raw_reply:
+                groundedness_verdict = await judge_reply_groundedness(
+                    guardrail_judge_agent,
+                    reply=raw_reply,
+                    document_summary=analysis.get("summary", ""),
+                    source_text=source_materials,
+                )
+
             verdict = evaluate_response(
                 raw_reply,
                 source_materials=source_materials,
@@ -1330,6 +1456,7 @@ def create_planning_graph(
                 # per its own docstring.
                 requester_clearance=requester_clearance,
                 judge_verdict=judge_verdict,
+                groundedness_verdict=groundedness_verdict,
             )
             reply = verdict.text
             flagged = verdict.action != "pass"
@@ -1374,6 +1501,7 @@ def create_planning_graph(
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
+                "context_usage": context_usage,
             }
             if flagged:
                 result["flagged"] = True
@@ -1717,6 +1845,21 @@ def create_planning_graph(
             updates["revise_result"] = {"status": result["status"]}
             return
 
+        # draft_graph akışıyla aynı: kullanıcının bu oturumdaki önceki
+        # turlarında verdiği bir isim/tarih/kurum, revizyonun doğrulama
+        # geçişinde de "kullanıcının kendi sözü" sayılmalı (bkz.
+        # _build_instruction_haystack). Revizyon turunda `brief` adımı
+        # çalışmadığı için brief cevapları doğrudan yerleşmiş taslaktan
+        # (active_draft.writing_brief) alınır.
+        prior_user_turns = [
+            turn.get("content", "")
+            for turn in _prior_turns(state, limit=10_000)
+            if turn.get("role") == "user"
+        ]
+        instruction_haystack = _build_instruction_haystack(
+            state["input_text"], prior_user_turns, active_draft.writing_brief
+        )
+
         result = await run_revise(
             active_draft=active_draft,
             instructions=state["input_text"],
@@ -1730,6 +1873,8 @@ def create_planning_graph(
             instruction_origin="user_turn",
             company_id=state.get("company_id"),
             today=today_tr(),
+            instruction_haystack=instruction_haystack,
+            resolved_placeholder_answers=active_draft.resolved_placeholder_answers,
         )
         updates["draft_result"] = result
         updates["revise_result"] = {"status": result["status"]}
@@ -2085,6 +2230,13 @@ def create_planning_graph(
             "assist": _pick("assist_result"),
             "transfer": transfer_result,
         }
+        # Bağlam penceresi doluluk dökümü (yalnızca assist turu üretir; bkz.
+        # _run_assist). Frontend'in dairesel göstergesi son bilinen değeri
+        # koruduğu için diğer turlarda alanın olmaması sorun değil.
+        assist_context_usage = _pick("assist_result").get("context_usage")
+        if assist_context_usage:
+            output["context_usage"] = assist_context_usage
+
         if draft_result.get("conflicts") or draft_result.get("changelog"):
             output["revision"] = {
                 "conflicts": draft_result.get("conflicts") or [],
@@ -2354,9 +2506,23 @@ def create_planning_graph(
                 updates["final_output"] = _compile_final_output(state, updates)
                 return updates
 
+            gate_answers = answer.get("answers", {}) or {}
             filled_draft, residual = apply_answers(
-                draft_result.get("draft", ""), answer.get("answers", {})
+                draft_result.get("draft", ""), gate_answers
             )
+
+            # Bu turda verilen cevaplar (ve "Sen karar ver" ertelemeleri)
+            # taslak sürümünün üstünde kalıcılaşsın diye draft_result'a
+            # yazılır -- sonraki bir `revize` turunun
+            # build_missing_info_request çağrısı, kullanıcının zaten
+            # cevapladığı/ertelediği bir yer tutucuyu tekrar sormaz
+            # (bkz. DraftVersion.resolved_placeholder_answers, revise_graph.
+            # verify_node). AUTO_ANSWER sentinel'leri aynen korunur: erteleme
+            # işareti onlardır.
+            merged_resolved = {
+                **(draft_result.get("resolved_placeholder_answers") or {}),
+                **gate_answers,
+            }
 
             # Only a placeholder key this draft actually asked a question
             # about is grounds to reopen the gate. `residual` alone is not
@@ -2386,6 +2552,7 @@ def create_planning_graph(
                     **draft_result,
                     "draft": filled_draft,
                     "missing_information": residual_questions,
+                    "resolved_placeholder_answers": merged_resolved,
                     "status": StepStatus.NEEDS_INPUT,
                 }
                 return {
@@ -2457,6 +2624,7 @@ def create_planning_graph(
                 "applied_rules": [rule.model_dump() for rule in report.applied_rules],
                 "evaluation_notes": report.evaluation_notes,
                 "missing_information": [],
+                "resolved_placeholder_answers": merged_resolved,
                 "status": status,
             }
             return {"draft_result": updated}
@@ -2513,6 +2681,7 @@ def create_planning_graph(
             status=draft_result.get("status") or "",
             rejection_reason=draft_result.get("rejection_reason") or "",
             writing_brief=draft_result.get("writing_brief") or {},
+            resolved_placeholder_answers=draft_result.get("resolved_placeholder_answers") or {},
         )
 
         await emit_node_start(
@@ -2532,6 +2701,7 @@ def create_planning_graph(
             instruction_origin="human_gate",
             company_id=state.get("company_id"),
             today=today_tr(),
+            resolved_placeholder_answers=active_draft.resolved_placeholder_answers,
         )
         if result.get("status") == StepStatus.FAILED:
             await emit_node_error(

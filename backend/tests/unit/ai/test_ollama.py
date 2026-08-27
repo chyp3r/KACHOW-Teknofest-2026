@@ -157,3 +157,15 @@ def test_ollama_factory_uses_local_defaults():
 
 def test_shared_config_keeps_repository_model_default():
     assert Settings.model_fields["OLLAMA_MODEL"].default == "qwen3.5:9b"
+
+
+def test_ollama_context_window_follows_num_ctx():
+    assert OllamaClient(base_url="x", model="m").context_window == settings.OLLAMA_NUM_CTX
+    assert OllamaClient(base_url="x", model="m", num_ctx=4096).context_window == 4096
+
+
+def test_evren_context_window_is_the_hosted_window():
+    from app.infrastructure.providers.evren import EvrenClient
+
+    assert EvrenClient(base_url="x", model="m").context_window == settings.EVREN_NUM_CTX
+    assert settings.EVREN_NUM_CTX > settings.OLLAMA_NUM_CTX

@@ -15,11 +15,14 @@ vi.mock("../../services/unitsService", () => ({
 
 const updateDestinationMock = vi.fn();
 const getDraftMock = vi.fn();
+const exportDraftMock = vi.fn();
 vi.mock("../../services/draftService", () => ({
   draftService: {
     get: (draftId: string) => getDraftMock(draftId),
     updateDestination: (draftId: string, destination: string) =>
       updateDestinationMock(draftId, destination),
+    export: (draftId: string, format: "docx" | "pdf", version?: number) =>
+      exportDraftMock(draftId, format, version),
   },
 }));
 
@@ -28,12 +31,18 @@ function renderWithQueryClient(ui: ReactNode) {
   return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
 }
 
+function expandDraftMeta() {
+  fireEvent.click(screen.getByRole("button", { name: "Taslak kontrol ayrıntılarını göster" }));
+}
+
 describe("DraftMetaStrip", () => {
   beforeEach(() => {
     updateDestinationMock.mockReset();
+    exportDraftMock.mockReset().mockResolvedValue(undefined);
     getDraftMock.mockReset().mockResolvedValue({
       id: "draft-1",
       destination: "İnsan Kaynakları",
+      version: 3,
     });
   });
 
@@ -42,7 +51,7 @@ describe("DraftMetaStrip", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows score, routed unit, and a ready badge for a clean completed draft", () => {
+  it("starts compact with only the score and ready state, then reveals details", () => {
     renderWithQueryClient(
       <DraftMetaStrip
         details={{
@@ -52,8 +61,13 @@ describe("DraftMetaStrip", () => {
       />,
     );
     expect(screen.getByText("Güven skoru: 92/100")).toBeInTheDocument();
-    expect(screen.getByText(/Önerilen birim: İnsan Kaynakları/)).toBeInTheDocument();
     expect(screen.getByText("Hazır")).toBeInTheDocument();
+    expect(screen.queryByText(/Önerilen birim: İnsan Kaynakları/)).not.toBeInTheDocument();
+
+    expandDraftMeta();
+
+    expect(screen.getByText(/Önerilen birim: İnsan Kaynakları/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Taslak kontrol ayrıntılarını gizle" })).toHaveAttribute("aria-expanded", "true");
   });
 
   it("shows neutral review notes alongside the ready badge -- never an approval prompt", () => {
@@ -70,6 +84,8 @@ describe("DraftMetaStrip", () => {
         }}
       />,
     );
+    expect(screen.queryByText("Kontrol notları")).not.toBeInTheDocument();
+    expandDraftMeta();
     expect(screen.getByText("Kontrol notları")).toBeInTheDocument();
     expect(screen.getByText("Eksik yapısal unsurlar: Kapanış ifadesi.")).toBeInTheDocument();
     expect(screen.queryByText(/İnsan onayı/)).not.toBeInTheDocument();
@@ -87,6 +103,7 @@ describe("DraftMetaStrip", () => {
         }}
       />,
     );
+    expandDraftMeta();
     expect(
       screen.getByText(/Önerilen birim: Mali İşler · Alternatif: Destek Hizmetleri/),
     ).toBeInTheDocument();
@@ -122,6 +139,8 @@ describe("DraftMetaStrip", () => {
       />,
     );
 
+    expect(screen.queryByText("Skor dökümü (2)")).not.toBeInTheDocument();
+    expandDraftMeta();
     expect(screen.getByText("Skor dökümü (2)")).toBeInTheDocument();
     expect(screen.getByText(/Eksik Konu satırı — -8 puan/)).toBeInTheDocument();
     expect(screen.getByText(/Kaynakta doğrulanamayan iddia \(×3\) — -30 puan/)).toBeInTheDocument();
@@ -168,6 +187,7 @@ describe("DraftMetaStrip", () => {
         }}
       />,
     );
+    expandDraftMeta();
     expect(screen.getByRole("button", { name: "Birimi değiştir" })).toBeInTheDocument();
   });
 
@@ -180,7 +200,31 @@ describe("DraftMetaStrip", () => {
         }}
       />,
     );
+    expandDraftMeta();
     expect(screen.queryByRole("button", { name: "Birimi değiştir" })).not.toBeInTheDocument();
+  });
+
+  it("asks for a format from the compact download action", async () => {
+    renderWithQueryClient(
+      <DraftMetaStrip
+        details={{
+          draft: { id: "draft-1", draft: "Taslak metni", status: "COMPLETED", combined_score: 92 },
+        }}
+      />,
+    );
+
+    const formatMenu = screen.getByRole("menu", { name: "İndirme formatı" });
+    const downloadDetails = formatMenu.closest("details");
+    expect(downloadDetails).not.toHaveAttribute("open");
+    fireEvent.click(screen.getByText("İndir"));
+    expect(downloadDetails).toHaveAttribute("open");
+
+    fireEvent.click(screen.getByRole("menuitem", { name: "Word (.docx)" }));
+
+    await waitFor(() =>
+      expect(exportDraftMock.mock.calls[0]?.slice(0, 2)).toEqual(["draft-1", "docx"]),
+    );
+    expect(downloadDetails).not.toHaveAttribute("open");
   });
 
   it("saves a picked unit and updates the displayed suggestion in place", async () => {
@@ -197,6 +241,7 @@ describe("DraftMetaStrip", () => {
       />,
     );
 
+    expandDraftMeta();
     fireEvent.click(screen.getByRole("button", { name: "Birimi değiştir" }));
     const select = await screen.findByLabelText("Hedef birim");
     fireEvent.change(select, { target: { value: "Mali İşler" } });
@@ -222,6 +267,7 @@ describe("DraftMetaStrip", () => {
       />,
     );
 
+    expandDraftMeta();
     await waitFor(() =>
       expect(screen.getByText("Hedef birim: Mali İşler")).toBeInTheDocument(),
     );

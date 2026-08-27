@@ -13,6 +13,7 @@ from app.core.enums.user_role import UserRole
 from app.domains.companies.root_repository import RootRepository
 from app.domains.users.model.user_model import UserModel
 from app.infrastructure.database.session import get_db
+from app.observability.prometheus_query import llm_token_usage
 
 router = APIRouter(prefix="/root", tags=["root"])
 
@@ -81,6 +82,63 @@ async def root_user_stats(
                 {"company_id": row["company_id"], "name": row["name"], "user_count": row["user_count"]}
                 for row in per_company
             ],
+        }
+    )
+
+
+@router.get("/users/insights", response_model=APIResponse[dict])
+async def root_user_insights(
+    current_user: UserModel = Depends(require_roles(UserRole.ROOT)),
+    db: AsyncSession = Depends(get_db),
+):
+    """"Kullanıcı İstatistikleri" konsolunu besleyen zengin sistem-geneli
+    döküm: KPI'lar, günlük aktiflik zaman serisi, rol dağılımı, kurum
+    koltukları, en aktif kullanıcılar, iş akışı türü/sonuç dağılımı,
+    guardrail sinyalleri ve Prometheus'tan global AI token kullanımı.
+
+    "Aktif" burada da izlenen bir giriş zaman damgası değil, bir ``runs``
+    satırı demektir (bkz. ``root_user_stats``).
+    """
+    repository = RootRepository(db)
+
+    by_role = dict(await repository.users_by_role())
+    total_users = sum(by_role.values())
+    active_7d = await repository.active_user_count(days=7)
+    active_30d = await repository.active_user_count(days=30)
+    new_7d = await repository.new_user_count(days=7)
+    new_30d = await repository.new_user_count(days=30)
+    run_status = dict(await repository.run_status_totals())
+    total_runs = sum(run_status.values())
+    per_company = await repository.company_rollup()
+
+    return SuccessResponse(
+        data={
+            "kpis": {
+                "total_users": total_users,
+                "active_7d": active_7d,
+                "active_30d": active_30d,
+                "activity_rate_30d": (active_30d / total_users) if total_users else 0.0,
+                "new_7d": new_7d,
+                "new_30d": new_30d,
+                "total_runs": total_runs,
+                "runs_per_active_user_30d": (total_runs / active_30d) if active_30d else 0.0,
+            },
+            "daily_activity": await repository.daily_activity(days=30),
+            "by_role": by_role,
+            "seats_by_company": [
+                {
+                    "company_id": row["company_id"],
+                    "name": row["name"],
+                    "user_count": row["user_count"],
+                    "is_active": row["is_active"],
+                }
+                for row in per_company
+            ],
+            "top_users": await repository.top_users(limit=15),
+            "runs_by_intent": dict(await repository.runs_by_intent()),
+            "runs_by_status": run_status,
+            "guardrail_by_decision": dict(await repository.guardrail_by_decision()),
+            "token_usage": await llm_token_usage(),
         }
     )
 

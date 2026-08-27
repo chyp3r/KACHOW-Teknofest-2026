@@ -11,10 +11,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.mcp.mevzuat_client import (
+    excerpt_within,
     fetch_mevzuat_text,
     pick_document_id,
     resolve_and_fetch,
     resolve_mevzuat_id,
+    search_and_excerpt,
+    search_by_phrase,
     text_of,
 )
 
@@ -138,3 +141,93 @@ async def test_resolve_and_fetch_returns_none_when_the_content_is_empty():
     call = AsyncMock(side_effect=[_result(SEARCH_657), _result("   ")])
     with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
         assert await resolve_and_fetch("657", "KANUN") is None
+
+
+# ==========================================
+# search_by_phrase / excerpt_within / search_and_excerpt
+# ==========================================
+SEARCH_BY_TOPIC = "- [4982] BİLGİ EDİNME HAKKI KANUNU (Kanunlar) | mevzuatId: 55555\n"
+
+
+@pytest.mark.asyncio
+async def test_search_by_phrase_uses_phrase_and_disables_title_only_search():
+    """The server defaults `basliktaAra` to True (title-only search) --
+    a topic query almost never matches that way, so this must pass it
+    explicitly as False to actually search the content."""
+    call = AsyncMock(return_value=_result(SEARCH_BY_TOPIC))
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        document_id = await search_by_phrase("bilgi edinme başvurusu")
+
+    assert document_id == "55555"
+    call.assert_awaited_once()
+    args = call.await_args.args[2]
+    assert args["phrase"] == "bilgi edinme başvurusu"
+    assert args["basliktaAra"] is False
+
+
+@pytest.mark.asyncio
+async def test_search_by_phrase_skips_repealed_records_like_the_numeric_path():
+    """Shares pick_document_id with the numeric path -- same repealed-marker
+    trap applies to a phrase-matched result."""
+    call = AsyncMock(return_value=_result(SEARCH_657))
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        assert await search_by_phrase("devlet memuru izin hakkı") == "102924"
+
+
+@pytest.mark.asyncio
+async def test_search_by_phrase_returns_none_when_nothing_matches():
+    call = AsyncMock(return_value=_result("Results: 0 total"))
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        assert await search_by_phrase("tamamen alakasız bir konu") is None
+
+
+@pytest.mark.asyncio
+async def test_excerpt_within_calls_search_within_mevzuat_with_the_keyword():
+    call = AsyncMock(return_value=_result("[Madde 7] ... eşleşen pasaj ..."))
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        excerpt = await excerpt_within("55555", "başvuru süresi", max_results=3)
+
+    assert excerpt == "[Madde 7] ... eşleşen pasaj ..."
+    call.assert_awaited_once_with(
+        "mevzuat",
+        "search_within_mevzuat",
+        {"mevzuat_id": "55555", "keyword": "başvuru süresi", "max_results": 3},
+    )
+
+
+@pytest.mark.asyncio
+async def test_excerpt_within_returns_empty_string_when_nothing_matches():
+    call = AsyncMock(return_value=_result(""))
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        assert await excerpt_within("55555", "hiç geçmeyen terim") == ""
+
+
+@pytest.mark.asyncio
+async def test_search_and_excerpt_chains_phrase_search_then_targeted_excerpt():
+    call = AsyncMock(
+        side_effect=[_result(SEARCH_BY_TOPIC), _result("[Madde 4] ilgili pasaj")]
+    )
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        result = await search_and_excerpt("bilgi edinme başvurusu")
+
+    assert result == ("55555", "[Madde 4] ilgili pasaj")
+    assert call.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_search_and_excerpt_returns_none_when_no_law_matches():
+    call = AsyncMock(return_value=_result("Results: 0 total"))
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        assert await search_and_excerpt("tamamen alakasız bir konu") is None
+    call.assert_awaited_once()  # excerpt_within never reached
+
+
+@pytest.mark.asyncio
+async def test_search_and_excerpt_returns_none_when_the_law_matches_but_no_passage_does():
+    """A matched law with no excerpt is not the same as a full-text
+    fallback -- this function's entire purpose is a *targeted* excerpt, so
+    falling back to the (potentially half-million character) full text
+    would defeat it."""
+    call = AsyncMock(side_effect=[_result(SEARCH_BY_TOPIC), _result("   ")])
+    with patch("app.mcp.mevzuat_client.mcp_manager.call_tool", call):
+        assert await search_and_excerpt("bilgi edinme başvurusu") is None

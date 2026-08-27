@@ -16,12 +16,24 @@ Sırayla çalışan üç kontrol vardır, her biri verdikti daha ağır bir sevi
 yükseltebilir:
 
 1. ``assert_no_prompt_leak`` -- değişmedi, hâlâ anında sert bir engelleme.
-2. Dayanaklılık (``app.ai.verification.draft_verifier.check_groundedness``,
-   yeniden uygulanmadı, yeniden kullanıldı) -- dayanaksız bir iddia, yanıtın
-   tamamının yerine geçmek yerine yanıttan kırpılarak kaldırılır, çünkü
-   "kaç sayfa bu belge" sorusuna kısmen uydurulmuş bir yanıt, uydurulan
-   kısım kaldırılmış haliyle genel bir reddedişle değiştirilmesinden daha
-   kullanışlıdır.
+2. Dayanaklılık (``app.ai.verification.draft_verifier.groundedness_report``,
+   yeniden uygulanmadı, yeniden kullanıldı) -- yanıttan çıkarılan somut
+   iddiaların getirilen kaynağa kadar izlenebilen payı çözülmüş politikanın
+   ``output_groundedness_threshold``'unun altındaysa, yanıtın tamamının
+   yerine geçmek yerine dayanaksız iddiayı İÇEREN CÜMLE komple çıkarılıp
+   ``[Bu bilgi doğrulanamadığı için kaldırıldı]`` ile değiştirilir (çünkü
+   uydurulan kısmı kaldırılmış bir yanıt, genel bir reddedişten daha
+   kullanışlıdır) ve kaldırılan her cümle ``reasons``'a eklenerek
+   kullanıcının gördüğü güvenlik uyarısında gösterilir.
+   Eşiği geçen -- yani büyük ölçüde kaynaklı -- bir yanıt olduğu gibi bırakılır:
+   yığında bulunan MCP mevzuat metninden alınmış ama token-örtüşme
+   eşleştiricisinin ya da 6000 karakterlik alıntı sınırının kaçırdığı birkaç
+   ifade, tüm yanıtı sansürlemeye yetmez. Bu kalıp-bazlı kontrolün yanı
+   sıra, bir belge eklendiğinde ``groundedness_verdict`` (bkz.
+   ``app.ai.guardrails.llm_nuance.judge_reply_groundedness``) DÜZ CÜMLE
+   evrak halüsinasyonunu -- ne sayı ne tarih içeren, kalıpların hiç
+   bakmadığı uydurma ifadeleri -- yüksek güvenle işaretlerse, o cümleler
+   de aynı şekilde çıkarılır.
 3. PII sızıntısı (``app.ai.guardrails.pii.redact_pii``) -- yalnızca bu
    turda gerçekten bir belge eklendiğinde devreye girer (``sensitivity is
    not None``); kullanıcının konuşmaya kendisinin yazdığı PII şeklindeki bir
@@ -36,16 +48,17 @@ yükseltebilir:
 """
 
 import logging
+import re
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 from app.ai.guardrails.injection import GuardrailViolation, assert_no_prompt_leak
-from app.ai.guardrails.llm_nuance import GuardrailJudgeVerdict
+from app.ai.guardrails.llm_nuance import GroundednessJudgeVerdict, GuardrailJudgeVerdict
 from app.ai.guardrails.pii import redact_pii
 from app.ai.guardrails.sensitivity import SensitivityAssessment
 from app.ai.policy import GuardrailPolicy, get_policy
-from app.ai.verification.draft_verifier import check_groundedness
+from app.ai.verification.draft_verifier import _fold, groundedness_report
 from app.core.enums.sensitivity_level import SensitivityLevel
 
 logger = logging.getLogger(__name__)
@@ -56,8 +69,47 @@ FALLBACK_REPLY = (
 )
 
 #: `check_groundedness`'in bu turun kaynaklarına dayandıramadığı bir iddia
-#: yerine geçen Türkçe yer tutucu.
-_UNGROUNDED_MARKER = "[doğrulanamayan ifade kaldırıldı]"
+#: içeren CÜMLENİN tamamı yerine geçen Türkçe yer tutucu. Kullanıcıya
+#: gösterilen cevabın içine gömülür, dolayısıyla bir cümle gibi büyük harfle
+#: başlar. Yalnızca tek bir sayıyı/tarihi işaretle değiştirmek, modelin o
+#: değerin etrafına ördüğü uydurma bağlamın (ör. "... tarihli yazınıza
+#: istinaden ...") cümlede kalmasına izin veriyordu; artık dayanaksız bilgi
+#: içeren cümle komple çıkarılır.
+_UNGROUNDED_MARKER = "[Bu bilgi doğrulanamadığı için kaldırıldı]"
+
+#: Cümle sınırı: nokta/soru/ünlem/üç nokta + boşluk, ya da bir veya daha çok
+#: satır sonu. Ham `re.split` ayırıcıyı düşürür; bu yüzden aşağıda cümleler
+#: tek boşlukla yeniden birleştirilir -- bir sohbet yanıtı için kabul
+#: edilebilir bir biçim kaybı.
+_SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?…])\s+|\n+")
+
+#: Yanıtın sonundaki KAYNAKLAR bloğunun başlığı (bkz. ``assistant.md`` ve
+#: frontend'in ``citations.ts``'i). Bloğun satırları evraktan BİREBİR
+#: alıntılardır ve yapısı makine tarafından ayrıştırılır.
+_SOURCES_HEADER_PATTERN = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?[ \t]*KAYNAKLAR[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _split_sources_block(text: str) -> tuple[str, str]:
+    """Yanıtı, modelin kendi düzyazısı ve KAYNAKLAR bloğu olarak ayırır.
+
+    Cümle bazlı kırpma bloğun içinde çalıştırılamaz. Blok satırları
+    ``[2] (s. 4) ...`` biçiminde yapılandırılmıştır ve cümle sınırlarına göre
+    bölmek onları ortasından kesiyordu -- üretimde görülen sonuç:
+    ``[2] (s. [Bu bilgi doğrulanamadığı için kaldırıldı]``. Ayrıca blok
+    zaten kaynağın kendi cümlesidir: tanım gereği dayanaklıdır, kırpılacak
+    bir iddia değildir.
+
+    Returns:
+        ``(düzyazı, blok)``. Blok yoksa ikincisi boş string'tir ve
+        ``düzyazı + blok`` her zaman girdiye eşittir.
+    """
+    header = _SOURCES_HEADER_PATTERN.search(text)
+    if not header:
+        return text, ""
+    return text[: header.start()], text[header.start() :]
 
 GateAction = Literal["pass", "redact", "block"]
 
@@ -70,21 +122,107 @@ class GateVerdict(BaseModel):
     reasons: list[str] = Field(default_factory=list)
 
 
-def _redact_unsupported_claims(text: str, claims: list) -> str:
-    """Her dayanaksız iddianın metnini bir kırpma işaretiyle değiştir.
+def _redact_unsupported_claims(text: str, claims: list) -> tuple[str, list[str]]:
+    """Dayanaksız iddia içeren her CÜMLEYİ bir kırpma işaretiyle değiştir.
 
-    En iyi çaba string değiştirme: ``UnsupportedClaim.value``,
-    ``draft_verifier._findall`` tarafından boşluk normalize edilmiştir ve bu
-    yüzden orijinalde düzensiz boşluklama olduğunda ``text``'teki tam
-    aralıkla bayt bazında eşleşmeyebilir. Bulunamayan bir iddia tahmin
-    edilmek yerine olduğu gibi bırakılır -- yine de ``reasons``'da görünür,
-    böylece kaçırılma sessiz değil, görünür olur.
+    Modelin emin olmadığı bir bilgi, çevresine ördüğü cümleyle birlikte
+    kaldırılır: tek başına "E-99..." sayısını maskelemek, "... sayılı ve
+    ... tarihli yazınıza istinaden" gibi aynı ölçüde uydurma olan bağlamı
+    yanıtta bırakıyordu.
+
+    En iyi çaba: ``UnsupportedClaim.value``, ``draft_verifier._findall``
+    tarafından boşluk normalize edilmiştir ve orijinalde düzensiz
+    boşluklama varsa cümle metniyle bayt bazında eşleşmeyebilir. Hiçbir
+    cümle iddiayı harfiyen içermiyorsa, dayanaksız değer yine de yanıtta
+    kalmasın diye eski değer-bazlı değiştirmeye düşülür.
+
+    Returns:
+        ``(kırpılmış metin, kaldırılan özgün cümleler)``. İkinci öğe
+        ``evaluate_response`` tarafından ``reasons``'a eklenir; böylece
+        hangi cümlenin neden çıkarıldığı kullanıcıya gösterilen güvenlik
+        uyarısında görünür.
     """
+    values = [claim.value for claim in claims if claim.value]
+    if not values:
+        return text, []
+
+    removed: list[str] = []
+    rebuilt: list[str] = []
+    matched_any = False
+    for segment in _SENTENCE_SPLIT_PATTERN.split(text):
+        if segment and any(value in segment for value in values):
+            matched_any = True
+            stripped = segment.strip()
+            if stripped:
+                removed.append(stripped)
+            rebuilt.append(_UNGROUNDED_MARKER)
+        elif segment:
+            rebuilt.append(segment)
+
+    if matched_any:
+        return " ".join(rebuilt), removed
+
+    # Whitespace-normalization mismatch -- no sentence contained a value
+    # verbatim. Fall back to the old value-level replacement so the
+    # ungrounded span is still removed even if its sentence isn't.
     redacted = text
-    for claim in claims:
-        if claim.value and claim.value in redacted:
-            redacted = redacted.replace(claim.value, _UNGROUNDED_MARKER)
-    return redacted
+    for value in values:
+        if value in redacted:
+            redacted = redacted.replace(value, _UNGROUNDED_MARKER)
+    return redacted, []
+
+
+#: LLM hakemi bir cümleyi birebir üretmeyebilir; eşleşmenin güvenilir olması
+#: için katlanmış (folded) parçanın en az bu kadar karakter olması gerekir --
+#: daha kısası masum bir cümleyle rastgele örtüşüp onu da silebilir.
+_MIN_FLAGGED_FRAGMENT_LEN = 15
+
+
+def _redact_flagged_sentences(text: str, fragments: list[str]) -> tuple[str, list[str]]:
+    """LLM dayanaklılık hakeminin işaretlediği cümleleri yanıttan çıkar.
+
+    ``_redact_unsupported_claims``'in kalıp tarafındaki ikizi, ama eşleşme
+    katlanmış alt dizge içermesine göre yapılır: hakem cümleyi yanıtta
+    geçtiği gibi birebir vermeyebilir (araya boşluk/noktalama farkı girebilir
+    ya da ucundan kırpabilir).
+
+    Args:
+        text: Kullanıcıya gösterilecek (kısmen kırpılmış olabilen) yanıt.
+        fragments: ``GroundednessJudgeVerdict.ungrounded_sentences`` --
+            hakemin dayanaksız dediği cümleler.
+
+    Returns:
+        ``(kırpılmış metin, kaldırılan özgün cümleler)``. Hiçbir cümle
+        eşleşmezse ``(text, [])`` -- çağıran bunu "hakem işaretledi ama
+        konumlandıramadı" durumu olarak ele alır.
+    """
+    needles = [
+        folded
+        for fragment in fragments
+        if len(folded := _fold(fragment)) >= _MIN_FLAGGED_FRAGMENT_LEN
+    ]
+    if not needles:
+        return text, []
+
+    removed: list[str] = []
+    rebuilt: list[str] = []
+    for segment in _SENTENCE_SPLIT_PATTERN.split(text):
+        if not segment:
+            continue
+        folded_segment = _fold(segment)
+        if folded_segment and any(
+            needle in folded_segment or folded_segment in needle for needle in needles
+        ):
+            stripped = segment.strip()
+            if stripped:
+                removed.append(stripped)
+            rebuilt.append(_UNGROUNDED_MARKER)
+        else:
+            rebuilt.append(segment)
+
+    if not removed:
+        return text, []
+    return " ".join(rebuilt), removed
 
 
 def evaluate_response(
@@ -95,6 +233,7 @@ def evaluate_response(
     requester_clearance: Optional[SensitivityLevel] = None,
     policy: Optional[GuardrailPolicy] = None,
     judge_verdict: Optional[GuardrailJudgeVerdict] = None,
+    groundedness_verdict: Optional[GroundednessJudgeVerdict] = None,
 ) -> GateVerdict:
     """Üretilen bir yanıtı, kullanıcıya ulaşmadan önce doğrula ve kesinleştir.
 
@@ -128,6 +267,14 @@ def evaluate_response(
             arasında koruduğu ayrımla aynı. Hakem devre dışıysa, bozulduysa
             veya sorulmadıysa (belge eklenmemiş, dolayısıyla sızıntı için
             yargılanacak bir şey yok) ``None``.
+        groundedness_verdict: LLM dayanaklılık hakeminin görüşü (bkz.
+            ``app.ai.guardrails.llm_nuance.judge_reply_groundedness``), yine
+            çağıran tarafından hesaplanmış. Yalnızca bir belge eklendiğinde
+            sorulur; ``grounded=False`` ve güven ``judge_promotion_confidence``
+            eşiğinin üzerindeyse, hakemin işaretlediği dayanaksız cümleler
+            deterministik kalıp kontrolünün göremediği düz-cümle
+            halüsinasyonu olsalar bile yanıttan çıkarılır. Devre dışı,
+            bozulmuş veya belgesiz turda ``None``.
 
     Returns:
         Geçidin verdikti: ``pass`` (yanıt değişmedi), ``redact`` (yanıt
@@ -146,12 +293,83 @@ def evaluate_response(
         return GateVerdict(action="block", text=FALLBACK_REPLY, reasons=["prompt_leak_or_injection_echo"])
 
     reasons: list[str] = []
-    redacted = reply
+    # Dayanaklılık kontrolü ve cümle bazlı kırpma yalnızca modelin kendi
+    # düzyazısında çalışır; KAYNAKLAR bloğu dokunulmadan sona eklenir (bkz.
+    # _split_sources_block).
+    prose, sources_block = _split_sources_block(reply)
+    redacted = prose
 
-    unsupported = check_groundedness(reply, source_materials=source_materials)
-    if unsupported:
-        redacted = _redact_unsupported_claims(redacted, unsupported)
+    # Dayanaklılık: yanıttan çıkarılan somut iddiaların (sayı/tarih/mevzuat/
+    # kurum/tutar) getirilen kaynak materyale kadar izlenebilen payı, çözülmüş
+    # politikanın `output_groundedness_threshold`'unun (bkz.
+    # GuardrailPolicy) altına düşerse dayanaksız iddialar kırpılır. Eşiği
+    # geçen bir yanıt olduğu gibi bırakılır: MCP mevzuat aracından gelen ve
+    # yığında bulunan ama 6000 karakterlik alıntı sınırı ya da Türkçe hukuk
+    # metninde token-örtüşme eşleştiricisinin kaçırdığı bir "madde 125" gibi
+    # birkaç ifade yüzünden, büyük ölçüde kaynaklı bir yanıtın cümlelerinin
+    # `[Bu bilgi doğrulanamadığı için kaldırıldı]` ile değiştirilmesini önler.
+    unsupported, total_claims = groundedness_report(
+        prose, source_materials=source_materials
+    )
+    grounded_share = 1.0 if total_claims == 0 else 1.0 - len(unsupported) / total_claims
+    if unsupported and grounded_share < active_policy.output_groundedness_threshold:
+        redacted, removed_sentences = _redact_unsupported_claims(redacted, unsupported)
         reasons.append(f"{len(unsupported)} doğrulanamayan ifade kaldırıldı")
+        # Her kaldırılan cümle kendi `reasons` satırı olarak yüzeye çıkar --
+        # kullanıcının gördüğü "Maskelendi" uyarısında hangi cümlenin neden
+        # çıkarıldığı yazsın diye. Bunlar uydurma (dayanaksız) içeriktir, bir
+        # kaynaktan gelen hassas değer değil; `emit_guardrail_event`'in "ham
+        # hassas değer asla" kuralını ihlal etmez.
+        for sentence in removed_sentences:
+            reasons.append(f'Kaldırılan cümle: "{sentence}"')
+
+    # LLM dayanaklılık hakemi: kalıp-bazlı kontrolün göremediği DÜZ CÜMLE
+    # halüsinasyonunu yakalar (ör. "evrakta X biriminden söz ediliyor" -- ne
+    # sayı ne tarih, ama evrakta böyle bir şey yok). Yalnızca yüksek güvenli
+    # (>= judge_promotion_confidence, semantic-leak yükseltmesiyle aynı eşik)
+    # bir "dayanaksız" verdikti işleme alınır -- yalın, düşük güvenli bir LLM
+    # tahmini bir yanıtı tek başına değiştiremez.
+    if (
+        groundedness_verdict is not None
+        and not groundedness_verdict.grounded
+        and groundedness_verdict.confidence >= active_policy.judge_promotion_confidence
+    ):
+        flagged = [
+            sentence
+            for sentence in groundedness_verdict.ungrounded_sentences
+            if sentence and sentence.strip()
+        ]
+        judged_text, judged_removed = _redact_flagged_sentences(redacted, flagged)
+        if judged_removed:
+            redacted = judged_text
+            reasons.append(
+                f"{len(judged_removed)} doğrulanamayan cümle kaldırıldı (model değerlendirmesi)"
+            )
+            for sentence in judged_removed:
+                reasons.append(f'Kaldırılan cümle: "{sentence}"')
+        elif redacted == prose:
+            # Hakem "dayanaksız" dedi, konumlandırılabilir bir cümle veremedi
+            # VE yukarıdaki kalıp-bazlı kontrol de bir şey kırpmadı -- yani
+            # elde targeted olarak çıkarılacak bir şey yok. Semantic-leak
+            # yolundaki gibi tüm yanıtı güvenli bir nota indir; yanıt gittiği
+            # için kaynak bloğu da düşer.
+            redacted = (
+                "Bu yanıt, yüklü evrakla doğrulanamayan bilgiler içerdiği için kaldırıldı. "
+                "Lütfen sorunuzu evraka atıfla yeniden sorar mısınız?"
+            )
+            sources_block = ""
+            reasons.append(
+                "model değerlendirmesi: doğrulanamayan evrak bilgisi "
+                f"({groundedness_verdict.reason})"
+            )
+        # else: kalıp-bazlı kontrol zaten bir cümle kırpmış ve hakem büyük
+        # olasılıkla aynı cümleyi işaret ediyor -- ikinci kez kırpacak bir
+        # şey yok, tüm yanıtı da indirmeye gerek yok.
+
+    # Blok yerine konur. Bundan sonraki tek işlem PII maskelemesidir: o,
+    # cümle silmek yerine metin parçası maskelediği için blok yapısını
+    # bozmaz, ve bir alıntıda geçen PII de maskelenmelidir.
+    redacted += sources_block
 
     # PII işleme yalnızca bu turda gerçekten bir belge eklendiğinde devreye
     # girer (`sensitivity is not None`). Belge yoksa, tespit edilen
@@ -215,7 +433,7 @@ def evaluate_response(
                 # sessizce silmek yerine aynı çıktıda buluşur.
                 redacted, _findings = redact_pii(redacted, confidence_floor=active_policy.pii_confidence_floor)
                 kinds = sorted({finding.kind for finding in pii_findings})
-                reasons.append(f"{len(pii_findings)} pii bulgusu maskelendi ({', '.join(kinds)})")
+                reasons.append(f"{len(pii_findings)} PII bulgusu maskelendi ({', '.join(kinds)})")
             elif semantic_leak:
                 # Maskelenecek belirli bir metin parçası yok -- hakem,
                 # konumlandırılabilir bir string değil, yanıtın anlamını
@@ -256,7 +474,15 @@ def classify_reason_kind(reasons: list[str]) -> str:
         ``"injection"`` değerlerinden biri, veya daha özgül bir şey
         eşleşmediyse genel ``"output_gate"``.
     """
-    joined = " ".join(reasons)
+    # Küçük harfe katlanır: reason dizeleri kullanıcıya gösterilen metinlerdir
+    # ("PII", "Doğrulanamayan ...") ve büyük/küçük harf değişebilir; sınıflama
+    # anahtar kelimeleri buna karşı dayanıklı kalmalı. "Kaldırılan cümle:"
+    # satırları hariç tutulur -- bunlar modelin ürettiği serbest metindir ve
+    # içlerinde geçen "pii"/"yetkisiz" gibi bir kelime kararın türünü
+    # yanlış sınıflandırmamalı.
+    joined = " ".join(
+        reason for reason in reasons if not reason.startswith("Kaldırılan cümle:")
+    ).lower()
     if "yetkisiz" in joined:
         return "leakage"
     if "pii" in joined:

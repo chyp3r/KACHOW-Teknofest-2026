@@ -12,7 +12,7 @@ filterwarnings = [
     # (pytest_benchmark/plugin.py) -- nothing this repo's code does.
     "ignore::DeprecationWarning:pytest_benchmark.*",
 ]
-addopts = "-m 'not e2e and not performance' --cov=app --cov-report=term-missing:skip-covered"
+addopts = "-m 'not e2e and not performance and not real_corpus' --cov=app --cov-report=term-missing:skip-covered"
 markers = [
     # Deliberately NOT deselected by addopts above -- this repo has no
     # separate CI-only lane (see tests/_db_fixtures.py's own module
@@ -33,6 +33,14 @@ markers = [
     # one instead of retrofitting the marker once a GitHub-hosted runner
     # (which has no Ollama at all) turns red.
     "needs_ollama: requires a live, reachable Ollama instance",
+    # Real PDF rasterization (pypdfium2) against a small, real, hand-labelled
+    # corpus (datasets/resmi_yazisma/) -- genuinely slow relative to the rest
+    # of this suite (per-document rasterization, not a mock), so it's opt-in
+    # like performance/e2e above rather than part of every `make test` run.
+    # Exists to pin a real-world accuracy number so it can't silently regress
+    # again unnoticed (see marks.py's own history) -- deselected by addopts
+    # above, run explicitly with `pytest -m real_corpus` or `make test-corpus`.
+    "real_corpus: exercises real files under datasets/ with hand-labelled ground truth",
 ]
 
 [tool.coverage.run]

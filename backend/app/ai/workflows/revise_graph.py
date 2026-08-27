@@ -86,6 +86,7 @@ from app.ai.workflows.attempt_tracking import best_of, snapshot_attempt
 from app.ai.verification import (
     InfoQuestion,
     VerificationReport,
+    apply_answers,
     build_missing_info_request,
     check_filler_sentences,
     check_meta_commentary,
@@ -96,6 +97,7 @@ from app.ai.verification import (
     merge_verdicts,
     normalize_role_placeholders,
     normalize_unfilled_markers,
+    resolve_placeholders_from_brief,
     verify_draft,
 )
 from app.ai.verification.draft_verifier import LEGISLATION_PATTERN
@@ -108,7 +110,7 @@ from app.ai.workflows.events import (
     emit_notice,
 )
 from app.ai.workflows.resilience import IO_RETRY
-from app.ai.workflows.writing_brief import format_writing_brief
+from app.ai.workflows.writing_brief import AUTO_ANSWER, format_writing_brief
 from app.core.config import settings
 from app.core.enums.step_status import StepStatus
 from app.observability.ai_metrics import DRAFT_REVISIONS, DRAFT_SCORE
@@ -137,6 +139,19 @@ class ReviseState(TypedDict, total=False):
     #: yüzden bu yalnızca bir yeniden yazım geçişi bir "Tarih:" yer tutucusunu
     #: yeniden getirdiğinde devreye girer.
     today: str
+    #: Taslak turundaki eksik-bilgi gate'inde çözülmüş / "Sen karar ver" ile
+    #: ertelenmiş yer tutucu cevapları (`InfoQuestion.key` -> değer veya
+    #: `AUTO_ANSWER`). `verify_node`, hem bunları hem de yerleşmiş yazım
+    #: briefini kullanarak zaten bilinen bir yer tutucuyu kullanıcıya tekrar
+    #: sormaz. Çağıran tarafından bir kez ayarlanır (bkz. `run_revise`).
+    resolved_placeholder_answers: dict[str, Any]
+    #: `draft_graph.DraftState.instruction_haystack`'in revizyon karşılığı:
+    #: bu turun talimatı + önceki kullanıcı turları + yerleşmiş brief cevapları.
+    #: `verify_node`, `verify_draft`'a bunu `instructions=` olarak geçirir --
+    #: böylece kullanıcının önceki bir turda verdiği bir isim/tarih/kurum
+    #: revizyonda `dayanaksiz_iddia` olarak puanlanmaz. Boşsa `instructions`'a
+    #: düşer.
+    instruction_haystack: str
 
     #: `parse` tarafından ayarlanır.
     instruction: RevisionInstruction
@@ -902,24 +917,59 @@ def create_revise_graph(
             )
             if value
         ]
-        report = verify_draft(
-            draft_text,
-            source_document=active_draft.source_document,
-            context=state.get("context", ""),
-            classification=active_draft.classification,
-            instructions=state.get("instructions", ""),
-            strict=strict,
-            style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
-            is_individual_petition="dilekçe" in sub_genre.lower(),
-            today=state.get("today", ""),
-            trusted_facts=trusted_facts,
-            # draft_graph.verify_node ile aynı katma -- bu olmadan,
-            # orijinal taslağın getirilen bir belge parçasından meşru
-            # olarak kopyaladığı bir olgu, onu ilk yazan taslakta olduğundan
-            # her revizyonda kesinlikle daha zayıf bir dayanağa sahip
-            # olurdu.
-            source_chunks=active_draft.source_chunks,
+        def _run_verify(text: str) -> VerificationReport:
+            return verify_draft(
+                text,
+                source_document=active_draft.source_document,
+                context=state.get("context", ""),
+                classification=active_draft.classification,
+                # draft_graph.verify_node:1381 ile aynı -- yalnızca bu turun
+                # ham talimatı değil, birikmiş haystack (önceki turlar +
+                # yerleşmiş brief cevapları). Bu olmadan kullanıcının bir
+                # önceki turda verdiği bir isim/tarih/kurum, revizyonda
+                # dayanaksiz_iddia (-12) olarak puanlanıyordu.
+                instructions=state.get("instruction_haystack") or state.get("instructions", ""),
+                strict=strict,
+                style_examples=list(active_draft.style_examples) + list(adapter.preferred_examples),
+                is_individual_petition="dilekçe" in sub_genre.lower(),
+                today=state.get("today", ""),
+                trusted_facts=trusted_facts,
+                # draft_graph.verify_node ile aynı katma -- bu olmadan,
+                # orijinal taslağın getirilen bir belge parçasından meşru
+                # olarak kopyaladığı bir olgu, onu ilk yazan taslakta olduğundan
+                # her revizyonda kesinlikle daha zayıf bir dayanağa sahip
+                # olurdu.
+                source_chunks=active_draft.source_chunks,
+            )
+
+        report = _run_verify(draft_text)
+
+        # Taslak turunda zaten çözülmüş yer tutucuları ve yerleşmiş yazım
+        # briefinden doldurulabilecekleri, kullanıcıya tekrar sormak yerine
+        # sessizce yerine koy. Bu, iki akış (taslak <-> revizyon) arasındaki
+        # "aynı bilgiyi iki kez sorma" tutarsızlığının düzeltmesi;
+        # apply_answers deterministik olduğu için taslak yeniden üretilmez.
+        # "Sen karar ver" (AUTO_ANSWER) ile ertelenenler burada değil --
+        # onlar metinde köşeli parantez olarak kalır (taslak akışıyla aynı),
+        # yalnızca build_missing_info_request tarafından yeniden sorulmaz.
+        # State üzerinden gelir (run_revise onu active_draft'tan seed'ler);
+        # doğrudan graf çağrısı (bkz. testler) state'e koymadıysa yine de
+        # taslak sürümünün üstünden okunur.
+        resolved_answers = (
+            state.get("resolved_placeholder_answers")
+            or active_draft.resolved_placeholder_answers
+            or {}
         )
+        resolved_real = {
+            key: value
+            for key, value in resolved_answers.items()
+            if value and value != AUTO_ANSWER
+        }
+        brief_fills = resolve_placeholders_from_brief(draft_text, active_draft.writing_brief)
+        known_fills = {**brief_fills, **resolved_real}  # açık cevap, brief'ten öne geçer
+        if known_fills:
+            draft_text, _ = apply_answers(draft_text, known_fills)
+            report = _run_verify(draft_text)
 
         judge_on = (
             settings.DRAFT_JUDGE_ENABLED if preset.judge_enabled is None else preset.judge_enabled
@@ -962,7 +1012,15 @@ def create_revise_graph(
         missing_information: list[InfoQuestion] = []
         if report.placeholder_count > 0:
             missing_information = build_missing_info_request(
-                draft_text, report, active_draft.classification
+                draft_text,
+                report,
+                active_draft.classification,
+                # AUTO_ANSWER girdileri de dahil: "Sen karar ver" ile
+                # ertelenmiş bir yer tutucu revizyonda yeniden sorulmaz
+                # (yine de doldurulmamis_yer_tutucu ile NEEDS_HUMAN_APPROVAL'a
+                # taşınabilir -- taslak akışıyla birebir aynı davranış).
+                resolved_keys=resolved_answers,
+                writing_brief=active_draft.writing_brief,
             )
 
         # `_merge` üzerinden ekleme yapmadan `draft_text` üretebilen iki

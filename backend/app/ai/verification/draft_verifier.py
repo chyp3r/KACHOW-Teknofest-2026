@@ -928,6 +928,35 @@ def verify_draft(
     )
 
 
+def _count_claims(text: str) -> int:
+    """Kaç somut iddia (sayı/tarih/mevzuat/kurum/tutar) çıkarıldığını sayar.
+
+    ``_collect_claims`` yalnızca *dayanaksız* olanları döndürür; bir
+    dayanaklılık *payı* hesaplamak isteyen çağıran (bkz.
+    ``groundedness_report``) toplam iddia sayısına da ihtiyaç duyar.
+    """
+    total = 0
+    for _kind, pattern, _explanation in CLAIM_CHECKS:
+        total += len(_findall(pattern, text))
+    return total
+
+
+def groundedness_report(
+    text: str, *, source_materials: str
+) -> tuple[list[UnsupportedClaim], int]:
+    """``(dayanaksız iddialar, incelenen toplam somut iddia sayısı)``.
+
+    ``check_groundedness`` ile aynı boru hattı; ek olarak toplamı da
+    döndürür, böylece ``output_gate`` "yanıtın çoğu dayanaklı mı" (bir pay)
+    kararını verebilir -- birkaç bulanık eşleşmeyen iddia yüzünden büyük
+    ölçüde doğru bir yanıtı sansürlemek yerine.
+    """
+    haystack = _fold(source_materials)
+    canonical_index = _build_canonical_index(source_materials)
+    auditable = _strip_placeholders(text)
+    return _collect_claims(auditable, haystack, canonical_index), _count_claims(auditable)
+
+
 def check_groundedness(text: str, *, source_materials: str) -> list[UnsupportedClaim]:
     """Find claims in arbitrary text that ``source_materials`` doesn't support.
 

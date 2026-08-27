@@ -313,6 +313,10 @@ export interface paths {
          *     yönlendirir. Çalıştırma insan-döngüde kapısında duraklatıldığında bir
          *     ``INTERRUPTED`` durumu da döndürebilir; bunu ``POST /chat/resume`` ile
          *     devam ettirin.
+         *
+         *     Kısa preflight DB işi (evrak erişimi + revizyon taslağı çözümü) ayrı
+         *     bir kısa ömürlü oturumda yapılır ve bağlantı, dakikalarca sürebilen
+         *     planlama grafiği çalışmadan önce iade edilir (bkz. #288).
          */
         post: operations["send_chat_message_api_v1_chat_message_post"];
         delete?: never;
@@ -484,6 +488,29 @@ export interface paths {
          * @description Stop the active turn and settle its persisted workflow checkpoint.
          */
         post: operations["cancel_chat_session_api_v1_chat_sessions__session_id__cancel_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/chat/sessions/{session_id}/compact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Compact Chat Session
+         * @description Sohbeti sıkıştır: birebir geçmiş penceresini yuvarlanan özete katla.
+         *
+         *     Bağlam göstergesinin "Bağlamı sıkıştır" düğmesi çağırır. Aktif bir tur
+         *     veya bekleyen bir HITL varsa ``{"status": "busy"}`` döner.
+         */
+        post: operations["compact_chat_session_api_v1_chat_sessions__session_id__compact_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1329,6 +1356,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/drafts/{draft_id}/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Draft
+         * @description Bir taslak sürümünü indirilebilir bir belgeye dönüştürür (docx | pdf).
+         *
+         *     Router'daki diğer rotalardan farklı olarak bir ``SuccessResponse`` zarfı
+         *     değil, doğrudan ``attachment`` olarak işaretlenmiş binary döndürür.
+         */
+        get: operations["export_draft_api_v1_drafts__draft_id__export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/drafts/{draft_id}/send": {
         parameters: {
             query?: never;
@@ -1930,6 +1980,32 @@ export interface paths {
          *     docstring'ine bakın.
          */
         get: operations["root_user_stats_api_v1_root_users_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/root/users/insights": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Root User Insights
+         * @description "Kullanıcı İstatistikleri" konsolunu besleyen zengin sistem-geneli
+         *     döküm: KPI'lar, günlük aktiflik zaman serisi, rol dağılımı, kurum
+         *     koltukları, en aktif kullanıcılar, iş akışı türü/sonuç dağılımı,
+         *     guardrail sinyalleri ve Prometheus'tan global AI token kullanımı.
+         *
+         *     "Aktif" burada da izlenen bir giriş zaman damgası değil, bir ``runs``
+         *     satırı demektir (bkz. ``root_user_stats``).
+         */
+        get: operations["root_user_insights_api_v1_root_users_insights_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5762,6 +5838,37 @@ export interface operations {
             };
         };
     };
+    compact_chat_session_api_v1_chat_sessions__session_id__compact_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                session_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_companies_api_v1_companies_get: {
         parameters: {
             query?: {
@@ -6810,6 +6917,40 @@ export interface operations {
             };
         };
     };
+    export_draft_api_v1_drafts__draft_id__export_get: {
+        parameters: {
+            query?: {
+                /** @description Çıktı biçimi. */
+                fmt?: string;
+            };
+            header?: never;
+            path: {
+                draft_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     send_draft_api_v1_drafts__draft_id__send_post: {
         parameters: {
             query?: never;
@@ -7790,6 +7931,26 @@ export interface operations {
         };
     };
     root_user_stats_api_v1_root_users_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["APIResponse_dict_"];
+                };
+            };
+        };
+    };
+    root_user_insights_api_v1_root_users_insights_get: {
         parameters: {
             query?: never;
             header?: never;

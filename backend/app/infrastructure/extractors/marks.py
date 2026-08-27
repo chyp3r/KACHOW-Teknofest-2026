@@ -159,7 +159,26 @@ _HANDWRITING_MIN_BASELINE_STD = 0.10
 #: doğrulandı (datasets/resmi_yazisma/00_gelen_kaynaklar/cevap_yazisi/):
 #: bir örnek sayfadaki gerçekten basılı her metin parçası >=1.26 skorladı,
 #: elle inşa edilmiş bir el yazısı test şekli 1.0 skorladı.
-_MAX_STROKE_RUN_DENSITY = 1.5
+#:
+#: 1.5'ten 2.3'e yükseltildi: ocr_ground_truth.json'un elle etiketlediği 23
+#: belgeye karşı ölçüldüğünde (bkz. scripts/evaluate_marks.py
+#: --ground-truth), 1.5 imza recall'ını %50'ye düşürüyordu -- 16 gerçek
+#: imzadan 8'i, tam olarak bu kapıda kaçırılıyordu. 6 bağımsız kaçırılan
+#: belgenin (2 farklı imza sahibi, CY-003/010/011/014/033/050) gerçek imza
+#: bölgesinin run_density'si 1.62-2.17 arasında ölçüldü -- 1.5 tabanı, bu
+#: modülün kendi kalibrasyon örneğinden daha "bağlantılı" (birden çok
+#: kesişen kalem vuruşu) gerçek imzaları sistematik olarak dışlıyordu.
+#: 2.3'e yükseltmek recall'ı %94'e çıkarır (15/16), kesinlik 1.00'de kalır
+#: (yeni yanlış pozitif yok) -- 23 belgenin tamamına karşı doğrulandı.
+#: 2.4'e denendi (kalan tek kaçırmayı, CY-002'yi, run_density=2.33 ile
+#: yakalamak için) ama CY-005'te (has_signature=false) yeni bir yanlış
+#: pozitif açtı; kesinlik precision=0.94'e düşerdi. is_signed, yalnızca
+#: eksik bir imzayı işaretleyen bir tavsiye kontrolünü besliyor (bkz.
+#: check_required_fields) -- burada bir yanlış pozitif (imzasız bir belgeyi
+#: imzalı sanmak) gerçek bir eksikliği gizler, bir yanlış negatif ise
+#: yalnızca gereksiz bir inceleme istemine yol açar; bu asimetri nedeniyle
+#: 2.3'te (kesinlik önceliği) kalındı, 2.4'e geçilmedi.
+_MAX_STROKE_RUN_DENSITY = 2.3
 #: Sayfa yüksekliğinin bu oranında veya altında imza şeklindeki bir bölge
 #: bir imza olarak sınıflandırılır (RYUEHY m.17'nin bir tane koyduğu yer);
 #: onun üzerindeki aynı şekil bunun yerine el yazısı bir not olarak

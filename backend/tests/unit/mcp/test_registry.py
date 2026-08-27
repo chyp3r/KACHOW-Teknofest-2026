@@ -12,13 +12,17 @@ Three properties matter more than the happy path:
 * every failure degrades to "not found" -- a third-party government site being
   slow or down must not turn a chat turn into a 500.
 
-`build_live_legislation_tools()` reads `settings.MEVZUAT_MCP_ENABLED` live, not a
-value captured at registration time, so every test that needs the tool available
-keeps `patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True)` open around
-both `register_servers()` *and* the call to `build_live_legislation_tools()` --
-building it after the patch has already exited would find the flag back at its
-real (off) value and get an empty list, which is a different thing than what
-these tests mean to check.
+`build_live_legislation_tools()` reads `settings.MEVZUAT_MCP_ENABLED` and
+`settings.LOCAL_MODE` live, not a value captured at registration time, so
+every test that needs the tool available keeps `_enabled()`'s patch (both
+flags) open around both `register_servers()` *and* the call to
+`build_live_legislation_tools()` -- building it after the patch has already
+exited would find the flags back at their real (LOCAL_MODE=True,
+MEVZUAT_MCP_ENABLED=False) values and get an empty list, which is a
+different thing than what these tests mean to check. `LOCAL_MODE=true` is
+this codebase's normal default -- mevzuat-mcp is only ever used there for
+the boot-time curated-legislation warm-up (`app.ai.retrieval.mcp_mevzuat`),
+never for a per-request live tool call.
 """
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -63,8 +67,12 @@ def _result(text: str) -> MagicMock:
 
 
 def _enabled():
-    """Shorthand for the patch every live-tool test needs open around its body."""
-    return patch("app.mcp.registry.settings.MEVZUAT_MCP_ENABLED", True)
+    """Shorthand for the patches every live-tool test needs open around its
+    body -- both LOCAL_MODE=False and MEVZUAT_MCP_ENABLED=True, since
+    `build_live_legislation_tools()` now requires both."""
+    return patch.multiple(
+        "app.mcp.registry.settings", LOCAL_MODE=False, MEVZUAT_MCP_ENABLED=True
+    )
 
 
 # ==========================================

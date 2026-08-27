@@ -74,6 +74,8 @@ async def run_revise(
     rules_provider: Optional[RulesProvider] = None,
     profile_provider: Optional[ProfileProvider] = None,
     today: str = "",
+    resolved_placeholder_answers: Optional[dict[str, Any]] = None,
+    instruction_haystack: str = "",
 ) -> dict[str, Any]:
     """Aktif taslağın hedefe yönelik bir revizyonunu üretir.
 
@@ -158,6 +160,16 @@ async def run_revise(
             karşıtı kuralı) ve buna asla ihtiyaç duymaz, ancak başlığı meşru
             şekilde yeniden üreten bir yeniden yazım yine de kullanıcıya
             sorulan bir soruya dönüşmemelidir.
+        resolved_placeholder_answers: Taslak turundaki eksik-bilgi gate'inde
+            çözülmüş / "Sen karar ver" ile ertelenmiş yer tutucu cevapları
+            (`InfoQuestion.key` -> değer veya `AUTO_ANSWER`). None verilirse
+            `active_draft.resolved_placeholder_answers`'a düşer. verify_node
+            bunları kullanıp kullanıcının zaten cevapladığı bir yer tutucuyu
+            tekrar sormaz.
+        instruction_haystack: draft_graph'ın `instruction_haystack`'inin
+            revizyon karşılığı (bu turun talimatı + önceki kullanıcı turları +
+            yerleşmiş brief cevapları). Boşsa `instructions`'a düşer.
+            verify_node bunu `verify_draft`'a `instructions=` olarak geçirir.
 
     Returns:
         Revizyon sonucu.
@@ -179,6 +191,12 @@ async def run_revise(
                 "reasoning_level": preset.level.value,
                 "company_id": company_id or "",
                 "today": today,
+                "resolved_placeholder_answers": (
+                    resolved_placeholder_answers
+                    if resolved_placeholder_answers is not None
+                    else active_draft.resolved_placeholder_answers
+                ),
+                "instruction_haystack": instruction_haystack or instructions,
             },
             config=child_config(config),
         )
@@ -197,6 +215,7 @@ async def run_revise(
             "context": active_draft.context,
             "source_document": active_draft.source_document,
             "writing_brief": active_draft.writing_brief,
+            "resolved_placeholder_answers": active_draft.resolved_placeholder_answers,
         }
 
     status = final_state.get("status", StepStatus.FAILED)
@@ -214,6 +233,7 @@ async def run_revise(
             "context": active_draft.context,
             "source_document": active_draft.source_document,
             "writing_brief": active_draft.writing_brief,
+            "resolved_placeholder_answers": active_draft.resolved_placeholder_answers,
         }
 
     return {
@@ -260,6 +280,7 @@ async def run_revise(
         "correspondence_sub_genre": final_state.get("correspondence_sub_genre")
         or active_draft.correspondence_sub_genre,
         "writing_brief": active_draft.writing_brief,
+        "resolved_placeholder_answers": active_draft.resolved_placeholder_answers,
         "reasoning_level": preset.level.value,
         "instruction_origin": instruction_origin,
     }

@@ -117,6 +117,18 @@ spec:
                 secretKeyRef:
                   name: kachow-secrets
                   key: LANGFUSE_SECRET_KEY
+            # Only actually used when configmap.yaml's LOCAL_MODE is
+            # "false" -- see that file's own comment and secrets.yaml's.
+            - name: EVREN_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: EVREN_API_KEY
+            - name: EVREN_QDRANT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: kachow-secrets
+                  key: EVREN_QDRANT_API_KEY
             - name: S3_ACCESS_KEY
               valueFrom:
                 secretKeyRef:

@@ -386,3 +386,121 @@ async def test_audit_node_degrades_instead_of_failing_an_already_successful_revi
     assert "Sayın Vali Bey" in result["draft"]
     assert result["changelog"]["entries"] == []
     assert result["conflicts"] == []
+
+
+# --- #282: taslak <-> revizyon "aynı şeyi iki kez sorma" tutarlılığı ---------
+
+
+@pytest.mark.asyncio
+async def test_a_placeholder_answered_at_the_draft_gate_is_not_re_asked(fake_llm):
+    """resolved_placeholder_answers taşınır: taslak turunda cevaplanan bir
+    yer tutucu, revizyondaki metinde yine görünse bile kullanıcıya tekrar
+    sorulmaz -- cevap sessizce yerine konur."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: [Belge Sayısı]\nTarih: 30.07.2026\n\n"
+        "Sayın Makam,\n\nİlgi yazı kapsamında izin talebi iletilmiştir.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(
+                resolved_placeholder_answers={"belge_sayisi": "E-2026/99"}
+            ),
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert result["missing_information"] == []
+    assert "[Belge Sayısı]" not in result["draft"]
+    assert "E-2026/99" in result["draft"]
+
+
+@pytest.mark.asyncio
+async def test_a_placeholder_deferred_with_sen_karar_ver_is_not_re_asked(fake_llm):
+    """"Sen karar ver" (AUTO_ANSWER) ile ertelenen bir yer tutucu revizyonda
+    tekrar sorulmaz; ama taslak akışıyla birebir aynı şekilde köşeli parantez
+    metinde kalır ve insan onayını tetikler."""
+    from app.ai.workflows.writing_brief import AUTO_ANSWER
+
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: [Belge Sayısı]\nTarih: 30.07.2026\n\n"
+        "Sayın Makam,\n\nİlgi yazı kapsamında izin talebi iletilmiştir.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(
+                resolved_placeholder_answers={"belge_sayisi": AUTO_ANSWER}
+            ),
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert result["missing_information"] == []
+    assert "[Belge Sayısı]" in result["draft"]
+    assert result["status"] == StepStatus.NEEDS_HUMAN_APPROVAL
+
+
+@pytest.mark.asyncio
+async def test_a_placeholder_is_filled_from_the_writing_brief_instead_of_asked(fake_llm):
+    """Yerleşmiş yazım briefinden çözülebilen bir [Muhatap] yer tutucusu
+    sorulmaz, brief değeriyle doldurulur."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\n"
+        "Sayın [Muhatap],\n\nİlgi yazı kapsamında izin talebi iletilmiştir.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(writing_brief={"muhatap": "Yarışma Komitesi"}),
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert result["missing_information"] == []
+    assert "[Muhatap]" not in result["draft"]
+    assert "Yarışma Komitesi" in result["draft"]
+
+
+@pytest.mark.asyncio
+async def test_instruction_haystack_is_forwarded_to_the_verifier(fake_llm, monkeypatch):
+    """#282: revizyonun doğrulama geçişi artık yalnız bu turun ham talimatını
+    değil, birikmiş haystack'i (önceki turlar + brief cevapları) alır -- bir
+    önceki turda verilmiş bir isim/kurum revizyonda dayanaksiz_iddia olarak
+    puanlanmasın diye."""
+    seen: dict[str, str] = {}
+    real_verify = __import__(
+        "app.ai.workflows.revise_graph", fromlist=["verify_draft"]
+    ).verify_draft
+
+    def _spy(*args, **kwargs):
+        seen["instructions"] = kwargs.get("instructions", "")
+        return real_verify(*args, **kwargs)
+
+    monkeypatch.setattr("app.ai.workflows.revise_graph.verify_draft", _spy)
+
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: 30.07.2026\n\nSayın Makam,\n\n"
+        "İlgi yazı kapsamında izin talebi iletilmiştir.\n\nArz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    await graph.ainvoke(
+        {
+            "active_draft": _active_draft(),
+            "instructions": "Bunu daha iyi yap.",
+            "instruction_haystack": "Berkay Demir stajını bizim kurumda tamamladı.\nBunu daha iyi yap.",
+            "reasoning_level": "fast",
+        }
+    )
+
+    assert "Berkay Demir stajını bizim kurumda tamamladı." in seen["instructions"]

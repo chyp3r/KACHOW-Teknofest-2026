@@ -30,7 +30,7 @@ kullanılabilir olmak gelir).
 
 import asyncio
 import logging
-from typing import Optional
+from typing import Optional, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -53,6 +53,9 @@ _ECHO_OVERLAP_THRESHOLD = get_policy().guardrail.judge_echo_overlap_threshold
 _MAX_JUDGED_TEXT_CHARS = 4000
 
 
+_JudgeVerdictT = TypeVar("_JudgeVerdictT", bound=BaseModel)
+
+
 class GuardrailJudgeVerdict(BaseModel):
     """Guardrail hakeminin yapılandırılmış verdikti. Hiçbir alan yargılanan içeriği taşıyamaz."""
 
@@ -61,6 +64,37 @@ class GuardrailJudgeVerdict(BaseModel):
     )
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str = Field(max_length=300, description="Kısa gerekçe; içerik metnini tekrar üretme.")
+
+
+class GroundednessJudgeVerdict(BaseModel):
+    """Asistan yanıtının, yüklü evrakın gerçek içeriğine ne kadar dayandığına dair yargı.
+
+    ``GuardrailJudgeVerdict``'ten farklı olarak ``ungrounded_sentences``
+    alanı yargılanan YANITTAN birebir cümleler taşır -- bu bir sızıntı
+    değildir, çünkü o cümleler zaten kullanıcıya gösterilen yanıtın
+    içindedir ve tanım gereği kaynakta yoktur; ``output_gate`` onları
+    yanıttan çıkarmak için kullanır. Anti-yansıma koruması yine de KAYNAK
+    metnine karşı çalışır (bkz. ``judge_reply_groundedness``).
+    """
+
+    grounded: bool = Field(
+        description=(
+            "Yanıttaki evraka dair TÜM ifadeler kaynağa, özete veya araç "
+            "çıktısına dayanıyorsa true; en az biri uydurma/dayanaksızsa false."
+        )
+    )
+    confidence: float = Field(ge=0.0, le=1.0)
+    ungrounded_sentences: list[str] = Field(
+        default_factory=list,
+        max_length=8,
+        description=(
+            "Kaynakta doğrulanamayan cümleler, YANITTA geçtiği hâliyle birebir "
+            "(parafraz etme, kısaltma). En fazla 8 tane. grounded=true ise boş."
+        ),
+    )
+    reason: str = Field(
+        max_length=300, description="Kısa Türkçe gerekçe; kaynak metnini tekrar üretme."
+    )
 
 
 def _reject_echo(verdict: GuardrailJudgeVerdict, judged_text: str) -> bool:
@@ -92,16 +126,20 @@ async def _run_judge(
     prompt: str,
     judged_text: str,
     timeout_s: Optional[float],
-) -> Optional[GuardrailJudgeVerdict]:
-    """Her iki yargılama görevi için paylaşılan çağrı/bozulma yolu. Asla fırlatmaz.
+    response_model: type[_JudgeVerdictT] = GuardrailJudgeVerdict,  # type: ignore[assignment]
+) -> Optional[_JudgeVerdictT]:
+    """Her yargılama görevi için paylaşılan çağrı/bozulma yolu. Asla fırlatmaz.
 
     Args:
         agent: Oluşturulmuş bir :class:`GuardrailJudgeAgent` (fast-tier istemci).
-        prompt: Göreve özgü tam prompt (aşağıdaki iki genel fonksiyona bakın).
+        prompt: Göreve özgü tam prompt (aşağıdaki genel fonksiyonlara bakın).
         judged_text: Yargılanan ham metin, yalnızca anti-yansıma kontrolü
-            için kullanılır -- verdiktte asla geri gönderilmez.
+            için kullanılır -- ``reason`` alanında asla geri gönderilmez.
         timeout_s: Kesin zaman aşımı; varsayılan
             ``settings.GUARDRAIL_JUDGE_TIMEOUT_SECONDS``.
+        response_model: Beklenen verdikt şeması; varsayılan
+            ``GuardrailJudgeVerdict``. Dayanaklılık görevi
+            ``GroundednessJudgeVerdict`` geçirir.
 
     Returns:
         Verdikt, veya zaman aşımı, şema hatası, sağlayıcı hatası ya da
@@ -113,10 +151,10 @@ async def _run_judge(
     timeout = timeout_s if timeout_s is not None else settings.GUARDRAIL_JUDGE_TIMEOUT_SECONDS
 
     try:
-        verdict: GuardrailJudgeVerdict = await asyncio.wait_for(
+        verdict: _JudgeVerdictT = await asyncio.wait_for(
             agent.run_structured(
                 messages=prompt,
-                response_model=GuardrailJudgeVerdict,
+                response_model=response_model,
                 temperature=0.0,
                 max_retries=1,
             ),
@@ -210,3 +248,67 @@ async def judge_output_leakage(
         f"{truncated}"
     )
     return await _run_judge(agent, prompt=prompt, judged_text=truncated, timeout_s=timeout_s)
+
+
+async def judge_reply_groundedness(
+    agent: GuardrailJudgeAgent,
+    *,
+    reply: str,
+    document_summary: str,
+    source_text: str,
+    timeout_s: Optional[float] = None,
+) -> Optional[GroundednessJudgeVerdict]:
+    """Bir asistan yanıtının yüklü evrakla ilgili ifadelerinin uydurma olup
+    olmadığını sor.
+
+    ``output_gate``'in kalıp-bazlı dayanaklılık kontrolü yalnızca tipli
+    iddiaları (sayı/tarih/mevzuat/kurum/tutar) yakalar; "evrakta X biriminden
+    söz ediliyor", "başvuru gerekçesi olarak Y gösterilmiş" gibi ne sayı ne
+    tarih içeren DÜZ CÜMLE halüsinasyonu ondan sıyrılır. Bu hakem tam olarak
+    onun için: model, evrakla ilgili bir bilgiyi kaynağa (gerçek evrak metni),
+    bağlamdaki özete veya bir araç çıktısına dayandıramıyorsa cümleyi
+    ``ungrounded_sentences``'a koyar ve ``output_gate`` onu yanıttan çıkarır.
+
+    Yalnızca bir belge eklendiğinde çağrılır (bkz.
+    ``planning_graph._run_assist``); belgesiz bir sohbet turunda
+    "dayanaksız evrak bilgisi" diye bir kavram yoktur.
+
+    Args:
+        agent: Oluşturulmuş bir :class:`GuardrailJudgeAgent`.
+        reply: Değerlendirilecek asistan yanıtı.
+        document_summary: Modelin bağlamında zaten bulunan evrak özeti --
+            bu özetten türetilen ifadeler dayanaklı sayılır.
+        source_text: Bu turda gerçekten elde edilen ham metin (evrakın
+            çıkarılmış metni + araç çıktıları, birleştirilmiş). Boş olabilir
+            (hiç araç çalışmadıysa); o zaman hakem yalnızca özete bakar.
+        timeout_s: Kesin zaman aşımı geçersiz kılması.
+
+    Returns:
+        Verdikt, veya çağrı bozulduysa ``None`` -- çağıranlar yalnızca
+        deterministik dayanaklılık kontrolüne geri döner.
+    """
+    if not reply.strip():
+        return None
+
+    truncated_reply = reply[:_MAX_JUDGED_TEXT_CHARS]
+    truncated_source = (source_text or "")[:_MAX_JUDGED_TEXT_CHARS]
+    prompt = (
+        "GÖREV: EVRAK DAYANAKLILIK DEĞERLENDİRMESİ\n\n"
+        "### EVRAK ÖZETİ (modelin bağlamında zaten var):\n"
+        f"{document_summary or '(özet yok)'}\n\n"
+        "### EVRAKTAN/ARAÇLARDAN GELEN GERÇEK METİN:\n"
+        f"{truncated_source or '(bu turda araç çalışmadı; yalnızca yukarıdaki özet var)'}\n\n"
+        "### DEĞERLENDİRİLECEK ASİSTAN YANITI:\n"
+        f"{truncated_reply}"
+    )
+    # Anti-yansıma kontrolü KAYNAK metnine karşı yapılır: gerekçesini
+    # kaynağın kelimeleriyle dolduran bir hakem yargılamıyor demektir.
+    # `ungrounded_sentences` bu kontrole girmez -- onlar yanıtın kendi
+    # cümleleridir ve tanım gereği kaynakta bulunmazlar.
+    return await _run_judge(
+        agent,
+        prompt=prompt,
+        judged_text=truncated_source or truncated_reply,
+        response_model=GroundednessJudgeVerdict,
+        timeout_s=timeout_s,
+    )
