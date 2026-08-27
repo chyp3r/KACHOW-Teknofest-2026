@@ -52,7 +52,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       {...props}
     >
       {loading ? <Loader2 className="spinner" aria-hidden="true" /> : leadingIcon ? <span className="button-icon" aria-hidden="true">{leadingIcon}</span> : null}
-      <span className="button-label">{children}</span>
+      {/* İçerik yoksa (ör. yükleniyorken IconButton) boş bir label span'i
+          bırakma -- grid'de spinner'ı ikinci satıra iterek ortadan kaydırıyor. */}
+      {children != null && children !== false && (
+        <span className="button-label">{children}</span>
+      )}
       {!loading && trailingIcon ? <span className="button-icon" aria-hidden="true">{trailingIcon}</span> : null}
     </button>
   );

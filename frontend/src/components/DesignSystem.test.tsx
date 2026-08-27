@@ -22,6 +22,16 @@ describe("design-system primitives", () => {
     expect(screen.getByRole("button", { name: "Evraklarda ara" })).toBeInTheDocument();
   });
 
+  it("shows only the spinner (centered, no icon glyph) while an icon button loads", () => {
+    render(<IconButton icon={<Search />} aria-label="Aranıyor" loading />);
+    const button = screen.getByRole("button", { name: "Aranıyor" });
+    expect(button).toBeDisabled();
+    expect(button.querySelector(".spinner")).toBeInTheDocument();
+    // İkon glyph'i ve boş label span'i render edilmez -> spinner tek çocuk, ortalı.
+    expect(button.querySelector(".icon-button-glyph")).not.toBeInTheDocument();
+    expect(button.querySelector(".button-label")).not.toBeInTheDocument();
+  });
+
   it("associates labels, errors, and invalid state with form controls", () => {
     render(<Input label="E-posta" error="Geçerli bir adres girin" />);
     const input = screen.getByLabelText("E-posta");
