@@ -25,7 +25,6 @@ own `_MAX_STROKE_RUN_DENSITY` were all calibrated against.
 
 import argparse
 import glob
-import json
 import os
 import sys
 import time
@@ -34,9 +33,16 @@ from collections import Counter
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "backend"))
 
 from app.infrastructure.extractors.marks import detect_marks  # noqa: E402
+from app.infrastructure.extractors.marks_eval import (  # noqa: E402
+    confusion,
+    load_ground_truth,
+    precision_recall,
+    rasterise,
+    should_rasterise,
+)
 
 try:
-    import pypdfium2 as pdfium
+    import pypdfium2 as pdfium  # noqa: F401 -- import-checked here so the error below fires early
 except ImportError:
     sys.exit("HATA: 'pypdfium2' gerekli. Kurulum: pip install -r backend/requirements-dev.txt")
 
@@ -44,65 +50,6 @@ DEFAULT_CORPUS = os.path.join(
     os.path.dirname(__file__), "..", "datasets", "resmi_yazisma",
     "00_gelen_kaynaklar", "cevap_yazisi",
 )
-RENDER_DPI = 300
-
-
-def _load_ground_truth(path: str) -> dict:
-    with open(path, encoding="utf-8") as fh:
-        data = json.load(fh)
-    data.pop("_meta", None)
-    return data
-
-
-def _confusion(predicted: bool, actual: bool) -> str:
-    if predicted and actual:
-        return "tp"
-    if predicted and not actual:
-        return "fp"
-    if not predicted and actual:
-        return "fn"
-    return "tn"
-
-
-def _precision_recall(counts: dict) -> tuple[float, float]:
-    tp, fp, fn = counts["tp"], counts["fp"], counts["fn"]
-    precision = tp / (tp + fp) if (tp + fp) else float("nan")
-    recall = tp / (tp + fn) if (tp + fn) else float("nan")
-    return precision, recall
-
-
-def rasterise(pdf_bytes: bytes) -> list:
-    """Rasterise every page of a PDF at RENDER_DPI -- every page, not just
-    the first, matching production (see BaseDocumentExtractor.extract's own
-    raster_cache, shared across every page of a document)."""
-    scale = RENDER_DPI / 72
-    document = pdfium.PdfDocument(pdf_bytes)
-    try:
-        return [page.render(scale=scale).to_pil() for page in document]
-    finally:
-        document.close()
-
-
-def _has_no_text_layer(pdf_bytes: bytes) -> bool:
-    """Cheap filter: only genuine scans exercise the OCR path detect_marks
-    targets. A born-digital PDF is never rasterised in production at all
-    (see PdfiumExtractor/OpenDataLoaderExtractor's own `supports()`), so
-    running detection against one here would measure something production
-    never does."""
-    document = pdfium.PdfDocument(pdf_bytes)
-    try:
-        for index, page in enumerate(document):
-            if index >= 3:
-                break
-            text_page = page.get_textpage()
-            try:
-                if len(text_page.get_text_range().strip()) >= 20:
-                    return False
-            finally:
-                text_page.close()
-        return True
-    finally:
-        document.close()
 
 
 def main() -> int:
@@ -130,11 +77,11 @@ def main() -> int:
     if not paths:
         sys.exit(f"HATA: '{args.corpus}' içinde .pdf bulunamadı.")
 
-    ground_truth = _load_ground_truth(args.ground_truth) if args.ground_truth else {}
+    ground_truth = load_ground_truth(args.ground_truth) if args.ground_truth else {}
     # tp/fp/fn/tn counts per kind, page 1 only -- ground truth was labelled
     # from page 1 alone, so scoring later pages against it would be scoring
     # against nothing and silently inflate false negatives.
-    confusion = {"signature": Counter(), "stamp": Counter()}
+    confusion_by_kind = {"signature": Counter(), "stamp": Counter()}
 
     kind_totals = Counter()
     docs_with_any_mark = 0
@@ -149,8 +96,8 @@ def main() -> int:
         with open(path, "rb") as handle:
             pdf_bytes = handle.read()
 
-        if not _has_no_text_layer(pdf_bytes):
-            continue  # not a scan -- production never rasterises this either
+        if not should_rasterise(pdf_bytes):
+            continue  # not a scan, and not Class A either -- production never rasterises this
         docs_scanned += 1
 
         doc_started = time.time()
@@ -171,7 +118,7 @@ def main() -> int:
             for kind in ("signature", "stamp"):
                 predicted = kind in page_1_kinds
                 actual = bool(ground_truth[name].get(f"has_{kind}"))
-                confusion[kind][_confusion(predicted, actual)] += 1
+                confusion_by_kind[kind][confusion(predicted, actual)] += 1
             gt_marker = "  [etiketli]"
 
         print(
@@ -196,8 +143,8 @@ def main() -> int:
         print(f"=== Kesinlik/duyarlılık -- {labelled} etiketli belge, yalnızca 1. sayfa ===")
         print(f"{'tür':12} {'kesinlik':>10} {'duyarlılık':>12} {'tp':>4} {'fp':>4} {'fn':>4} {'tn':>4}")
         for kind in ("signature", "stamp"):
-            counts = confusion[kind]
-            precision, recall = _precision_recall(counts)
+            counts = confusion_by_kind[kind]
+            precision, recall = precision_recall(counts)
             print(
                 f"{kind:12} {precision:>10.2f} {recall:>12.2f} "
                 f"{counts['tp']:>4} {counts['fp']:>4} {counts['fn']:>4} {counts['tn']:>4}"
