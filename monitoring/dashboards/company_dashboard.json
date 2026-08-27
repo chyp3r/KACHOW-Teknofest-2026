@@ -9,10 +9,10 @@
   "editable": true,
   "graphTooltip": 1,
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
-  "refresh": "30s",
+  "refresh": "1m",
   "timezone": "browser",
   "templating": {
     "list": [
@@ -83,6 +83,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -255,6 +256,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "noValue": "0",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
@@ -316,6 +318,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "noValue": "0",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
@@ -386,6 +389,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "noValue": "0",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,

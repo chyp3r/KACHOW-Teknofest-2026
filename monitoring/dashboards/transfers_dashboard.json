@@ -9,10 +9,10 @@
   "editable": true,
   "graphTooltip": 1,
   "time": {
-    "from": "now-6h",
+    "from": "now-7d",
     "to": "now"
   },
-  "refresh": "30s",
+  "refresh": "1m",
   "timezone": "browser",
   "templating": {
     "list": []
@@ -99,7 +99,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(kachow_artifact_transfers_total)"
+          "expr": "(sum(kachow_artifact_transfers_total)) or vector(0)"
         }
       ],
       "id": 2
@@ -165,7 +165,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(kachow_artifact_transfers_total{result=\"success\"}) / clamp_min(sum(kachow_artifact_transfers_total), 0.0001)"
+          "expr": "(sum(kachow_artifact_transfers_total{result=\"success\"}) / clamp_min(sum(kachow_artifact_transfers_total), 0.0001)) or vector(0)"
         }
       ],
       "id": 3
@@ -226,7 +226,7 @@
             "uid": "prometheus"
           },
           "refId": "A",
-          "expr": "sum(kachow_transfer_policy_denials_total)"
+          "expr": "(sum(kachow_transfer_policy_denials_total)) or vector(0)"
         }
       ],
       "id": 4
@@ -260,6 +260,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -370,6 +371,7 @@
       },
       "fieldConfig": {
         "defaults": {
+          "noValue": "0",
           "custom": {
             "align": "auto",
             "cellOptions": {
@@ -458,6 +460,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "noValue": "0",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
@@ -519,6 +522,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "noValue": "0",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
@@ -580,6 +584,7 @@
           "color": {
             "mode": "palette-classic"
           },
+          "noValue": "0",
           "custom": {
             "drawStyle": "line",
             "lineWidth": 2,
