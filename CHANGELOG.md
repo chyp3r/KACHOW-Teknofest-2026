@@ -3,6 +3,15 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Eklendi
+- **NER PoC script'i (`scripts/ner_poc.py`).** `entities[]` alanı için ayrı bir
+  dedicated NER modelinin (Türkçe BERT tabanlı) mevcut LLM çıktısına karşı
+  nitel karşılaştırması -- backend'in `requirements.txt`'ine eklenmez, ayrı
+  bir venv'de çalışır. Bulgu: dedicated model mevcut LLM round-trip'ini
+  KALDIRMAZ (diğer ~11 alan için o çağrı zaten gerekli) ve tarih/sayı gibi
+  alanları yakalamıyor (yalnızca PER/ORG/LOC) -- bu yüzden gecikme/maliyet
+  düşürmek için değil, yalnızca şema sadeleştirmek isteniyorsa değerli olabilir.
+
 ### Değiştirildi
 - **Belge analizinde LOCAL_MODE=false için hızlı-katman-önce cascade.**
   `analyze_node` artık Evren/cloud modunda (LOCAL_MODE=false) önce `llm-fast`
