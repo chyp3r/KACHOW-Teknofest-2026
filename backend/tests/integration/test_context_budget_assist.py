@@ -64,3 +64,44 @@ async def test_an_oversized_summary_and_backlog_do_not_silently_overflow(
     conversational_turns = [m for m in sent_messages if m["role"] in ("user", "assistant")]
     # Bounded below the full seeded backlog (40) plus this turn's own message.
     assert len(conversational_turns) < len(long_history) + 1
+
+
+@pytest.mark.asyncio
+async def test_context_usage_is_reported_against_the_providers_window(
+    fake_llm, fake_fast_llm
+):
+    """`details.context_usage.total`, aktif sağlayıcının bağlam penceresidir
+    (Ollama'da OLLAMA_NUM_CTX, Evren'de EVREN_NUM_CTX) -- sabit değil."""
+    fake_llm.stream_chunks = ["kısa yanıt"]
+    graph = _build_graph(fake_llm, fake_fast_llm)
+    config = {"configurable": {"thread_id": "context-usage-total"}}
+
+    result = await graph.ainvoke(
+        {"input_text": "Bana bu sistemde neler yapabileceğimi anlatır mısın", "document_id": None},
+        config=config,
+    )
+
+    usage = result["final_output"]["context_usage"]
+    assert usage["total"] == fake_llm.context_window
+    assert usage["used"] + usage["free"] == usage["total"]
+    assert {segment["key"] for segment in usage["segments"]} >= {"system", "input", "reserved"}
+
+
+@pytest.mark.asyncio
+async def test_a_wider_provider_window_grows_the_budget(fake_llm, fake_fast_llm, monkeypatch):
+    """Evren'in penceresine geçince bağlam bütçesi (available) buna göre büyür."""
+    from app.core.config import settings
+
+    monkeypatch.setattr(settings, "OLLAMA_NUM_CTX", settings.EVREN_NUM_CTX)
+    fake_llm.stream_chunks = ["kısa yanıt"]
+    graph = _build_graph(fake_llm, fake_fast_llm)
+    config = {"configurable": {"thread_id": "context-usage-wide"}}
+
+    result = await graph.ainvoke(
+        {"input_text": "Bana bu sistemde neler yapabileceğimi anlatır mısın", "document_id": None},
+        config=config,
+    )
+
+    usage = result["final_output"]["context_usage"]
+    assert usage["total"] == settings.EVREN_NUM_CTX
+    assert usage["free"] > 200_000

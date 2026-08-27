@@ -51,6 +51,9 @@ services:
       - EVREN_ROUTER_MODEL=${EVREN_ROUTER_MODEL:-router}
       - EVREN_EMBED_MODEL=${EVREN_EMBED_MODEL:-bge-m3-embed}
       - EVREN_REQUEST_TIMEOUT_SECONDS=${EVREN_REQUEST_TIMEOUT_SECONDS:-1800}
+      # Evren'in bağlam penceresi -- bağlam bütçesi ve sohbet göstergesi
+      # LOCAL_MODE=false iken buna göre boyutlanır.
+      - EVREN_NUM_CTX=${EVREN_NUM_CTX:-262144}
       - EVREN_QDRANT_URL=${EVREN_QDRANT_URL:-}
       - EVREN_QDRANT_API_KEY=${EVREN_QDRANT_API_KEY:-}
       # AI iş akışı zaman aşımları (sn). Uzun "deep" koşuları yerelde erken

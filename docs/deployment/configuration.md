@@ -38,7 +38,7 @@ Depolama mekanizması iki şekilde konfigüre edilebilir:
 Mevzuat-mcp'nin (mevzuat.gov.tr) istek başına ne zaman kullanılacağını asıl belirleyen `LOCAL_MODE`'dur (bkz. `app.core.config.Settings.LOCAL_MODE`), tek başına `MEVZUAT_SOURCE` değil:
 
 - **`LOCAL_MODE=true` (varsayılan geliştirme değeri):** mevzuat-mcp yalnızca boot açılışında `CURATED_LEGISLATION`'daki 7 kanunu ısıtmak için kullanılır. Analiz, taslak ve chat aşamalarının hiçbiri istek başına ağa çıkmaz -- ölçüm: local modda mevzuat aramasının kullanıcı deneyimini bozacak kadar yavaş olması.
-- **`LOCAL_MODE=false`:** evrak analizi, taslak oluşturma ve chat'in hepsi, yerel korpüs zayıf/boş kaldığında canlı MCP'ye eskale eder (`MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS` ile sınırlı). Ayrıca `MEVZUAT_MCP_ENABLED=true` ve sunucunun kayıtlı olması gerekir (`MEVZUAT_SOURCE=mcp` veya `MEVZUAT_MCP_ENABLED` -- ikisinden biri sunucuyu kaydeder).
+- **`LOCAL_MODE=false`:** evrak analizi, taslak oluşturma ve chat'in hepsi, yerel korpüs zayıf/boş kaldığında canlı MCP'ye eskale eder (`MEVZUAT_LIVE_SEARCH_TIMEOUT_SECONDS` ile sınırlı). Ayrıca `MEVZUAT_MCP_ENABLED=true` ve sunucunun kayıtlı olması gerekir (`MEVZUAT_SOURCE=mcp` veya `MEVZUAT_MCP_ENABLED` -- ikisinden biri sunucuyu kaydeder). Bu modda bağlam penceresi Ollama'nın 8192'si yerine `EVREN_NUM_CTX`'tir (varsayılan 262144); assist adımının bağlam bütçesi ve sohbetteki bağlam doluluk göstergesi buna göre boyutlanır.
 
 `MEVZUAT_SOURCE` (`mcp` veya `local`) yalnızca **evrak analizinin boot-warm indeksinin** hangi kaynaktan besleneceğini seçer (canlı MCP ile ısıtılmış mı, yoksa committed korpüs mü) -- `LOCAL_MODE`'dan bağımsız, ayrı bir anahtardır.
 

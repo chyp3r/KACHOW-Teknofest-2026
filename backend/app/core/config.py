@@ -389,6 +389,12 @@ class Settings(BaseSettings):
     #: donanımda uzun süren üretimler 1800s'ye kadar sürebilir.
     EVREN_REQUEST_TIMEOUT_SECONDS: float = 1800.0
 
+    #: Evren'in bağlam penceresi (llm-large). Yerel Ollama'nın 8192'sinin
+    #: aksine çok daha geniştir; bağlam bütçesi ve sohbetteki bağlam
+    #: göstergesi LOCAL_MODE=False iken bu değere göre boyutlanır (bkz.
+    #: ``BaseLLMClient.context_window``).
+    EVREN_NUM_CTX: int = 262144
+
     #: Takım başına izole edilmiş, Evren'in özel Qdrant kümesi
     #: (evren-vektor.ssyz.org.tr). LOCAL_MODE=False olduğunda QDRANT_URL
     #: yerine kullanılır.

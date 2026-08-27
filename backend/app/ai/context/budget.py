@@ -6,7 +6,9 @@ class TokenBudget:
     """Bağlam penceresi taşmadan önce bir prompt'un harcayabileceği token sayısı.
 
     Attributes:
-        total: Modelin bağlam penceresi (``settings.OLLAMA_NUM_CTX``).
+        total: Aktif sağlayıcının bağlam penceresi
+            (``BaseLLMClient.context_window`` -- Ollama'da ``OLLAMA_NUM_CTX``,
+            Evren'de ``EVREN_NUM_CTX``).
         reserved_for_completion: Modelin kendi cevabı için ayrılan token
             sayısı (genelde çağrının ``max_tokens`` değeri). Tüm pencereyi
             prompt'a harcamak cevaba yer bırakmaz.

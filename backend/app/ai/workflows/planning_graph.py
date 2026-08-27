@@ -1161,8 +1161,13 @@ def create_planning_graph(
         fixed_cost = llm_client.count_tokens(
             assistant_agent.system_prompt
         ) + llm_client.count_tokens(state["input_text"])
+        # Aktif sağlayıcının gerçek bağlam penceresi: yerel Ollama'da
+        # OLLAMA_NUM_CTX (8192), Evren'de EVREN_NUM_CTX (262144). Hem
+        # geçmiş penceresi bütçesi hem de sohbetteki bağlam göstergesi buna
+        # göre boyutlanır (bkz. BaseLLMClient.context_window).
+        context_window = llm_client.context_window
         context_budget = TokenBudget(
-            total=settings.OLLAMA_NUM_CTX,
+            total=context_window,
             reserved_for_completion=ASSIST_COMPLETION_RESERVE_TOKENS + fixed_cost,
         )
 
@@ -1233,9 +1238,9 @@ def create_planning_graph(
         ]
         _usage_used = sum(segment["tokens"] for segment in _usage_segments)
         context_usage = {
-            "total": settings.OLLAMA_NUM_CTX,
-            "used": min(_usage_used, settings.OLLAMA_NUM_CTX),
-            "free": max(settings.OLLAMA_NUM_CTX - _usage_used, 0),
+            "total": context_window,
+            "used": min(_usage_used, context_window),
+            "free": max(context_window - _usage_used, 0),
             "segments": [s for s in _usage_segments if s["tokens"] > 0],
         }
 
