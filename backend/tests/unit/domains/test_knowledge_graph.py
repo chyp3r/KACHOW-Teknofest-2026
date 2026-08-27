@@ -305,6 +305,41 @@ def test_entities_produce_entity_nodes_and_bahseder_edges():
     assert all(e.source_kind == "llm" for e in edges)
 
 
+def test_a_bare_year_entity_mention_is_skipped_without_raising():
+    """`resolve_entities` canonicalizes a bare 4+ digit number (e.g. a stray
+    year) to nothing and omits it from its result -- `ensure_entity` must
+    skip such a mention rather than KeyError on the missing lookup."""
+    entry = _entry("uploads/y.pdf", entities=["2025", "NATO"])
+
+    graph = build_knowledge_graph([entry])
+
+    entity_nodes = [n for n in graph.nodes if n.node_type == "entity"]
+    assert len(entity_nodes) == 1
+    assert entity_nodes[0].label == "NATO"
+    edges = [e for e in graph.edges if e.edge_type == "bahseder"]
+    assert len(edges) == 1
+
+
+def test_a_muhatap_that_canonicalizes_to_nothing_is_skipped_without_raising():
+    entry = _entry("uploads/z.pdf", muhatap="2025", entities=["NATO"])
+
+    graph = build_knowledge_graph([entry])
+
+    edge_types = {e.edge_type for e in graph.edges}
+    assert "muhatap" not in edge_types
+    assert "bahseder" in edge_types
+
+
+def test_a_konu_that_canonicalizes_to_nothing_is_skipped_without_raising():
+    entry = _entry("uploads/zz.pdf", konu="2025")
+
+    graph = build_knowledge_graph([entry])
+
+    konu_nodes = [n for n in graph.nodes if n.node_type == "konu"]
+    assert konu_nodes == []
+    assert not any(e.edge_type == "konu" for e in graph.edges)
+
+
 def test_two_documents_sharing_a_canonical_entity_get_one_node_two_edges_no_doc_doc_edge():
     entries = [
         _entry("uploads/f.pdf", entities=["NATO"]),

@@ -2,6 +2,15 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
+## [Unreleased]
+### Düzeltildi
+- **Belge grafiğinde `KeyError` çökmesi.** `knowledge_graph.py`'deki
+  `ensure_entity`/`ensure_konu`, `resolve_entities()`'in bilinçli olarak
+  atladığı (boş/None'a çözülen) ham bir entity dizgesine (örn. çıplak bir
+  yıl "2025") koşulsuz sözlük erişimi yapıyordu; `GET /document-graph`
+  endpoint'i böyle bir belge için 500 dönüyordu. Artık bu tür mentionlar
+  sessizce atlanıyor.
+
 ## [3.57]
 ### Eklendi
 - Canlı mevzuat sorguları (mevzuat.gov.tr) için MCP entegrasyonu, dayanıklılık/önbellek mekanizması ve gecikme metrikleri.
