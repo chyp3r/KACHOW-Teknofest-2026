@@ -952,9 +952,17 @@ def create_revise_graph(
         # "Sen karar ver" (AUTO_ANSWER) ile ertelenenler burada değil --
         # onlar metinde köşeli parantez olarak kalır (taslak akışıyla aynı),
         # yalnızca build_missing_info_request tarafından yeniden sorulmaz.
+        # State üzerinden gelir (run_revise onu active_draft'tan seed'ler);
+        # doğrudan graf çağrısı (bkz. testler) state'e koymadıysa yine de
+        # taslak sürümünün üstünden okunur.
+        resolved_answers = (
+            state.get("resolved_placeholder_answers")
+            or active_draft.resolved_placeholder_answers
+            or {}
+        )
         resolved_real = {
             key: value
-            for key, value in (state.get("resolved_placeholder_answers") or {}).items()
+            for key, value in resolved_answers.items()
             if value and value != AUTO_ANSWER
         }
         brief_fills = resolve_placeholders_from_brief(draft_text, active_draft.writing_brief)
@@ -1011,7 +1019,7 @@ def create_revise_graph(
                 # ertelenmiş bir yer tutucu revizyonda yeniden sorulmaz
                 # (yine de doldurulmamis_yer_tutucu ile NEEDS_HUMAN_APPROVAL'a
                 # taşınabilir -- taslak akışıyla birebir aynı davranış).
-                resolved_keys=state.get("resolved_placeholder_answers") or {},
+                resolved_keys=resolved_answers,
                 writing_brief=active_draft.writing_brief,
             )
 
