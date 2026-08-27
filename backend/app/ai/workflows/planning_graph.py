@@ -1210,6 +1210,35 @@ def create_planning_graph(
                 len(history),
             )
 
+        # Bağlam penceresi doluluk dökümü -- frontend'in sohbet alanındaki
+        # dairesel göstergesini besler ("bağlam penceresinin ne kadarı ne
+        # için kullanıldı"). Modelin gerçekten kullandığı bütçe kalemleriyle
+        # birebir: sabit maliyet (sistem yönergesi + kullanıcı mesajı),
+        # context_builder'ın yerleştirdiği bloklar, seçilen geçmiş penceresi
+        # ve tamamlama için ayrılan pay. `count_tokens` gerçek üretim
+        # çağrısının boyutlandırıldığı aynı tahmin edicidir.
+        _ct = llm_client.count_tokens
+        _usage_segments = [
+            {"key": "system", "label": "Sistem yönergesi",
+             "tokens": _ct(assistant_agent.system_prompt)},
+            {"key": "document_context", "label": "Belge bağlamı",
+             "tokens": _ct(assembled.get("document_context")) if document_id else 0},
+            {"key": "history_summary", "label": "Geçmiş özeti",
+             "tokens": _ct(assembled.get("history_summary")) if not is_small_talk_turn else 0},
+            {"key": "history", "label": "Sohbet geçmişi",
+             "tokens": sum(_ct(str(turn.get("content", ""))) for turn in history)},
+            {"key": "input", "label": "Güncel mesaj", "tokens": _ct(state["input_text"])},
+            {"key": "reserved", "label": "Yanıt için ayrılan",
+             "tokens": ASSIST_COMPLETION_RESERVE_TOKENS},
+        ]
+        _usage_used = sum(segment["tokens"] for segment in _usage_segments)
+        context_usage = {
+            "total": settings.OLLAMA_NUM_CTX,
+            "used": min(_usage_used, settings.OLLAMA_NUM_CTX),
+            "free": max(settings.OLLAMA_NUM_CTX - _usage_used, 0),
+            "segments": [s for s in _usage_segments if s["tokens"] > 0],
+        }
+
         referenced_anchor: dict[str, str] = {}
 
         def _record_referenced_anchor(anchor: str) -> None:
@@ -1392,6 +1421,7 @@ def create_planning_graph(
                 "reply": reply,
                 "status": StepStatus.COMPLETED,
                 "history": [{"role": "assistant", "content": reply}],
+                "context_usage": context_usage,
             }
             if flagged:
                 result["flagged"] = True
@@ -2120,6 +2150,13 @@ def create_planning_graph(
             "assist": _pick("assist_result"),
             "transfer": transfer_result,
         }
+        # Bağlam penceresi doluluk dökümü (yalnızca assist turu üretir; bkz.
+        # _run_assist). Frontend'in dairesel göstergesi son bilinen değeri
+        # koruduğu için diğer turlarda alanın olmaması sorun değil.
+        assist_context_usage = _pick("assist_result").get("context_usage")
+        if assist_context_usage:
+            output["context_usage"] = assist_context_usage
+
         if draft_result.get("conflicts") or draft_result.get("changelog"):
             output["revision"] = {
                 "conflicts": draft_result.get("conflicts") or [],

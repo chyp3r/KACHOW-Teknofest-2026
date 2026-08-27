@@ -4,12 +4,14 @@ import { AlertCircle, GitBranch, History, PauseCircle, Plus, RotateCcw } from "l
 import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
+import { ContextUsageRing } from "../features/chat/ContextUsageRing";
 import { ConversationHistoryDrawer } from "../features/chat/ConversationHistoryDrawer";
 import { guardrailDecisionLabel, formatGuardrailReason } from "../features/chat/guardrailLabels";
 import { MessageList } from "../features/chat/MessageList";
 import type {
   ChatMessage,
   ChatSession,
+  ContextUsage,
   GuardrailEvent,
   InterruptState,
   ToolCallEvent,
@@ -157,6 +159,17 @@ export function ChatsPage({
     }, 50);
   };
 
+  // Bağlam penceresi doluluk dökümü -- son assist turunun details'inden
+  // (backend planning_graph._compile_final_output). Bir taslak/revizyon
+  // turu bunu üretmediğinden en son bilinen değer korunur.
+  const contextUsage = (() => {
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const usage = messages[index]?.details?.context_usage as ContextUsage | undefined;
+      if (usage && typeof usage.total === "number") return usage;
+    }
+    return null;
+  })();
+
   const page = (
     <div className="chat-page">
       <PageHeader
@@ -260,6 +273,11 @@ export function ChatsPage({
         />
         </div>
         <div className="composer-dock">
+          {!interrupt && contextUsage && (
+            <div className="composer-context-usage">
+              <ContextUsageRing usage={contextUsage} />
+            </div>
+          )}
           {interrupt ? (
             <div className="composer-paused-state" role="status">
               <PauseCircle size={18} />
