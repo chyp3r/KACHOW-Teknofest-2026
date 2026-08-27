@@ -186,3 +186,50 @@ describe("MarkdownMessage trailing sources", () => {
     expect(container.querySelector(".citation-trailing")).toBeNull();
   });
 });
+
+describe("MarkdownMessage during the typewriter reveal", () => {
+  // The sources block is the last thing in the reply, so a partially revealed
+  // `text` contains no citations at all -- markers already on screen used to
+  // sit as bare "[1]" until the animation finished, then snap into badges.
+  const FULL = [
+    "Staj yapmıştır [1]. Mezuniyeti 2027'dir [2].",
+    "",
+    "KAYNAKLAR:",
+    "[1] (s. 1) ASELSAN, Turkcell, OBSS Technology",
+    "[2] (s. 2) June 2027 (Expected)",
+  ].join("\n");
+
+  it("badges a marker that is already visible, before the block is revealed", () => {
+    const { container } = render(
+      <MarkdownMessage text="Staj yapmıştır [1]." citationSource={FULL} />,
+    );
+
+    expect(proseBadges(container)).toEqual(["1"]);
+    expect(container.textContent).not.toContain("[1]");
+  });
+
+  it("does not trail a citation whose marker has not been reached yet", () => {
+    const { container } = render(
+      <MarkdownMessage text="Staj yapmıştır [1]." citationSource={FULL} />,
+    );
+
+    // [2] is referenced by the finished answer, so it must not flash at the
+    // bottom as an unreferenced source mid-animation.
+    expect(container.querySelector(".citation-trailing")).toBeNull();
+  });
+
+  it("renders only the revealed slice, never the rest of the reply", () => {
+    const { container } = render(
+      <MarkdownMessage text="Staj yapmıştır [1]." citationSource={FULL} />,
+    );
+
+    expect(container.textContent).not.toContain("Mezuniyeti");
+    expect(container.textContent).not.toContain("KAYNAKLAR");
+  });
+
+  it("behaves exactly as before when no separate source is given", () => {
+    const { container } = render(<MarkdownMessage text={FULL} />);
+
+    expect(proseBadges(container)).toEqual(["1", "2"]);
+  });
+});

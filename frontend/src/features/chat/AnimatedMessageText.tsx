@@ -60,7 +60,11 @@ export function AnimatedMessageText({
   return (
     <div className="markdown-content">
       <div aria-hidden="true">
-        <MarkdownMessage text={text.slice(0, visibleLength)} onCitationClick={onCitationClick} />
+        <MarkdownMessage
+          text={text.slice(0, visibleLength)}
+          citationSource={text}
+          onCitationClick={onCitationClick}
+        />
         <span className="streaming-caret" />
       </div>
       <span className="sr-only">{text}</span>

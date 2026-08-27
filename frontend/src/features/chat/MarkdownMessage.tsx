@@ -160,12 +160,33 @@ function buildComponents(
  */
 export function MarkdownMessage({
   text,
+  citationSource,
   onCitationClick,
 }: {
   text: string;
+  /**
+   * The complete reply, when `text` is only the part revealed so far.
+   *
+   * The sources block sits at the very end, so parsing citations out of a
+   * partially-revealed `text` finds none -- and the markers already on screen
+   * render as bare `[1]` until the typewriter reaches the end, then snap into
+   * badges. Parsing them from the whole reply instead resolves every badge
+   * from the first frame.
+   */
+  citationSource?: string;
   onCitationClick?: (target: CitationTarget) => void;
 }) {
-  const { body, citations } = useMemo(() => parseReplyCitations(text), [text]);
+  const source = citationSource ?? text;
+  const { body: fullBody, citations } = useMemo(
+    () => parseReplyCitations(source),
+    [source],
+  );
+  // Only the revealed slice is rendered; `fullBody` above exists to decide
+  // which citations the finished answer references.
+  const body = useMemo(
+    () => (source === text ? fullBody : parseReplyCitations(text).body),
+    [source, text, fullBody],
+  );
   const components = useMemo(
     () => buildComponents(citations, onCitationClick),
     [citations, onCitationClick],
@@ -176,14 +197,17 @@ export function MarkdownMessage({
   // never referenced: dropping it would make the citation vanish outright --
   // the exact failure that made this feature look broken -- so those trail the
   // answer as a single row of badges. Not a bibliography, just the leftovers.
+  // Measured against the finished answer, not the revealed slice: otherwise a
+  // marker the typewriter has not reached yet counts as unreferenced, and its
+  // badge appears at the bottom only to vanish once the text catches up.
   const orphans = useMemo(() => {
     const referenced = new Set(
-      [...body.matchAll(MARKER_PATTERN)].map((match) => Number(match[1])),
+      [...fullBody.matchAll(MARKER_PATTERN)].map((match) => Number(match[1])),
     );
     return [...citations.values()]
       .filter((citation) => !referenced.has(citation.index))
       .sort((left, right) => left.index - right.index);
-  }, [body, citations]);
+  }, [fullBody, citations]);
 
   return (
     <>
