@@ -194,6 +194,13 @@ class DraftVersion:
     #: olarak" hatasının yaptığı gibi belirtilmemiş bir yöne geri
     #: kaymamalıdır.
     writing_brief: dict[str, Any] = dataclasses.field(default_factory=dict)
+    #: Bu taslak soyunda daha önceki bir eksik-bilgi (``human_gate``) turunda
+    #: verilmiş cevaplar; ``InfoQuestion.key`` -> gerçek değer, ya da kullanıcı
+    #: "Sen karar ver" seçtiyse ``AUTO_ANSWER``. ``writing_brief`` ile aynı
+    #: sebeple taşınır: sonraki bir ``revize`` turunun
+    #: ``build_missing_info_request`` çağrısı, kullanıcının zaten cevapladığı
+    #: veya bilerek ertelediği bir yer tutucuyu tekrar sormamalıdır.
+    resolved_placeholder_answers: dict[str, Any] = dataclasses.field(default_factory=dict)
     status: str = ""
     rejection_reason: str = ""
     conflicts: tuple[dict[str, Any], ...] = ()
@@ -409,6 +416,7 @@ def _draft_version_from_result(
         correspondence_type_source=draft_result.get("correspondence_type_source") or "",
         correspondence_sub_genre=draft_result.get("correspondence_sub_genre") or "",
         writing_brief=draft_result.get("writing_brief") or {},
+        resolved_placeholder_answers=draft_result.get("resolved_placeholder_answers") or {},
         status=str(draft_result.get("status") or ""),
         conflicts=tuple(draft_result.get("conflicts") or ()),
         changelog=draft_result.get("changelog") or {},
