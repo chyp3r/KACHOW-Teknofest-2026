@@ -41,14 +41,17 @@ export function ChatComposer({
   const [text, setText] = useState("");
   const [level, setLevel] = useState<ReasoningLevel>("balanced");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // The textarea content at the moment dictation started. Fixed for the whole
+  // session -- the hook now emits the FULL transcript on every event, so each
+  // update is `base + current transcript`, never an append onto the previous
+  // result (which double-wrote the final chunk when the mic was stopped).
   const dictationBaseRef = useRef("");
-  const handleTranscript = useCallback((transcript: string, isFinal: boolean) => {
+  const handleTranscript = useCallback((transcript: string) => {
     setText(() => {
       const base = dictationBaseRef.current;
+      if (!transcript) return base;
       const needsSpace = base.length > 0 && !/[\s\n]$/.test(base);
-      const next = `${base}${needsSpace ? " " : ""}${transcript}`;
-      if (isFinal) dictationBaseRef.current = next;
-      return next;
+      return `${base}${needsSpace ? " " : ""}${transcript}`;
     });
   }, []);
   const {
