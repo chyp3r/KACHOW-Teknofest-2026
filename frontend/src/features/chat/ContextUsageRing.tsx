@@ -1,10 +1,12 @@
-import { useId } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ContextUsage } from "../../types/chat";
 
 // Claude'un bağlam göstergesi gibi: modelin bağlam penceresinin ne kadarının
 // ne için dolu olduğunu gösteren küçük bir halka. Veri backend'den gelir
 // (final_result.details.context_usage -> planning_graph._run_assist); yalnızca
 // assist turları üretir, o yüzden `usage` null iken bileşen hiç render olmaz.
+// Değer her tur değiştiğinde halka ve yüzde animasyonlu şekilde yükselir/iner:
+// yaylar CSS geçişiyle, ortadaki yüzde bir rAF tween'iyle.
 
 const SEGMENT_COLORS: Record<string, string> = {
   system: "var(--accent-blue)",
@@ -18,21 +20,70 @@ const SEGMENT_COLORS: Record<string, string> = {
 const RADIUS = 15;
 const STROKE = 5;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+const TWEEN_MS = 600;
+
+const easeOutCubic = (t: number) => 1 - (1 - t) ** 3;
+
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+
+/** `target`'a doğru yumuşakça animasyonla ilerleyen bir sayı döndürür.
+ * İlk montajda 0'dan başlar (sayaç yukarı doğru sayar). */
+function useTweenedNumber(target: number): number {
+  const [value, setValue] = useState(0);
+  const fromRef = useRef(0);
+  const frameRef = useRef<number>();
+
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      setValue(target);
+      return;
+    }
+    const from = fromRef.current;
+    const start = performance.now();
+    const tick = (now: number) => {
+      const progress = Math.min(1, (now - start) / TWEEN_MS);
+      const next = from + (target - from) * easeOutCubic(progress);
+      setValue(next);
+      fromRef.current = next;
+      if (progress < 1) frameRef.current = requestAnimationFrame(tick);
+    };
+    frameRef.current = requestAnimationFrame(tick);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
+  }, [target]);
+
+  return value;
+}
 
 export function ContextUsageRing({ usage }: { usage: ContextUsage | null | undefined }) {
   const titleId = useId();
+  const total = usage && usage.total > 0 ? usage.total : 1;
+  const targetPercent = usage ? Math.min(100, (usage.used / total) * 100) : 0;
+  const animatedPercent = useTweenedNumber(targetPercent);
+
+  // İlk görünüşte yaylar boştan gerçek uzunluğa doğru çizilsin.
+  const [drawn, setDrawn] = useState(false);
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   if (!usage || usage.total <= 0) return null;
 
-  const percent = Math.min(100, Math.round((usage.used / usage.total) * 100));
+  const shownPercent = Math.round(animatedPercent);
   const visible = usage.segments.filter((segment) => segment.tokens > 0);
 
   let offset = 0;
   const arcs = visible.map((segment) => {
     const fraction = Math.min(1, segment.tokens / usage.total);
-    const length = fraction * CIRCUMFERENCE;
+    const length = drawn ? fraction * CIRCUMFERENCE : 0;
     const arc = (
       <circle
         key={segment.key}
+        className="context-usage-arc"
         cx="18"
         cy="18"
         r={RADIUS}
@@ -40,16 +91,16 @@ export function ContextUsageRing({ usage }: { usage: ContextUsage | null | undef
         stroke={SEGMENT_COLORS[segment.key] ?? "var(--accent-blue)"}
         strokeWidth={STROKE}
         strokeDasharray={`${length} ${CIRCUMFERENCE - length}`}
-        strokeDashoffset={-offset}
+        strokeDashoffset={drawn ? -offset : 0}
       />
     );
-    offset += length;
+    offset += drawn ? fraction * CIRCUMFERENCE : 0;
     return arc;
   });
 
   return (
     <details className="context-usage">
-      <summary aria-label={`Bağlam penceresi: %${percent} dolu`}>
+      <summary aria-label={`Bağlam penceresi: %${shownPercent} dolu`}>
         <svg
           className="context-usage-ring"
           width="36"
@@ -58,7 +109,7 @@ export function ContextUsageRing({ usage }: { usage: ContextUsage | null | undef
           role="img"
           aria-labelledby={titleId}
         >
-          <title id={titleId}>Bağlam penceresi %{percent} dolu</title>
+          <title id={titleId}>Bağlam penceresi %{shownPercent} dolu</title>
           <circle
             cx="18"
             cy="18"
@@ -75,7 +126,7 @@ export function ContextUsageRing({ usage }: { usage: ContextUsage | null | undef
             fontSize="9"
             fontWeight="600"
           >
-            %{percent}
+            %{shownPercent}
           </text>
         </svg>
         <span className="context-usage-caption">

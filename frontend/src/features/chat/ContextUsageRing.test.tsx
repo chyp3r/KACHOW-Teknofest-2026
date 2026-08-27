@@ -21,9 +21,10 @@ describe("ContextUsageRing", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the used percentage and the token caption", () => {
+  it("shows the used percentage and the token caption", async () => {
     render(<ContextUsageRing usage={usage} />);
-    expect(screen.getByText("%50")).toBeInTheDocument();
+    // Yüzde 0'dan hedefe doğru animasyonla sayar; nihai değeri bekle.
+    expect(await screen.findByText("%50")).toBeInTheDocument();
     expect(
       screen.getByText(/4\.096 \/ 8\.192 token/),
     ).toBeInTheDocument();
