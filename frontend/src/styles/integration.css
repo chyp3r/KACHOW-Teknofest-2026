@@ -393,6 +393,19 @@
   color: var(--text-primary);
 }
 
+/* Citations the model listed but never referenced inline -- offered under the
+   answer so a source is never lost. See MarkdownMessage.tsx. */
+.citation-footer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-3) 0 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-default);
+}
+.citation-footer-label { color: var(--text-muted); }
+
 /* Source view: the cited page, with the matched passage highlighted. */
 .source-peek-drawer { width: min(46rem, 100vw); padding: var(--space-5); gap: var(--space-3); }
 .source-peek-drawer > div { display: flex; flex-direction: column; gap: var(--space-3); }

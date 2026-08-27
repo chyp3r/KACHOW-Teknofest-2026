@@ -170,5 +170,51 @@ export function MarkdownMessage({
     () => buildComponents(citations, onCitationClick),
     [citations, onCitationClick],
   );
-  return <ReactMarkdown components={components}>{body}</ReactMarkdown>;
+
+  // A model that writes the sources block but forgets to place the markers in
+  // its prose is common enough that dropping those sources on the floor would
+  // make the whole feature look broken -- observed on a real reply that listed
+  // [1] under KAYNAKLAR and never referenced it. Anything unreferenced is
+  // offered below the answer instead, so a source is never silently lost.
+  const orphans = useMemo(() => {
+    const referenced = new Set(
+      [...body.matchAll(MARKER_PATTERN)].map((match) => Number(match[1])),
+    );
+    return [...citations.values()].filter((citation) => !referenced.has(citation.index));
+  }, [body, citations]);
+
+  return (
+    <>
+      <ReactMarkdown components={components}>{body}</ReactMarkdown>
+      {orphans.length > 0 && (
+        <p className="citation-footer">
+          <span className="citation-footer-label">Kaynaklar</span>
+          {orphans.map((citation) => {
+            const target: CitationTarget = {
+              page: citation.page,
+              quote: citation.quote,
+              index: citation.index,
+            };
+            const label = String(citation.index);
+            return onCitationClick ? (
+              <button
+                type="button"
+                className="page-citation page-citation-button"
+                key={citation.index}
+                onClick={() => onCitationClick(target)}
+                title={`Kaynağı göster: ${citation.quote}`}
+                aria-label={`Kaynak ${label}. Bu bilginin evraktaki kaynağını göster.`}
+              >
+                {label}
+              </button>
+            ) : (
+              <span className="page-citation" key={citation.index}>
+                {label}
+              </span>
+            );
+          })}
+        </p>
+      )}
+    </>
+  );
 }

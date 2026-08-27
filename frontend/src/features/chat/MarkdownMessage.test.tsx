@@ -66,8 +66,13 @@ describe("MarkdownMessage", () => {
       <MarkdownMessage text={"Eski [s. 3] biçim.\n\nKAYNAKLAR:\n[3] (s. 9) Alakasız."} />,
     );
 
-    const badges = [...container.querySelectorAll(".page-citation")].map((n) => n.textContent);
-    expect(badges).toEqual(["Sayfa 3"]);
+    // Scoped to the prose: citation 3 is genuinely unreferenced there (the
+    // legacy anchor is `[s. 3]`, not `[3]`), so it legitimately shows up in
+    // the unreferenced-sources footer below.
+    const inProse = [...container.querySelectorAll("p:not(.citation-footer) .page-citation")].map(
+      (n) => n.textContent,
+    );
+    expect(inProse).toEqual(["Sayfa 3"]);
   });
 
   it("stays a plain label when no click handler is given", () => {
@@ -97,5 +102,65 @@ describe("MarkdownMessage", () => {
     render(<MarkdownMessage text="**kalın** ve düz metin" />);
 
     expect(screen.getByText("kalın").tagName).toBe("STRONG");
+  });
+});
+
+describe("MarkdownMessage citation fallback", () => {
+  // Observed on a real reply: the model wrote the sources block but never
+  // placed [1] in its prose, so there was nothing to badge and the citation
+  // vanished entirely.
+  const NO_MARKERS = [
+    "Ortalama notu 3.83 olarak belirtilmiştir.",
+    "",
+    "KAYNAKLAR:",
+    "[1] (s. 1) GPA: 3.83 - Ranked 2nd out of 144 students",
+  ].join("\n");
+
+  it("offers a source the model listed but never referenced inline", () => {
+    const { container } = render(<MarkdownMessage text={NO_MARKERS} />);
+
+    const footer = container.querySelector(".citation-footer");
+    expect(footer).not.toBeNull();
+    expect(footer?.querySelector(".page-citation")?.textContent).toBe("1");
+    // The block itself still never reaches the reader as raw text.
+    expect(container.textContent).not.toContain("KAYNAKLAR:");
+  });
+
+  it("keeps the unreferenced source clickable", () => {
+    const onCitationClick = vi.fn();
+    render(<MarkdownMessage text={NO_MARKERS} onCitationClick={onCitationClick} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
+
+    expect(onCitationClick).toHaveBeenCalledWith(
+      expect.objectContaining({ index: 1, page: 1 }),
+    );
+  });
+
+  it("does not repeat a source that is already referenced inline", () => {
+    const { container } = render(
+      <MarkdownMessage text={"Cevap [1].\n\nKAYNAKLAR:\n[1] (s. 1) Kaynak."} />,
+    );
+
+    expect(container.querySelector(".citation-footer")).toBeNull();
+  });
+
+  it("lists only the sources that were missed", () => {
+    const { container } = render(
+      <MarkdownMessage
+        text={"Yalnızca ilki [1].\n\nKAYNAKLAR:\n[1] (s. 1) Bir.\n[2] (s. 2) İki."}
+      />,
+    );
+
+    const footerBadges = [
+      ...(container.querySelector(".citation-footer")?.querySelectorAll(".page-citation") ?? []),
+    ].map((node) => node.textContent);
+    expect(footerBadges).toEqual(["2"]);
+  });
+
+  it("shows no footer for a reply with no citations at all", () => {
+    const { container } = render(<MarkdownMessage text="Merhaba." />);
+
+    expect(container.querySelector(".citation-footer")).toBeNull();
   });
 });

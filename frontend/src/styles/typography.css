@@ -718,7 +718,8 @@ th {
   font-size: var(--text-overline);
   font-weight: var(--weight-semibold);
 }
-.chat-guardrail-removed-label {
+.chat-guardrail-removed-label,
+.citation-footer-label {
   font-size: var(--text-overline);
   font-weight: var(--weight-semibold);
   text-transform: uppercase;
