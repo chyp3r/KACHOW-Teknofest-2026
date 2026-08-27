@@ -24,6 +24,14 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   token sayılarıyla döker; sohbet alanında dairesel bir gösterge bunu okur.
 
 ### Değiştirildi
+- **Bağlam penceresi artık aktif sağlayıcıya göre boyutlanıyor.** Sabit
+  `OLLAMA_NUM_CTX` (8192) yerine `BaseLLMClient.context_window`: Ollama'da
+  `num_ctx`, Evren'de yeni `EVREN_NUM_CTX` (varsayılan 262144). `LOCAL_MODE=false`
+  iken assist adımının geçmiş penceresi bütçesi büyür ve sohbetteki bağlam
+  göstergesi doğru toplamı gösterir.
+- Sohbet bağlam halkası artık animasyonlu: değer her tur değiştiğinde yumuşakça
+  dolup boşalır (yaylarda CSS geçişi, yüzdede rAF tween; `prefers-reduced-motion`
+  altında kapalı).
 - Çıktı guardrail'i (`output_gate`) artık politikadaki `output_groundedness_threshold`
   değerini uyguluyor: dayanaklı iddia payı eşiği geçen bir yanıt olduğu gibi
   bırakılır. Önceden, MCP mevzuat metninden alınıp yığında bulunan ama
