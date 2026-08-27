@@ -364,8 +364,20 @@ export function DocumentAnalysisPanel({
         <details>
           <summary>İmza ve mühür</summary>
           <div className="guardrail-summary">
-            <StatusBadge tone={analysis.signature.is_signed ? "success" : "warning"}>
-              {analysis.signature.is_signed ? "İmzalı" : "İmza tespit edilmedi"}
+            <StatusBadge
+              tone={
+                analysis.signature.is_signed === null
+                  ? "neutral"
+                  : analysis.signature.is_signed
+                  ? "success"
+                  : "warning"
+              }
+            >
+              {analysis.signature.is_signed === null
+                ? "İmza kontrol edilmedi"
+                : analysis.signature.is_signed
+                ? "İmzalı"
+                : "İmza tespit edilmedi"}
             </StatusBadge>
             {analysis.signature.marks.length ? (
               <ul className="detail-list">
@@ -376,6 +388,10 @@ export function DocumentAnalysisPanel({
                   </li>
                 ))}
               </ul>
+            ) : analysis.signature.is_signed === null ? (
+              <p className="detail-empty">
+                Bu belge için imza/mühür tespiti çalıştırılmadı.
+              </p>
             ) : (
               <p className="detail-empty">
                 Sayfada imza, mühür veya el yazısı bölgesi tespit edilmedi.

@@ -112,13 +112,22 @@ class SignatureAssessmentSchema(BaseModel):
     asla yetkili bir alternatif değildir. Bkz. `DetectedMarkSchema`.
     """
 
-    is_signed: bool = Field(
-        default=False,
-        description="Sayfada en az bir imza şeklinde bölge tespit edildi mi.",
+    is_signed: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Sayfada en az bir imza şeklinde bölge tespit edildi mi. "
+            "None: tespit hiç çalışmadı (belge rasterize edilmedi, ör. "
+            "doğrudan metin katmanından okunan bir PDF) -- bilinmiyor, "
+            "imzasız değil. False: tespit çalıştı ve hiçbir imza bölgesi "
+            "bulamadı."
+        ),
     )
-    has_stamp: bool = Field(
-        default=False,
-        description="Sayfada en az bir mühür/damga şeklinde bölge tespit edildi mi.",
+    has_stamp: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Sayfada en az bir mühür/damga şeklinde bölge tespit edildi mi. "
+            "Aynı None/False ayrımı is_signed ile aynıdır."
+        ),
     )
     marks: List[DetectedMarkSchema] = Field(
         default_factory=list, description="Tespit edilen tüm bölgeler."

@@ -130,6 +130,25 @@ describe("DocumentAnalysisPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a neutral not-checked badge when detection never ran", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{
+          ...analysis,
+          signature: { is_signed: null, has_stamp: null, marks: [] },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("İmza ve mühür"));
+
+    expect(screen.getByText("İmza kontrol edilmedi")).toBeInTheDocument();
+    expect(
+      screen.getByText("Bu belge için imza/mühür tespiti çalıştırılmadı."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("İmza tespit edilmedi")).not.toBeInTheDocument();
+  });
+
   it("discards edits on cancel without calling onSave", () => {
     const onSave = vi.fn();
     render(<DocumentAnalysisPanel analysis={analysis} onSave={onSave} />);

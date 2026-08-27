@@ -59,6 +59,7 @@ from app.infrastructure.extractors.base import (
     DocumentExtractionError,
 )
 from app.infrastructure.cache.redis import RedisCache
+from app.infrastructure.extractors.marks import DetectedMark
 from app.infrastructure.extractors.vision import VisionExtractorBase
 from app.infrastructure.storage.base import BaseStorage
 from app.ai.embeddings.service import EmbeddingService
@@ -721,29 +722,43 @@ class DocumentService:
                 MissingField(**item) for item in state.get("missing_fields") or []
             ],
             compliance_status=compliance_status,
-            signature=SignatureAssessmentSchema(
-                # Built directly from `extracted`, not `state` -- detection
-                # already ran once during extraction (see
-                # app.infrastructure.extractors.marks.detect_marks); the
-                # graph only reads it (check_compliance_node), it never
-                # recomputes it. Same reasoning as `extraction=` above.
-                is_signed=any(mark.kind == "signature" for mark in extracted.detected_marks),
-                has_stamp=any(mark.kind == "stamp" for mark in extracted.detected_marks),
-                marks=[
-                    DetectedMarkSchema(
-                        kind=mark.kind,
-                        page=mark.page,
-                        bbox=mark.bbox,
-                        confidence=mark.confidence,
-                    )
-                    for mark in extracted.detected_marks
-                ],
-            ),
+            signature=DocumentService._build_signature_assessment(extracted.detected_marks),
             mevzuat_references=[
                 MevzuatReferenceSchema(**item)
                 for item in state.get("mevzuat_suggestions") or []
             ],
             guardrail=guardrail,
+        )
+
+    @staticmethod
+    def _build_signature_assessment(
+        marks: Optional[list[DetectedMark]],
+    ) -> SignatureAssessmentSchema:
+        """Build the signature/stamp assessment from a raw `detect_marks`
+        result -- shared by `_assemble` and `generate_detailed_analysis`.
+
+        `marks is None` means detection never ran at all (see
+        `ExtractedDocument.detected_marks`'s own docstring) -- `is_signed`/
+        `has_stamp` must stay `None` (unknown), not `False` (checked, found
+        nothing), same tri-state `check_compliance_node` already applies to
+        `state["detected_marks"]`.
+
+        Args:
+            marks: `ExtractedDocument.detected_marks` -- `None` if detection
+                never ran, otherwise the (possibly empty) list it found.
+
+        Returns:
+            The schema, ready to attach to a `DocumentAnalysisResponseSchema`.
+        """
+        return SignatureAssessmentSchema(
+            is_signed=None if marks is None else any(mark.kind == "signature" for mark in marks),
+            has_stamp=None if marks is None else any(mark.kind == "stamp" for mark in marks),
+            marks=[
+                DetectedMarkSchema(
+                    kind=mark.kind, page=mark.page, bbox=mark.bbox, confidence=mark.confidence
+                )
+                for mark in (marks or [])
+            ],
         )
 
     @staticmethod

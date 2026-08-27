@@ -37,8 +37,10 @@ export interface DetectedMarkItem {
 }
 
 export interface SignatureAssessment {
-  is_signed: boolean;
-  has_stamp: boolean;
+  // null: detection never ran (e.g. a born-digital PDF, never rasterized) --
+  // unknown, distinct from false (detection ran, found nothing).
+  is_signed: boolean | null;
+  has_stamp: boolean | null;
   marks: DetectedMarkItem[];
 }
 

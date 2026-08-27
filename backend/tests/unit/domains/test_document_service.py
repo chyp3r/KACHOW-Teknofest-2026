@@ -240,8 +240,34 @@ async def test_analyze_populates_signature_assessment_from_detected_marks():
 
 
 @pytest.mark.asyncio
-async def test_analyze_reports_an_unsigned_document_with_no_detected_marks():
-    service, _, _, _ = _build_service()  # default fixture: detected_marks=[]
+async def test_analyze_reports_unknown_signature_status_when_detection_never_ran():
+    """Default fixture never passes detected_marks= -- simulates a
+    non-OCR extractor path (opendataloader/pdfium/plain_text), where
+    detect_marks never ran at all. Must read as unknown (None), not
+    False (checked, found nothing)."""
+    service, _, _, _ = _build_service()
+
+    result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.signature.is_signed is None
+    assert result.signature.has_stamp is None
+    assert result.signature.marks == []
+
+
+@pytest.mark.asyncio
+async def test_analyze_reports_unsigned_when_detection_ran_and_found_nothing():
+    """Distinct from the "never ran" case above: an OCR extractor that
+    genuinely found no marks passes detected_marks=[] explicitly."""
+    text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+    extracted = ExtractedDocument(
+        text=text, pages=[text], page_count=1,
+        extractor="tesseract", used_ocr=True, detected_marks=[],
+    )
+    service, _, _, _ = _build_service(extracted=extracted)
 
     result = await service.analyze_document(
         owner_id="user-1",
@@ -767,10 +793,12 @@ async def test_update_document_fields_reruns_compliance_and_persists_the_correct
 async def test_get_cached_analysis_loads_a_pre_signature_field_cache():
     """A cache written before `signature` existed on the response schema has
     no such key in its `analysis` object at all -- must still validate, with
-    `signature` taking its default (empty), the same guarantee `guardrail`
-    already relies on. Without a default this would 404 every document
-    analysed before this feature shipped (see get_cached_analysis's own
-    docstring: a validation failure returns None -> the router 404s)."""
+    `signature` taking its default (is_signed=None, unknown -- correctly so,
+    since no detection ever ran against this pre-feature cache), the same
+    guarantee `guardrail` already relies on. Without a default this would
+    404 every document analysed before this feature shipped (see
+    get_cached_analysis's own docstring: a validation failure returns
+    None -> the router 404s)."""
     storage_path = "uploads/old.pdf"
     service, storage, _, _ = _build_service()
     storage.blobs[_analysis_cache_key(storage_path)] = json.dumps(
@@ -799,7 +827,7 @@ async def test_get_cached_analysis_loads_a_pre_signature_field_cache():
     result = await service.get_cached_analysis(storage_path)
 
     assert result is not None
-    assert result.signature.is_signed is False
+    assert result.signature.is_signed is None
     assert result.signature.marks == []
 
 
