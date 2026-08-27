@@ -58,16 +58,13 @@ def build_trace_config(
     ``langfuse-langchain`` callback handler'ının bir trace'i bir
     kullanıcı/session/etiket kümesine atfetmek için okuduğu isimlerdir
     (bkz. Faz 6 tenancy-plan bölümündeki şirket etiketli observability).
-    Bir trace'i bu şekilde şirket kapsamına almak dürüst ama doğrulanmamış
-    bir yaklaşımdır: ``compose.yml`` hâlâ ``langfuse`` v4 Python SDK
-    bağımlılığına karşı ``langfuse/langfuse:2``'yi çalıştırıyor; bu repo'nun
-    kendi önceki notları bu versiyon çiftini muhtemelen uyumsuz olarak
-    zaten işaretlemiş durumda (v3+ kendi kendine barındırma bu projenin
-    çalıştırmadığı ClickHouse/MinIO gerektirir) -- etiketleme eklemek ekstra
-    bir maliyete sahip değildir ve tracing'in kendisi çalışmaya başladığı
-    gün çalışmaya başlayacaktır, ama bugün doğrulanmış, her zaman açık
-    observability hikayesi bu değil, ``runs``/``run_steps``/
-    ``guardrail_events``'tir.
+    Bir trace'i bu şekilde şirket kapsamına almak: ``compose.yml`` artık
+    ``langfuse/langfuse:3`` (web + worker) çalıştırıyor -- v4 Python SDK'nın
+    OTLP yazışının (``/api/public/otel``) eşleştiği sürüm çizgisi; yanında
+    ClickHouse + MinIO + Redis. Yine de her zaman açık, birinci-taraf
+    observability hikayesi ``runs``/``run_steps``/``guardrail_events``
+    tablolarıdır -- Langfuse bunun üstüne ayrıntılı LLM-trace görünümü
+    ekler, yerini almaz.
 
     Args:
         langfuse_user_id: Çağıranın id'si, biliniyorsa.

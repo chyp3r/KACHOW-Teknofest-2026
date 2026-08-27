@@ -87,7 +87,7 @@ services:
       - PROMETHEUS_URL=http://prometheus:9090
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
-      - LANGFUSE_HOST=http://langfuse:3000
+      - LANGFUSE_HOST=http://langfuse-web:3000
       # Infrastructure spans (HTTP/DB/Redis/outbound httpx) -- separate from
       # Langfuse above, which only sees LLM calls. Empty this to verify the
       # no-op degrade in app/observability/otel.py.
@@ -217,24 +217,122 @@ services:
     depends_on:
       - prometheus
 
-  langfuse:
-    # v2 server is not compatible with the v4 langfuse Python SDK the backend
-    # depends on (backend/requirements.txt); v3 is the matching server line.
-    image: langfuse/langfuse:2
+  # --- Langfuse v3 (LLM izleme) --------------------------------------------
+  # v3, backend'in langfuse v4 Python SDK'sıyla eşleşen sürüm çizgisidir
+  # (v4 SDK OTLP ile /api/public/otel'e yazar; v2 sunucuda o uç yok).
+  # v3 kendi kendine barındırma: Postgres (var) + ClickHouse + Redis (var,
+  # ayrı DB indeksi) + S3 uyumlu blob deposu (MinIO). Bunlar sağlanmadan
+  # web/worker başlamaz.
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    container_name: kachow_clickhouse_dev
+    environment:
+      - CLICKHOUSE_DB=default
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse}
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    ulimits:
+      nofile: { soft: 262144, hard: 262144 }
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    image: minio/minio:latest
+    container_name: kachow_minio_dev
+    command: server /data --console-address ":9001"
+    ports:
+      - "9002:9001"   # MinIO konsolu (9000/9001 Langfuse/başka servislerde)
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minio}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-miniosecret}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-init:
+    image: minio/mc:latest
+    container_name: kachow_minio_init_dev
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-minio} ${MINIO_ROOT_PASSWORD:-miniosecret} &&
+      mc mb --ignore-existing local/langfuse &&
+      echo 'langfuse bucket hazır'
+      "
+    restart: "no"
+
+  langfuse-web:
+    image: langfuse/langfuse:3
     container_name: kachow_langfuse_dev
     ports:
       - "3000:3000"
-    environment:
-      # A separate "langfuse" database on the same Postgres instance/creds as
-      # the app's own db -- not POSTGRES_DB, which is the app's "kachow" db.
+    environment: &langfuse_env
+      # Ayrı "langfuse" veritabanı; uygulamanın "kachow" DB'siyle aynı
+      # Postgres örneği ve kimlik bilgileri (bkz. scripts/init-db.sh).
+      # NOT: v2'den v3'e geçerken bu DB bir kez sıfırlanmalıdır
+      # (DROP DATABASE langfuse; CREATE DATABASE langfuse;).
       - DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/langfuse
+      - CLICKHOUSE_URL=http://clickhouse:8123
+      - CLICKHOUSE_MIGRATION_URL=clickhouse://clickhouse:9000
+      - CLICKHOUSE_USER=clickhouse
+      - CLICKHOUSE_PASSWORD=${CLICKHOUSE_PASSWORD:-clickhouse}
+      - CLICKHOUSE_CLUSTER_ENABLED=false
+      - REDIS_CONNECTION_STRING=redis://redis:6379/1
+      - LANGFUSE_S3_EVENT_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_EVENT_UPLOAD_REGION=auto
+      - LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minio}
+      - LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-miniosecret}
+      - LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE=true
+      - LANGFUSE_S3_MEDIA_UPLOAD_BUCKET=langfuse
+      - LANGFUSE_S3_MEDIA_UPLOAD_REGION=auto
+      - LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT=http://minio:9000
+      - LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID=${MINIO_ROOT_USER:-minio}
+      - LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD:-miniosecret}
+      - LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE=true
+      - NEXTAUTH_URL=http://localhost:3000
       - NEXTAUTH_SECRET=${LANGFUSE_NEXTAUTH_SECRET:-my_nextauth_secret_for_dev_only_123}
       - SALT=${LANGFUSE_SALT:-my_salt_for_dev_only_123}
       - ENCRYPTION_KEY=${LANGFUSE_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
-      - NEXTAUTH_URL=http://localhost:3000
       - TELEMETRY_ENABLED=false
+      - LANGFUSE_INIT_ORG_ID=kachow
+      - LANGFUSE_INIT_ORG_NAME=KACHOW
+      - LANGFUSE_INIT_PROJECT_ID=kachow
+      - LANGFUSE_INIT_PROJECT_NAME=KACHOW
+      # Proje anahtarları .env'deki backend değerlerinden alınır -> manuel
+      # "proje oluştur, anahtar kopyala" adımı yok; backend hazır çalışır.
+      - LANGFUSE_INIT_PROJECT_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
+      - LANGFUSE_INIT_PROJECT_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
+      - LANGFUSE_INIT_USER_EMAIL=${LANGFUSE_INIT_USER_EMAIL:-admin@kachow.example}
+      - LANGFUSE_INIT_USER_NAME=KACHOW Admin
+      - LANGFUSE_INIT_USER_PASSWORD=${LANGFUSE_INIT_USER_PASSWORD:-langfuse-dev-only}
     depends_on:
-      - db
+      db:
+        condition: service_started
+      clickhouse:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+  langfuse-worker:
+    image: langfuse/langfuse-worker:3
+    container_name: kachow_langfuse_worker_dev
+    environment: *langfuse_env
+    depends_on:
+      langfuse-web:
+        condition: service_started
 
   # OTLP collector + UI for the infrastructure spans app/observability/otel.py
   # emits (HTTP/DB/Redis/outbound httpx) -- deliberately separate from
@@ -278,3 +376,5 @@ volumes:
   qdrant_data:
   prometheus_data:
   grafana_data:
+  clickhouse_data:
+  minio_data:
