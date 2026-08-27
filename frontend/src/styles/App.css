@@ -876,9 +876,9 @@ textarea { min-height: 105px; resize: vertical; }
    animation-duration in this block to near-zero, so no separate
    reduced-motion handling is needed here. */
 .thinking-bubble-body { display: grid; gap: var(--space-3); }
-.thinking-bubble-header { display: flex; align-items: center; justify-content: flex-start; gap: var(--space-2); color: var(--text-secondary); }
-.thinking-bubble-title { display: inline-flex; align-items: center; gap: var(--space-2); }
-.thinking-bubble-spinner { animation: thinking-bubble-spin .9s linear infinite; color: var(--accent-blue); }
+.thinking-bubble-header { display: flex; align-items: center; justify-content: flex-start; flex-wrap: wrap; gap: var(--space-2); color: var(--text-secondary); }
+.thinking-bubble-title { display: inline-flex; align-items: center; gap: var(--space-2); white-space: nowrap; }
+.thinking-bubble-spinner { flex: 0 0 auto; animation: thinking-bubble-spin .9s linear infinite; color: var(--accent-blue); }
 .thinking-bubble-elapsed,
 .thinking-bubble-step-time { flex: 0 0 5ch; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 @keyframes thinking-bubble-spin { to { transform: rotate(360deg); } }

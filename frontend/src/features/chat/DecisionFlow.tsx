@@ -10,6 +10,7 @@ import { InteractiveGraphViewport } from "../../components/InteractiveGraphViewp
 import { Button, IconButton } from "../../components/Button";
 import { StatusBadge, type StatusTone } from "../../components/StatusBadge";
 import { Alert } from "../../components/Surface";
+import { guardrailDecisionLabel } from "./guardrailLabels";
 import { WorkflowStepper, type WorkflowStageItem } from "./WorkflowStepper";
 
 interface GraphNode {
@@ -440,7 +441,9 @@ export function DecisionFlow({
                 <div>
                   <strong>Güvenlik kararı</strong>
                   <span>
-                    {guardrailEvents.map((event) => event.decision).join(" · ")}
+                    {guardrailEvents
+                      .map((event) => guardrailDecisionLabel(event.decision))
+                      .join(" · ")}
                   </span>
                 </div>
               </div>

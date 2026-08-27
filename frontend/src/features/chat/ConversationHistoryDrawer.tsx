@@ -7,6 +7,7 @@ import { ListRow } from "../../components/ListRow";
 import { EmptyState } from "../../components/EmptyState";
 import { Alert, Skeleton, Spinner } from "../../components/Surface";
 import { Drawer } from "../../components/Overlay";
+import { capitalizeFirst } from "../../utils/text";
 
 const SEARCH_THRESHOLD = 10;
 type SessionGroup = "today" | "yesterday" | "older";
@@ -42,11 +43,13 @@ function compactTimestamp(timestamp: string, now: Date): string {
       minute: "2-digit",
     }).format(value);
   }
-  return new Intl.DateTimeFormat("tr-TR", {
-    day: "numeric",
-    month: "short",
-    year: value.getFullYear() === now.getFullYear() ? undefined : "numeric",
-  }).format(value);
+  return capitalizeFirst(
+    new Intl.DateTimeFormat("tr-TR", {
+      day: "numeric",
+      month: "long",
+      year: value.getFullYear() === now.getFullYear() ? undefined : "numeric",
+    }).format(value),
+  );
 }
 
 function previewForSession(
@@ -190,7 +193,7 @@ export function ConversationHistoryDrawer({
                                 onClick={() => onOpenSession(session.session_id)}
                                 selected={selected}
                                 leading={<MessageSquare />}
-                                primary={session.title || "Yeni sohbet"}
+                                primary={session.title ? capitalizeFirst(session.title) : "Yeni sohbet"}
                                 secondary={preview}
                                 metadata={<time dateTime={session.updated_at}>{compactTimestamp(session.updated_at, now)}</time>}
                               />
