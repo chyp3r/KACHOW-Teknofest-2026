@@ -84,6 +84,7 @@ services:
       - KACHOW_APP_DB_PASSWORD=${KACHOW_APP_DB_PASSWORD:-kachow_app_dev_only}
       - QDRANT_URL=http://qdrant:6333
       - REDIS_URL=redis://redis:6379/0
+      - PROMETHEUS_URL=http://prometheus:9090
       - LANGFUSE_PUBLIC_KEY=${LANGFUSE_PUBLIC_KEY:-pk-lf-1234567890}
       - LANGFUSE_SECRET_KEY=${LANGFUSE_SECRET_KEY:-sk-lf-1234567890}
       - LANGFUSE_HOST=http://langfuse:3000
