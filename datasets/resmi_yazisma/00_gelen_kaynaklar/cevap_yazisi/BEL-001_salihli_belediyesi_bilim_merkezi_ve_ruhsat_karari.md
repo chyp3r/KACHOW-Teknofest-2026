@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "T.C. Salihli Belediye Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "4"
 ---
 
 # T.C. Salihli Belediye Meclis Kararı (Karar No: 2026/33)
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "5"
 **Oturum:** 1
 
 **MECLİS BAŞKANI:** Belediye Başkanı
-**KATİP ÜYELER:** [KİŞİ ADI], [KİŞİ ADI]
+**KATİP ÜYELER:** [KİŞİ ADI]
 
 **TEKLİFİN ÖZETİ:**
 İmar ve Şehircilik Müdürlüğü ile Mali Hizmetler Müdürlüğü'nün Cumhuriyet Mahallesi 2537 Ada 2 parselde inşa edilmesi planlanan Dr. Erdal Yıldırım Akıl Üssü ve Bilim Merkezi yapım ihalesinin yıllara sari ihale yapılması ve iş yeri adres değişikliği halinde ruhsat ücreti alınmaması hakkındaki ortak teklifi.

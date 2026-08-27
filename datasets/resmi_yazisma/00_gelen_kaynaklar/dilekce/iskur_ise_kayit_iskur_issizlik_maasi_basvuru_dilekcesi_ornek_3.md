@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # İŞKUR İşsizlik Maaşı Başvuru Dilekçesi (Ornek 3)
@@ -20,9 +20,9 @@ Konu: İşsizlik Ödeneği Başvurusu
 Arslan A.S. işyerinden 24.02.2025 tarihinde işten çıkarılmış bulunmaktayım. 4447 sayılı İşsizlik Sigortası Kanunu kapsamında işsizlik ödeneği almaya hak kazandığımı düşünmekteyim.
 
 Kişisel Bilgilerim:
-- Adı Soyadı: Burak Sahin
+- Adı Soyadı: [KİŞİ ADI]
 - T.C. Kimlik No: [T.C. KİMLİK NO]
-- SGK Sicil No: 5889390
+- SGK Sicil No: [SİCİL NUMARASI]
 - Son Çalışılan İşyeri: Arslan A.S.
 - İşten Ayrılma Tarihi: 24.02.2025
 - İşten Ayrılma Nedeni: İşveren feshi (Kod: 29)
@@ -31,7 +31,7 @@ Kişisel Bilgilerim:
 İşsizlik ödeneği başvurumun değerlendirilmesini saygılarımla arz ederim.
 
 24.02.2025
-Burak Sahin
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Tel: [TELEFON]

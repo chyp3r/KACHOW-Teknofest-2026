@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "1"
+anonimlestirilen_alan_sayisi: "3"
 ---
 
 # Anayasa Mahkemesi Kararı - Esas Sayısı: 2022/45, Karar Sayısı: 2023/12
@@ -36,6 +36,6 @@ anonimlestirilen_alan_sayisi: "1"
 1. 2577 sayılı İdari Yargılama Usulü Kanunu'na 6545 sayılı Kanun'un 27. maddesiyle eklenen Ek 1. maddede yer alan parasal sınırların uygulanmasına ilişkin hükümlerin Anayasa'nın 13. ve 36. maddelerine aykırı olduğuna ve **İPTALİNE**,
 2. İptal kararının Resmî Gazete'de yayımlanmasından itibaren 9 ay sonra yürürlüğe girmesine OYBİRLİĞİYLE karar verildi.
 
-**Başkan:** Zühtü ARSLAN
-**Başkanvekili:** Kadir ÖZKAYA
-**Üyeler:** [KİŞİ ADI], Hasan Tahsin GÖKCAN, Engin YILDIRIM, Hicabi DURSUN, Celal Mümtaz AKINCI.
+**Başkan:** [KİŞİ ADI]
+**Başkanvekili:** [KİŞİ ADI]
+**Üyeler:** [KİŞİ ADI]

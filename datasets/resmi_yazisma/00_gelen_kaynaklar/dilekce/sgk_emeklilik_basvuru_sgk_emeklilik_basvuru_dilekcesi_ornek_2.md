@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sosyal Güvenlik Kurumu"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # SGK Emeklilik Başvuru Dilekçesi (Ornek 2)
@@ -21,7 +21,7 @@ Kurumunuz Ankara İl Müdürlüğü'nde 5483210 sicil numarası ile kayıtlı si
 
 Sigortalılık Bilgilerim:
 - T.C. Kimlik Numarası: [T.C. KİMLİK NO]
-- Sigorta Sicil Numarası: 5483210
+- Sigorta Sicil Numarası: [SİCİL NUMARASI]
 - İlk Sigortalılık Başlangıç Tarihi: 23.06.2004
 - Toplam Prim Gün Sayısı: 8455 gün
 - Son Çalışılan İşyeri: Arslan A.S.
@@ -29,7 +29,7 @@ Sigortalılık Bilgilerim:
 Yaşlılık aylığı tahsis talebimin değerlendirilmesini ve aylık bağlanmasını saygılarımla arz ederim.
 
 21.02.2021
-Mustafa Celik
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Tel: [TELEFON]

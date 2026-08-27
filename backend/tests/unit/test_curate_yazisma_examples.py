@@ -6,8 +6,10 @@ alongside /workspace/tests -- see compose.yml) since it curates a dataset
 shared across the repo, not backend-specific code.
 """
 
+import hashlib
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -370,3 +372,83 @@ def test_a_numbered_dir_synthetic_card_carries_its_own_niyet_without_numeric_pre
     syn = next(r for r in records if r["id"] == "SYN-001")
     assert syn["correspondence_type"] == "response_letter"
     assert syn["niyet"] == "istek_talep"
+
+
+# --- Shipped split files -----------------------------------------------------
+#
+# The unit tests above pin the pure split *function*. These pin the artefacts
+# actually committed to the repo, which is what an evaluation run reads. A
+# leak here silently inflates every dev/heldout score, so it is checked on the
+# real files rather than on a constructed fixture.
+
+
+def _load_shipped_splits() -> dict[str, list[dict]]:
+    paths = {
+        "retrieval": curate.DEFAULT_OUTPUT_PATH,
+        "dev": curate.DEV_EXAMPLES_PATH,
+        "heldout": curate.HELDOUT_EXAMPLES_PATH,
+    }
+    splits: dict[str, list[dict]] = {}
+    for split, path in paths.items():
+        if not os.path.exists(path):
+            pytest.skip(f"Split dosyası üretilmemiş: {path}")
+        with open(path, encoding="utf-8") as handle:
+            splits[split] = [json.loads(line) for line in handle if line.strip()]
+    return splits
+
+
+def _normalized_text(value: str) -> str:
+    """Collapse placeholders and digits so near copies hash identically."""
+    collapsed = re.sub(r"\[[^\]\n]{1,40}\]", " ", value or "")
+    collapsed = re.sub(r"\d+", "0", collapsed)
+    collapsed = re.sub(r"[^\w]+", " ", collapsed.casefold(), flags=re.UNICODE)
+    return " ".join(collapsed.split())
+
+
+@pytest.mark.parametrize(
+    "field", ["source_group", "template_family", "source_sha256", "source_path"]
+)
+def test_shipped_splits_share_no_source_identity(field):
+    splits = _load_shipped_splits()
+
+    owner: dict[str, str] = {}
+    collisions: list[tuple[str, str, str]] = []
+    for split, records in splits.items():
+        for record in records:
+            value = record.get(field)
+            if not value:
+                continue
+            previous = owner.setdefault(value, split)
+            if previous != split:
+                collisions.append((field, value, f"{previous}<->{split}"))
+
+    assert not collisions, collisions[:10]
+
+
+def test_shipped_splits_share_no_near_duplicate_body():
+    splits = _load_shipped_splits()
+
+    owner: dict[str, str] = {}
+    collisions: list[tuple[str, str]] = []
+    for split, records in splits.items():
+        for record in records:
+            digest = hashlib.sha256(
+                _normalized_text(record.get("text", "")).encode("utf-8")
+            ).hexdigest()
+            if not record.get("text"):
+                continue
+            previous = owner.setdefault(digest, split)
+            if previous != split:
+                collisions.append((record.get("id", ""), f"{previous}<->{split}"))
+
+    assert not collisions, collisions[:10]
+
+
+def test_shipped_splits_carry_no_pii_flag_and_no_split_label_drift():
+    splits = _load_shipped_splits()
+
+    for split, records in splits.items():
+        assert records, f"{split} boş"
+        for record in records:
+            assert record["dataset_split"] == split, record.get("id")
+            assert not record["pii_flags"], (record.get("id"), record["pii_flags"])

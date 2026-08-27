@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sosyal Güvenlik Kurumu"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "4"
+anonimlestirilen_alan_sayisi: "6"
 ---
 
 # SGK Emeklilik Başvuru Dilekçesi (Ornek 3)
@@ -21,7 +21,7 @@ Kurumunuz Diyarbakir İl Müdürlüğü'nde 3447613 sicil numarası ile kayıtl�
 
 Sigortalılık Bilgilerim:
 - T.C. Kimlik Numarası: [T.C. KİMLİK NO]
-- Sigorta Sicil Numarası: 3447613
+- Sigorta Sicil Numarası: [SİCİL NUMARASI]
 - İlk Sigortalılık Başlangıç Tarihi: 18.08.2001
 - Toplam Prim Gün Sayısı: 3056 gün
 - Son Çalışılan İşyeri: Kaya A.S.
@@ -29,7 +29,7 @@ Sigortalılık Bilgilerim:
 Yaşlılık aylığı tahsis talebimin değerlendirilmesini ve aylık bağlanmasını saygılarımla arz ederim.
 
 06.11.2025
-Ayse Demir
+[KİŞİ ADI]
 T.C. Kimlik No: [T.C. KİMLİK NO]
 Adres: [ADRES]
 Tel: [TELEFON]

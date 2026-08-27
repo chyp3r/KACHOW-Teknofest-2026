@@ -32,7 +32,7 @@ GELİR İDARESİ BAŞKANLIĞI
 Gelir Kanunları KDV-ÖTV Grup Müdürlüğü
 Sayı
 :
-[EVRAK SAYISI]Özelge]-45160
+[EVRAK SAYISI]
 13.01.2026
 Konu
 :

@@ -8,14 +8,14 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "5"
+anonimlestirilen_alan_sayisi: "7"
 ---
 
 # Anlaşmalı Boşanma Dava Dilekçesi (Ornek 3)
 
 Kayseri AİLE MAHKEMESİ HAKİMLİĞİ'NE
 
-DAVACI: Ali Erdogan (T.C.: [T.C. KİMLİK NO])
+DAVACI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
 Adres: [ADRES]
 
 DAVALI: [KİŞİ ADI] (T.C.: [T.C. KİMLİK NO])
@@ -43,5 +43,5 @@ Yukarıda arz edilen nedenlerle anlaşmalı boşanmamıza karar verilmesini sayg
 
 28.08.2022
 Davacı
-Ali Erdogan
+[İMZA SAHİBİ]
 İmza

@@ -1190,12 +1190,12 @@ VAL-009,teblig_bildirim,Kocaeli Valiliği Mahalli Çevre Kurulu Sanayi Emisyon D
 VAL-010,koordinasyon,Diyarbakır Valiliği Bağımlılıkla Mücadele İl Koordinasyon Kurulu Kararı,gercek_acik_kaynak,VAL-010_diyarbakir-valiligi-bagimlilikla-mucadele-koordinasyon-karari.md
 VAL-011,teblig_bildirim,Eskişehir Valiliği Kamu Düzeninin Korunması ve Çevresel Temizlik Genelgesi,gercek_acik_kaynak,VAL-011_eskisehir-valiligi-kamu-duzeni-ve-cevre-koruma-genelgesi.md
 YARG-001,mahkeme_karari,"Anayasa Mahkemesi Kararı - Esas Sayısı: 2023/131, Karar Sayısı: 2023/160",gercek_acik_kaynak,YARG-001_aym_ek_mtv_iptal_isteminin_reddi.md
-YARG-002,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2020/18234,gercek_acik_kaynak,YARG-002_aym_mulkiyet_hakki_ihlali_bireysel_basvuru.md
-YARG-003,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2021/34521,gercek_acik_kaynak,YARG-003_aym_makul_surede_yargilanma_hakki.md
+YARG-002,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: [BAŞVURU NUMARASI],gercek_acik_kaynak,YARG-002_aym_mulkiyet_hakki_ihlali_bireysel_basvuru.md
+YARG-003,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: [BAŞVURU NUMARASI],gercek_acik_kaynak,YARG-003_aym_makul_surede_yargilanma_hakki.md
 YARG-004,mahkeme_karari,"Anayasa Mahkemesi Kararı - Esas Sayısı: 2022/45, Karar Sayısı: 2023/12",gercek_acik_kaynak,YARG-004_aym_iyuk_parasal_sinirlar_iptal_karari.md
 YARG-005,mahkeme_karari,"Danıştay İdari Dava Daireleri Kurulu Kararı - E.2022/1120, K.2023/450",gercek_acik_kaynak,YARG-005_danistay_iddk_sozlesmeli_personel_atama.md
 YARG-006,mahkeme_karari,"Danıştay 10. Daire Kararı - E.2021/4890, K.2022/3120",gercek_acik_kaynak,YARG-006_danistay_10d_bilgi_edinme_hakki_iptal.md
-YARG-007,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2019/29104,gercek_acik_kaynak,YARG-007_aym_ifade_ozgurllugu_ve_erisim_engeli.md
+YARG-007,mahkeme_karari,Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: [BAŞVURU NUMARASI],gercek_acik_kaynak,YARG-007_aym_ifade_ozgurllugu_ve_erisim_engeli.md
 YOK_SIMULASYON_001,,Senato Kararı: Lisansüstü Eğitim Yönetmeliği Değişikliği - Belge No 1,,YOK_SIMULASYON_001.md
 YOK_SIMULASYON_002,,Üniversite Kurma/Bölüm Açma Değerlendirmesi - Belge No 2,,YOK_SIMULASYON_002.md
 YOK_SIMULASYON_003,,Akademik Kadro İlanı Onayı - Belge No 3,,YOK_SIMULASYON_003.md

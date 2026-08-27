@@ -15,17 +15,17 @@ dogrulama: "resmi_kaynaktan_indirildi"
 extractor: "pdfium_notice_splitter"
 used_ocr: "false"
 page_count: "1"
-kaynak_sayfa: "10"
 quality_score: "1.0"
 rag_status: "candidate"
 kaynak_kurum: "Türk Patent ve Marka Kurumu"
-kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
-lisans_durumu: "usage_review_required"
 anonimlestirme_durumu: "uygun"
 anonimlestirilen_alan_sayisi: "5"
+kaynak_sayfa: "10"
+kaynak_sha256: "009ce312c662e99a95cf250fcc8c859a69ba37a6999da407d34b3a5950853300"
+lisans_durumu: "usage_review_required"
 ---
 
-Evrak No: [EVRAK SAYISI]  Başvuru No: [BAŞVURU NUMARASI]
+Evrak No: [EVRAK SAYISI] Başvuru No: [BAŞVURU NUMARASI]
 İlgi : 10.10.2012 tarih ve [İLGİ EVRAK SAYISI] sayılı dilekçeniz.
 İlgide belirtilen dilekçeniz üzerine 12.06.2013 tarihinde 214 sayılı Resmi Marka Bülteni'nde
 yayımlanan [BAŞVURU NUMARASI] numaralı [MARKA ADI] ibareli marka tescil başvurunuzun, farklı gerekçelerle

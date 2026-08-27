@@ -13,10 +13,10 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Anayasa Mahkemesi Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "3"
+anonimlestirilen_alan_sayisi: "8"
 ---
 
-# Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: 2019/29104
+# Anayasa Mahkemesi Bireysel Başvuru Kararı - Başvuru No: [BAŞVURU NUMARASI]
 
 **ANAYASA MAHKEMESİ**
 **GENEL KURUL KARARI**
@@ -25,7 +25,7 @@ anonimlestirilen_alan_sayisi: "3"
 **Başvuru Numarası:** 2019/29104
 **R.G. Tarih-Sayı:** 12/01/2024 - 32427
 
-**BAŞVURAN:** [KİŞİ ADI]
+**BAŞVURAN:** [BAŞVURU SAHİBİ]
 **VEKİLİ:** Av. [VEKİL ADI]
 
 **BAŞVURUNUN KONUSU:** Başvuranın internet haber sitesinde yayımlanan iki adet haber içeriğine 5651 sayılı İnternet Ortamında Yapılan Yayınların Düzenlenmesi ve Bu Yayınlar Yoluyla İşlenen Suçlarla Mücadele Edilmesi Hakkında Kanun'un 9. maddesi uyarınca kişilik haklarının ihlal edildiği gerekçesiyle erişimin engellenmesine karar verilmesi nedeniyle ifade ve basın özgürlüğünün ihlal edildiği iddiasına ilişkindir.
@@ -41,7 +41,7 @@ Açıklanan gerekçelerle;
 3. İhlalin sonuçlarının ortadan kaldırılması için erişimin engellenmesi kararının kaldırılması amacıyla dosyanın [YARGI MERCİİ] Sulh Ceza Hakimliğine GÖNDERİLMESİNE,
 4. Başvurana 30.000 TL manevi tazminat ÖDENMESİNE OYBİRLİĞİYLE karar verildi.
 
-**Başkan:** Zühtü ARSLAN
-**Başkanvekili:** Hasan Tahsin GÖKCAN
-**Başkanvekili:** Kadir ÖZKAYA
-**Üyeler:** Engin YILDIRIM, Hicabi DURSUN, Celal Mümtaz AKINCI, Muammer TOPAL, M. Emin KUZ, Rıdvan GÜLEÇ, Yusuf Şevki HAKYEMEZ, Yıldız SEFERİNOĞLU, Selahaddin MENTEŞ, Basri BAĞCI, İrfan FİDAN.
+**Başkan:** [KİŞİ ADI]
+**Başkanvekili:** [KİŞİ ADI]
+**Başkanvekili:** [KİŞİ ADI]
+**Üyeler:** [KİŞİ ADI]

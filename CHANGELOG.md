@@ -189,6 +189,180 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [3.55]
 ### Eklendi
+- (#284) `scripts/evaluate_yazisma_vaka_seti.py`: gelen evrak-karar-cevap
+  kayıtlarını şema, karar/itiraz kotası, PII, mevzuat doğrulama izi, olgu
+  korunumu, provenance ve tam/yakın tekrar açısından deterministik olarak
+  denetleyen Aşama 4 kalite kapısı eklendi. Kapı canlı LLM/MCP çağrısı yapmaz;
+  makine-okunur istatistik ile Markdown kalite raporunu aynı girdiden üretir.
+- (#284) `scripts/mevzuat_dogrulama.py`: üretilen vakalardaki mevzuat
+  atıflarını mevzuat.gov.tr'ye karşı **tür-farkındalıklı** doğrulayan modül
+  (Aşama 3.2). Her atıf koşulsuz `mevzuat_tur="KANUN"` ile aranmaz; kanun,
+  KHK, yönetmelik, CB kararnamesi, CB kararı, genelge, tebliğ ve tüzük için
+  ayrı aday tür kümeleri kullanılır (tek bir "yönetmelik" kavramı sunucuda
+  `YONETMELIK`/`CB_YONETMELIK`/`KKY`/`UY` kovalarına dağılmıştır — 2646
+  sayılı Resmî Yazışmalar Yönetmeliği yalnız `CB_YONETMELIK` altındadır).
+  Numara eşleşmesi TEK BAŞINA yetersizdir: pilotta üretilen 22 atıftan 2'si
+  (%9) gerçek bir numaraya uydurma bir ad yakıştırıyordu (5615 →
+  "Sosyal Yardımlaşma Kanunu" iddiası, gerçekte "Gelir Vergisi Kanunu…";
+  5403 → "Köy Kanunu" iddiası, gerçekte "Toprak Koruma ve Arazi Kullanımı
+  Kanunu"), bu yüzden resmî başlık da Türkçe eke toleranslı sözcük
+  karşılaştırmasıyla doğrulanır ve madde verilmişse maddenin metinde
+  gerçekten var olduğu kontrol edilir. Doğrulama fail-closed'dır: tanınmayan
+  tür, eşleşmeyen numara, uyuşmayan başlık, olmayan madde ve mülga kayıt
+  reddedilir; `mevzuat_client.resolve_and_fetch`'in filtresiz yedek araması
+  bilerek kullanılmaz (yanlış mevzuatla eşleşip doğrulanmış görünürdü).
+  MCP altyapı hatası ayrı bir sonuç türüdür (`MevzuatAltyapiHatasi`) ve
+  "atıf yanlış" sayılmaz.
+
+### Değiştirildi
+- (#284) Vaka üretiminde paralel Evren çağrıları (`--concurrency`) ve ölçüm
+  raporu eklendi. Serbest LLM üretimiyle yapılan iki küçük denemede manuel
+  kabul oranı sıfır kaldığı için çekirdek yöntem fail-closed biçimde tam
+  deterministik belge/metadata üretimi + paralel Evren kalite hakemine
+  dönüştürüldü. Üç vakalık kota-uyumlu prototip 1,9 saniyede 3/3 otomatik ve
+  manuel kabul aldı; ana checkpoint 21 benzersiz vaka, sıfır hata ve sıfır
+  uyarıyla Aşama 4 kapısından geçti. Başarısız tüm ara sürümler ret/audit
+  arşivinde korundu ve üretim RAG kümesine karıştırılmadı.
+- (#284) Aşama 4 çekirdek vaka üretimi; gelen evraktan kopan takvim/yıl
+  sıçramaları, desteklenmeyen tutar-yüzde-gün süreleri, kaldırılmış büyükşehir
+  il özel idareleri, uydurma kurum/yetki dağılımları ve cevap taslağındaki yeni
+  somut olgular için fail-closed kapılarla genişletildi. Olgu ile kurum/yetki
+  semantik denetimleri tek Evren çağrısında birleştirildi ve varsayılan tekrar
+  sayısı ikiye düşürüldü. LLM tekrarlarında sürekli bozulan altı çekirdek kayıt,
+  gerçek üretim yöntemini `deterministic_curated_core` olarak bildiren yeniden
+  çalıştırılabilir `scripts/seed_curated_core_cases.py` ile tamamlandı. Çekirdek
+  checkpoint 18 benzersiz vaka ve sıfır kalite bulgusuyla kapıdan geçti; manuel
+  reddedilen tüm sürümler denetim/ret arşivinde korunuyor ve RAG'a karışmıyor.
+- (#284) 16 vakalık Aşama 4 denemesinde kalite kapısının yakaladığı hatalar
+  üzerine vaka üretimi fail-closed biçimde sertleştirildi. Kişi adlarına ek
+  olarak kurgusal özel tüzel kişi adları da tüm serbest metadata alanlarında
+  semantik olarak maskeleniyor; yer tutucu envanteri artık JSON kapsayıcı
+  köşeli parantezlerini yanlışlıkla yer tutucu saymıyor. `required_facts`,
+  `kaynak_satir` ve `must_include` anotasyonları belge gövdeleriyle
+  deterministik olarak hizalanıyor; en az bir izlenebilir olgu ve bir gerçek
+  zorunlu ifade kalmayan vaka yazılmadan reddediliyor. Tarih, evrak sayısı ve
+  diğer sayısal olgular kalite kontrolünde artık genellenmiyor, birebir
+  doğrulanıyor. İlk başarısız 16 vaka silinmeden denetim arşivinde tutuluyor
+  ve RAG çıktısına karıştırılmıyor.
+- (#284) `scripts/generate_yazisma_vaka_pilotu.py`: `legal_basis` artık
+  `list[str]` değil, `type`/`number`/`title`/`article`/`verification_source`/
+  `verification_status` alanlı yapısal kayıt listesi (Aşama 3.2 şeması).
+  Kaydedilen `title`, modelin iddiası değil MCP'den gelen **resmî** addır;
+  `verification_*` alanlarını LLM değil betik doldurur. Metin bekleyen
+  tüketiciler için türetilmiş `legal_basis_text` alanı eklendi. Doğrulanamayan
+  TEK bir atıf tüm vakayı geçersiz kılar ve reddedilen atıf bir sonraki
+  denemenin prompt'una geri bildirilir (sıcaklık 0.8'de model aksi halde aynı
+  yanlış eşleşmeyi tekrarlıyordu). `main()` mevzuat-mcp kayıtlı değilse
+  fail-closed durur; üst üste 5 altyapı hatasında tur, yazılmış vakaları
+  koruyarak durdurulur (`--resume` ile devam edilir).
+
+- (#284) `scripts/generate_yazisma_vaka_pilotu.py`: gerçek anonimleştirilmiş
+  korpus kartlarını few-shot referans alıp Evren (`llm-large`) ile
+  az-temsil-edilen karar türlerinden (yetkisizlik, belirsiz başvuru, çoklu
+  talep) kurgusal gelen evrak-karar-cevap vakası üreten betik. Üretim
+  sonrası: (1) LLM'in kendi bildirdiği kurgusal isimler dahil aynı
+  anonimleştirme/denetim hattından geçer, (2) numaralı mevzuat referansları
+  mevzuat.gov.tr MCP'si ile başlık eşleşmesi kontrol edilerek doğrulanır,
+  yanlış çıkan referanslı vaka otomatik olarak yeniden üretilir. Çıktı ayrı
+  bir klasöre (`datasets/resmi_yazisma_vakalar_pilot/`) yazılır, üretim
+  `ornekler.jsonl`'e otomatik karışmaz. Süreç
+  `datasets/resmi_yazisma/VAKA_URETIM_PLAYBOOK.md`'de belgelenmiştir.
+- (#284) `resmi_yazisma` veri kümesi için bağlamsal anonimleştirme denetim
+  manifesti (`anonimlestirme-denetim-manifesti.jsonl`): TCKN checksum
+  doğrulaması, ad-soyad/imza sahibi/vekil, telefon, e-posta (gizlenmiş
+  `[at]` biçimi dahil), IBAN ve abone/sayaç/sicil/başvuru/kayıt/sözleşme/
+  üyelik/öğrenci/pasaport/hesap numaraları için bağlama duyarlı bulgular;
+  her bulgu dosya, kart kimliği, satır, tür, önem, güven skoru, önerilen
+  semantik yer tutucu ve düzeltme durumu taşır, ham hassas değer hiçbir
+  zaman rapora yazılmaz. 130 bulgu tamamı otomatik düzeltildi, 0 kayıt
+  bağlamsal inceleme bekliyor.
+- (#284) `backend/tests/unit/test_prepare_resmi_yazisma_markdown.py` ve
+  `backend/tests/unit/test_curate_yazisma_examples.py`'e kullanıcı tarafından
+  bildirilen 12 sorunlu kart için regresyon testleri, denetim manifestinin
+  hiçbir zaman ham kişisel veri taşımadığını doğrulayan test ve üretilen
+  `ornekler*.jsonl` split'leri arasında `source_group`/`template_family`/
+  `source_sha256`/`source_path`/yakın-kopya sızıntısı olmadığını doğrulayan
+  parametrik regresyon testleri eklendi.
+
+### Değiştirildi
+- (#284) Ham resmi_yazisma kaynakları (492 PDF/HTML/DOC/DOCX + GİB API'nin
+  200 ham JSON anlık görüntüsü, ~43 MB) artık GitHub'a gönderilmiyor
+  (`.gitignore`); dosyalar yerel diskte olduğu yerde değişmeden duruyor,
+  yalnız `git`'e eklenmeleri durduruldu (`git rm --cached`, geçmiş
+  commit'ler bozulmadı). Veri kümesinin asıl teslim edilen içeriği zaten
+  türetilmiş Markdown kartlarıydı; bkz. `datasets/resmi_yazisma/README.md`
+  "Ham kaynaklar" bölümü.
+
+### Düzeltildi
+- (#284) 240 vaka üretiminde `--max-cases` artık karar türlerini round-robin
+  dolaşıyor; önceki karar-dışı döngü 16 kayıtlık doğrulama partisinin tamamını
+  `tam_kabul` üretiyor ve dengeli kalite kapısını boşa düşürüyordu. `--resume`
+  ayrıca önceki partilerin kurum sayaçlarını geri yükleyerek 19/240 kurum
+  tavanını batch sınırları arasında koruyor. LLM'den gelen bütün serbest metin
+  metadata alanları aynı semantik anonimleştirme/PII denetiminden geçiriliyor;
+  few-shot provenance artık kart kimliği, yol, SHA-256 ve `source_group`
+  taşıyor, `required_facts`/`missing_information` yapısal şemaya alındı ve
+  itiraz kotası `incoming_type` üzerinden fail-closed doğrulanıyor.
+- (#284) Gelen evrak-karar-cevap şeması düzeltildi: `itiraz`, pilot vaka
+  üretiminde yanlışlıkla ayrı bir `decision` değeri gibi kullanılmıştı;
+  itiraz aslında bir gelen evrak türüdür (`incoming_type`), sonucu yine
+  standart 8'li `decision` enum'undan (`tam_kabul`, `ret`, `kismi_kabul`,
+  `eksik_belge`, `yetkisizlik`, `yalnizca_bilgilendirme`,
+  `belirsiz_basvuru`, `coklu_talep`) biri olmalı. Pilot'taki 5 itiraz
+  vakasının `decision_reason`'ı okunarak hepsinin gerçekte "itirazın
+  kabulü" olduğu doğrulandı, `decision: tam_kabul` + `incoming_type: itiraz`
+  olarak yeniden etiketlendi; `case_id`/`source_group` de bununla tutarlı
+  yeniden hesaplandı.
+  `scripts/generate_yazisma_vaka_pilotu.py`'ye bu 8'li kümeyi kanonik
+  tutan `ALLOWED_DECISIONS` sabiti ve `TARGET_DECISIONS`'ın yalnız bu
+  kümenin üyelerini anahtar olarak kullanabildiğini garanti eden bir
+  import-zamanı doğrulama eklendi -- aynı hatanın büyük ölçekli (240
+  vakalık) üretimde sessizce tekrarlanmasını engeller.
+- (#284) `OS-*` sentetik örneklem kalite kapısı fail-closed hale getirildi.
+  `os_body_kind`, tanımadığı her gövde kalıbını `"genel"` kovasına
+  düşürüyordu ve `os_is_coherent` bu kovayı **koşulsuz** geçiriyordu —
+  yani eşleşme kanıtlanamadığında kart otomatik "tutarlı" sayılıyordu.
+  Üretici betik (`scripts/scrape_open_sources.py`) başlığı, kurumu ve
+  gövdeyi birbirinden bağımsız rastgele havuzlardan çektiği için bu, üç
+  çekimin çeliştiği kartların üretim RAG'ına girmesine yol açtı (ör.
+  "Konu: Bilgi Edinme Başvurusu Cevabı" başlıklı bir kartın gövdesinde
+  bir belediye meclis kararının anlatılması). Kapı artık üç ekseni ayrı
+  ayrı denetliyor ve hangisinin çeliştiğini ayrı `ret_nedeni` ile
+  bildiriyor: `baslik_govde_uyumsuzlugu`, `kategori_govde_uyumsuzlugu`,
+  `kurum_govde_uyumsuzlugu` (yalnız gövde kendi karar organını
+  adlandırdığında) ve `taninmayan_govde_kalibi`. Etki: 800 karttan
+  `candidate` kalan 63 → **9**; üretim `ornekler.jsonl` 438 → **396**,
+  dev 86 → 80, heldout 45 → 39; korpusun gerçek/resmî oranı %79,6 →
+  **%88,0**. Kartlar silinmedi, yalnız doğru şekilde `rejected` işaretlendi.
+- (#284) `_fold_tr()` yardımcısı eklendi: `"İ".casefold()` Türkçede
+  `i` + U+0307 (birleşik nokta) üretiyor, bu yüzden "İmar Planı" ile
+  başlayan **her** başlık kalite kapısının casefold karşılaştırmasında
+  sessizce eşleşmiyordu.
+- (#284) `scripts/prepare_resmi_yazisma_markdown.py`: front matter
+  değerleri `json.dumps` ile kaçışlanıp yazılıyor ama okunurken yalnız dış
+  tırnaklar soyuluyor, iç kaçışlar (`\\`) hiç geri çözülmüyordu. Bu, bir
+  değerde ters eğik çizgi geçtiğinde (`GIB-UY-015` başlığı) her
+  normalize-only çalıştırmasında kaçış sayısını katlıyordu — gerçek bir
+  idempotence ihlali. `split_front_matter` artık çift tırnaklı değerleri
+  `json.loads` ile doğru çözüyor.
+- (#284) `_replace_labelled_name`: `Başkanvekili` (bir mahkeme unvanı)
+  "vekil" alt-dizgisi yüzünden yanlışlıkla `[VEKİL ADI]` (avukat alanı)
+  ile maskeleniyordu; artık `[KİŞİ ADI]` ile maskeleniyor.
+- (#284) `semantic_anonymize`'daki eski/yanlış yer tutucu onarım geçişi,
+  `VEKİLİ:` etiketini satır başına çapalamadan aramıyordu; bu yüzden
+  `Başkanvekili:` alanının (üstteki düzeltmeyle doğru maskelenen)
+  `[KİŞİ ADI]` değerini de `[VEKİL ADI]`'ya geri çeviriyordu. Regex artık
+  yalnız satır başındaki bağımsız `VEKİLİ:` alanına çapalı.
+- (#284) `assess_quality`, `SIMULASYON` içeren kaynaklardan üretilen
+  kartları artık doğrudan `rejected`/`sentetik_simulasyon_yalniz_test`
+  olarak işaretliyor. Önceden bu karar yalnız `_effective_rag_decision`
+  içinde *raporlanıyor*, karta *yazılmıyordu* — `curate_yazisma_examples.py`
+  ise kararını kartın kendi `rag_status`'una dayandırdığından, tam bir
+  `--apply` çalıştırması (yarım kalan bir öncekinde gözlemlendiği gibi) 32
+  okunaklı simülasyon kartını `candidate`'e çevirip üretim `ornekler.jsonl`
+  dosyasına sokabiliyordu. Artık kaynaktan yeniden çıkarım ile normalize
+  arasında tutarlı: 300/300 simülasyon kartı `rejected` kalıyor, üretim
+  RAG çıktısında sıfır sızıntı.
 - `docs/diagrams/` altında sistemin tamamını (backend + frontend) kapsayan 8
   Mermaid diyagramı eklendi: use case, Görev 1 ve Görev 2 sıra diyagramları,
   evrak yaşam döngüsü aktivite diyagramı, dağıtım (deployment) diyagramı,

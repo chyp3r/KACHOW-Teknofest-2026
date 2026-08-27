@@ -13,7 +13,7 @@ dogrulama: "acik_kaynaktan_kazindi"
 rag_status: "candidate"
 kaynak_kurum: "Danıştay Başkanlığı"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "8"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Danıştay İdari Dava Daireleri Kurulu Kararı - E.2022/1120, K.2023/450
@@ -28,7 +28,7 @@ anonimlestirilen_alan_sayisi: "8"
 
 **TEMYİZ EDEN (DAVACI):** [KİŞİ ADI]
 **VEKİLİ:** Av. [VEKİL ADI]
-**DAVALI:** [KURUM ADI] Bakanlığı / Ankara
+**DAVALI:** [KİŞİ ADI]
 
 **İSTEMİN KONUSU:** Davacının, 657 sayılı Devlet Memurları Kanunu'nun 4/B maddesi uyarınca kamu kurumuna sözleşmeli büro personeli atanması istemiyle yaptığı başvurunun güvenlik soruşturması ve arşiv araştırması gerekçe gösterilerek reddedilmesine ilişkin işlemin iptali talebiyle açılan davada verilen direnme kararının temyizen incelenerek bozulması istenilmektedir.
 
@@ -42,4 +42,4 @@ anonimlestirilen_alan_sayisi: "8"
 3. Dosyanın yeniden bir karar verilmek üzere ilgili İdare Mahkemesine gönderilmesine OYÇOKLUĞUYLA karar verildi.
 
 **Başkan:** [KİŞİ ADI]
-**Üyeler:** [KİŞİ ADI], [KİŞİ ADI], [KİŞİ ADI], [KİŞİ ADI].
+**Üyeler:** [KİŞİ ADI]

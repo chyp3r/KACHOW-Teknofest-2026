@@ -32,7 +32,7 @@ GELİR İDARESİ BAŞKANLIĞI
 Gelir Yönetimi ve Denetim Müdürlüğü
 Sayı
 :
-[EVRAK SAYISI] ]-
+[EVRAK SAYISI]
 02.04.2026
 Konu
 :

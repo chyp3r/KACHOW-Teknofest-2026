@@ -8,7 +8,7 @@ dogrulama: "mevcut_markdown_kaydi"
 rag_status: "candidate"
 kaynak_kurum: "Sentetik veri üretimi"
 anonimlestirme_durumu: "uygun"
-anonimlestirilen_alan_sayisi: "3"
+anonimlestirilen_alan_sayisi: "5"
 ---
 
 # Vergi Dairesi İdari Para Cezası İtiraz Dilekçesi (Ornek 2)
@@ -25,7 +25,7 @@ Müdürlüğünüzün 09.08.2022 tarih ve 22630 sayılı yazısı ile tarafıma 
 3. 213 sayılı Vergi Usul Kanunu'nun ilgili maddeleri gereğince cezanın kaldırılmasını talep ediyorum.
 
 Mükellef Bilgileri:
-- Adı Soyadı: Ayse Demir
+- Adı Soyadı: [KİŞİ ADI]
 - T.C. Kimlik No: [T.C. KİMLİK NO]
 [KURUM İLETİŞİM BİLGİLERİ]
 [KURUM ADRESİ]
@@ -33,7 +33,7 @@ Mükellef Bilgileri:
 Yukarıda arz ettiğim nedenlerle, haksız yere kesilen para cezasının iptal edilmesini saygılarımla arz ve talep ederim.
 
 09.08.2022
-Ayse Demir
+[İMZA SAHİBİ]
 İmza
 
 EKLER:
