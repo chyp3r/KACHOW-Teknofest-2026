@@ -8,6 +8,41 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Belge analiz grafiğinde (`document_analysis_graph.py`) canlı mevzuat zenginleştirmesi.
 - Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
 - Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
+- **Taslağı Word ve PDF olarak indirme.** `GET /api/v1/drafts/{id}/export?fmt=docx|pdf`
+  taslak metnini 12 punto Times New Roman ile bir belgeye dönüştürüp `attachment`
+  olarak döndürür. PDF'te Türkçe glif kapsamı için Times New Roman metriğine denk
+  bir serif TTF (Liberation Serif) çalışma anında kaydedilir (`fonts-liberation`
+  her iki backend imajına eklendi). Taslaklar sayfası ve sohbet taslak özetine
+  Word/PDF indirme eylemleri eklendi.
+- **Asistan düğümüne regex/birebir belge arama aracı** (`search_document_regex`).
+  Anlamsal `search_document`'in zayıf kaldığı kesin dizge/sayı/tarih/atıf-kodu
+  aramaları ve "kaç kez geçiyor" sorguları için belge metnini satır satır tarar,
+  `[s. N]` atfıyla döndürür.
+- **Sohbette bağlam penceresi kullanım halkası.** Yanıtın `details.context_usage`
+  alanı asistan turunun bağlam penceresini nasıl kullandığını (sistem yönergesi,
+  belge bağlamı, geçmiş özeti, sohbet geçmişi, güncel mesaj, ayrılan pay) gerçek
+  token sayılarıyla döker; sohbet alanında dairesel bir gösterge bunu okur.
+
+### Değiştirildi
+- Çıktı guardrail'i (`output_gate`) artık politikadaki `output_groundedness_threshold`
+  değerini uyguluyor: dayanaklı iddia payı eşiği geçen bir yanıt olduğu gibi
+  bırakılır. Önceden, MCP mevzuat metninden alınıp yığında bulunan ama
+  token-örtüşme eşleştiricisinin kaçırdığı tek bir ifade bile tüm yanıtı
+  `[Doğrulanamayan ifade kaldırıldı]` ile deliyordu.
+- Revize turunda önceki sürümün birim önerisi (`destination` /
+  `destination_unit_id` / `destination_justification`) korunuyor; artık her
+  revizyon "Hedef birim"i sıfırlamıyor.
+
+### Düzeltildi
+- Sohbet geçmişi kenar çubuğunda "Daha eski" grubundaki tarih (`14 Ağustos`)
+  ikonun altına kayıyordu (eski, elle yazılmış grid override'ı).
+- Evrak kütüphanesinde analiz süresi göstergesi sadeleştirildi
+  (`12 saniyedir analiz ediliyor` → `Analiz ediliyor · 3 sn`).
+- "Gelen Evraklar" gibi kısa içerikli sekmeye geçince başlık/sekme barı
+  yatayda zıplıyordu (`scrollbar-gutter: stable`).
+- HITL eksik-bilgi kartında imza adı ve unvanı soruları aynı
+  "Ahmet Yılmaz / Daire Başkanı" örneğini gösteriyordu; ayrıldı. Var olmayan
+  bir "Sen karar ver" kontrolüne yönlendiren yardım cümlesi kaldırıldı.
 
 ## [3.56]
 ### Düzeltildi

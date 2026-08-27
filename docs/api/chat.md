@@ -49,11 +49,25 @@ Senkron: Orkestrasyonu çalıştırır ve tamamlanmış (veya kesintiye uğramı
       "status": "COMPLETED",
       "classification": {},
       "draft": {},
-      "routing": {}
+      "routing": {},
+      "assist": {},
+      "context_usage": {
+        "total": 8192,
+        "used": 3120,
+        "free": 5072,
+        "segments": [
+          { "key": "system", "label": "Sistem yönergesi", "tokens": 900 },
+          { "key": "history", "label": "Sohbet geçmişi", "tokens": 1150 },
+          { "key": "input", "label": "Güncel mesaj", "tokens": 46 },
+          { "key": "reserved", "label": "Yanıt için ayrılan", "tokens": 1024 }
+        ]
+      }
     }
   }
 }
 ```
+
+> **NOT:** `details.context_usage` yalnızca soru-cevap/sohbet (asistan) turlarında bulunur; o turun bağlam penceresini nasıl kullandığını gerçek token sayılarıyla döker (frontend'in dairesel göstergesi bunu okur). Taslak/revizyon turlarında alan gelmez.
 
 #### 422 Unprocessable Entity
 Geçersiz parametre kombinasyonu.
