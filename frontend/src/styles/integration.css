@@ -360,6 +360,24 @@
 }
 .chat-layout { display: block; min-height: 0; }
 .messages-area { width: 100%; padding: var(--space-3) var(--space-1) var(--space-6); }
+/* Page-citation badge: the backend's `[s. N]` anchor (format_anchor), shown
+   as a labelled chip so the provenance reads as provenance instead of as
+   stray punctuation in the sentence. See features/chat/MarkdownMessage.tsx. */
+.page-citation {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.15em;
+  padding: 0.05em 0.45em;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, var(--border-default));
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  vertical-align: baseline;
+  /* Never the target of a text selection drag more than the prose itself. */
+  user-select: none;
+}
+
 .chat-guardrail-stack {
   display: grid;
   align-content: start;
@@ -382,13 +400,7 @@
   border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--status-failed) 8%, transparent);
 }
-.chat-guardrail-removed-label {
-  font-size: var(--text-overline);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  color: var(--text-secondary);
-}
+.chat-guardrail-removed-label { color: var(--text-secondary); }
 .chat-guardrail-removed ul { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
 .chat-guardrail-removed li { font-style: italic; color: var(--text-secondary); }
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }

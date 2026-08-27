@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { MarkdownMessage } from "./MarkdownMessage";
 
 const FRAME_INTERVAL_MS = 24;
 const MAX_ANIMATION_STEPS = 220;
@@ -51,13 +51,13 @@ export function AnimatedMessageText({
 
   const isAnimating = visibleLength < text.length;
   if (!isAnimating) {
-    return <div className="markdown-content"><ReactMarkdown>{text}</ReactMarkdown></div>;
+    return <div className="markdown-content"><MarkdownMessage text={text} /></div>;
   }
 
   return (
     <div className="markdown-content">
       <div aria-hidden="true">
-        <ReactMarkdown>{text.slice(0, visibleLength)}</ReactMarkdown>
+        <MarkdownMessage text={text.slice(0, visibleLength)} />
         <span className="streaming-caret" />
       </div>
       <span className="sr-only">{text}</span>

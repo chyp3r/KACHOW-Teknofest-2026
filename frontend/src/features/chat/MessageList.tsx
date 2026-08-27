@@ -1,7 +1,6 @@
 import { Bot, FilePenLine, FileSearch, Info, MessageCircle, MessageSquare, Route, Sparkles, UploadCloud, UserRound } from "lucide-react";
 import { useCallback, useEffect, useRef } from "react";
 import type { UIEvent } from "react";
-import ReactMarkdown from "react-markdown";
 import type {
   ChatMessage,
   InterruptState,
@@ -10,6 +9,7 @@ import type {
 } from "../../types/chat";
 import { Button } from "../../components/Button";
 import { Accordion } from "../../components/Accordion";
+import { MarkdownMessage } from "./MarkdownMessage";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
@@ -257,7 +257,7 @@ export function MessageList({
           <div>
             <header>KACHOW Asistan</header>
             <div className="markdown-content">
-              <ReactMarkdown>{streamingText}</ReactMarkdown>
+              <MarkdownMessage text={streamingText} />
               <span className="streaming-caret" />
             </div>
           </div>
