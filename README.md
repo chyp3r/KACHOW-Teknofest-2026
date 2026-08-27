@@ -748,21 +748,19 @@ xychart-beta
 
 ### OCR ve Alan Çıkarımı Karşılaştırması
 
-Yukarıdaki LLM tabloları sentetik veriyle üretildi; bu bölümü ise gerçek bir
-resmî yazışma derlemi üzerinde ölçtük. `datasets/resmi_yazisma` altındaki 23
-belge / 52 sayfa, her biri 7 etiketli alanla (başlık bloğundan Sayı, Tarih,
-Konu, Muhatap, Gönderen Kurum; imza bloğundan İmza Sahibi, İmza Unvanı —
-toplam 134 alan) elle doğrulanmış zemin gerçeğiyle (`ground truth`)
-karşılaştırıldı. Ölçüm A100 üzerinde Colab'da koşuldu; her motor, üretimdeki
-`FallbackDocumentExtractor` zincirine ("zincir" sütunu) ve tek başına ham
-çağrısına ("ham" sütunu) karşı ayrı ayrı test edildi.
+Yukarıdaki LLM tabloları sentetik veriyle üretildi; bu bölüm gerçek bir
+resmî yazışma derlemini ölçüyor. `datasets/resmi_yazisma`'daki 23 belge /
+52 sayfa, elle doğrulanmış `ground truth`'la karşılaştırıldı: 7 alanlık
+etiket şeması (başlıktan Sayı, Tarih, Konu, Muhatap, Gönderen Kurum;
+imzadan İmza Sahibi, İmza Unvanı) üzerinden toplam 134 alan. Ölçüm,
+Colab'da A100 üzerinde koşuldu; her motor hem `FallbackDocumentExtractor`
+zincirine ("zincir" sütunu) hem ham çağrısına ("ham" sütunu) karşı ayrı
+test edildi.
 
-İmza bloğunu ayrı bir sütunda tuttuk çünkü header-band onarımı (aşağıda)
-zaten her motorun başlık alanlarını birbirine yaklaştırıyor; yalnızca
-başlığa bakılırsa tüm motorlar aynı performansta görünür. Motorlar
-arasındaki asıl fark imza bloğunda ortaya çıkıyor: ıslak imza mürekkebi
-basılı ismin üzerine bindiğinde (`"İF; BOZDAG ;"` → `"Bekir BOZDAĞ"` gibi)
-OpenDataLoader/Tesseract ismi kaybediyor ya da bozuyor.
+İmza bloğunu ayrı sütunda tuttuk: header-band onarımı başlık sonuçlarını
+motorlar arasında zaten yaklaştırıyor. Asıl fark imzada çıkıyor. Islak imza
+mürekkebi basılı ismin üzerine bindiğinde (`"İF; BOZDAG ;"` →
+`"Bekir BOZDAĞ"`) OpenDataLoader/Tesseract ismi kaybediyor ya da bozuyor.
 
 | Motor | Başlık Doğruluğu | İmza Doğruluğu | Ağırlıklı† | Ham s/sayfa | Zincir s/sayfa |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -772,32 +770,29 @@ OpenDataLoader/Tesseract ismi kaybediyor ya da bozuyor.
 | `deepseek-ocr` | %89.8 (79/88) | %73.9 (34/46) | %83.4 | 3.55s | 1.69s |
 | `unlimited-ocr` (q8_0) | %18.2 (16/88) | %52.2 (24/46) | %31.8 | 5.96s | 6.10s |
 
-*† Ağırlıklı doğruluk = %60 başlık + %40 imza. "Zincir s/sayfa", imza/başlık
-kurtarma yeniden denemeleri dahil üretimde gerçekten ödenen maliyeti
-gösterir; "ham s/sayfa" motorun tek çağrıdaki kendi hızıdır — bir motorun
-kurtarma zinciri daha sık başarıyla tetiklenmesi (daha çok deniyor ve
-kazanıyor olması) onu ham hızda daha yavaş gösterebilir, üretim maliyetiyle
-karıştırılmamalı. `paddleocr` bu tablodan çıkarıldı: ölçüm sırasında bir API
-uyumsuzluğu yüzünden ham geçişi her belgede anında başarısız oldu (o zamandan
-beri düzeltildi, henüz yeniden ölçülmedi).*
+*† Ağırlıklı doğruluk = %60 başlık + %40 imza. "Zincir s/sayfa", kurtarma
+denemeleri dahil üretimde ödenen gerçek maliyettir; "ham s/sayfa" motorun
+tek çağrıdaki hızıdır. Zinciri sık tetiklenen bir motor ham hızda daha
+yavaş görünebilir; bu, üretim maliyetiyle karıştırılmamalı. `paddleocr`
+tablo dışı bırakıldı: ölçüm sırasında bir API uyumsuzluğu yüzünden ham
+geçiş her belgede başarısız oluyordu (o zamandan beri düzeltildi, henüz
+yeniden ölçülmedi).*
 
-Üretimde kullanılan motor `glm-ocr` (`OLLAMA_VISION_MODEL =
-"glm-ocr:latest"`) ve bu ölçüm de o kararı doğruluyor. `deepseek-ocr`
-başlıkta eşit sonuç veriyor ama imza kurtarmada vision kullanmayan taban
-çizgiyle (%73.9) tamamen aynı çıkıyor, yani kurtarma yükseltmesi bu derlemde
-hiçbir katkı sağlamıyor. `glm-ocr` ise imza bloğunda 6 belgede daha iyi,
-hiçbir belgede daha kötü sonuç verdi.
+Üretimde `glm-ocr` kullanılıyor (`OLLAMA_VISION_MODEL = "glm-ocr:latest"`)
+ve ölçüm bu kararı doğruluyor. `deepseek-ocr` başlıkta aynı sonucu veriyor
+ama imzada, vision kullanmayan taban çizgiyle (%73.9) birebir örtüşüyor:
+kurtarma yükseltmesi bu derlemde hiçbir katkı sağlamıyor. `glm-ocr` ise
+imzada 6 belgede daha iyi, hiçbir belgede daha kötü sonuç verdi.
 
 ![OCR motor karşılaştırması — başlık/imza kurtarma](docs/images/ocr-benchmark-bars.png)
 
 ![OCR motor karşılaştırması — gecikme, doğruluk ve tahmini bellek](docs/images/ocr-benchmark-bubble.png)
 
-Bu ölçüm ayrıca onarım zincirinde iki gerçek hata ortaya çıkardı ve ikisi de
-düzeltildi (bkz. [Önemli Mimari Kararlar](#önemli-mimari-kararlar)):
-onarım daha önce sonucu kötüleştirebiliyordu (koruma yoktu), ve başlık
-alanları için sadece header-band kırpımı yeterli gelmediğinde tam-sayfaya
-yükseltme yolu yoktu — imza için zaten var olan mekanizmanın aynısı artık
-başlık için de çalışıyor.
+Ölçüm, onarım zincirinde iki hata da açığa çıkardı; ikisi de düzeltildi
+(bkz. [Önemli Mimari Kararlar](#önemli-mimari-kararlar)). Onarımın koruması
+yoktu, sonucu kötüleştirebiliyordu. Header-band yetmediğinde başlığı tam
+sayfaya yükseltecek yol da yoktu; artık imzadaki mekanizma başlık için de
+çalışıyor.
 
 ### Latency ve Performans Testleri
 
