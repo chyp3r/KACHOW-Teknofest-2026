@@ -312,6 +312,32 @@ async def test_dogrula_var_olan_maddeyi_kayda_yazar():
 
 
 @pytest.mark.asyncio
+async def test_numaradan_dogrula_resmi_basligi_modelden_almadan_yazar():
+    dogrulayici = _SahteDogrulayici({"4982": BILGI_EDINME})
+
+    sonuc = await dogrulayici.numaradan_dogrula("kanun", "4982")
+
+    assert sonuc.gecerli
+    assert sonuc.kayit["title"] == "BİLGİ EDİNME HAKKI KANUNU"
+    assert sonuc.kayit["verification_source"] == "mevzuat-mcp:103705"
+
+
+@pytest.mark.asyncio
+async def test_madde_metni_yalniz_hedef_madde_blogunu_dondurur():
+    dogrulayici = _SahteDogrulayici(
+        {"4982": BILGI_EDINME},
+        {"103705": "MADDE 10\nÖnceki hüküm.\nMADDE 11\nHedef hüküm.\nMADDE 12\nSonraki hüküm."},
+    )
+    dogrulayici._metinler["103705"] = dogrulayici.metinler["103705"]
+
+    metin = await dogrulayici.madde_metni("103705", "11")
+
+    assert "MADDE 11" in metin
+    assert "Hedef hüküm" in metin
+    assert "MADDE 12" not in metin
+
+
+@pytest.mark.asyncio
 async def test_dogrula_ayni_mevzuati_tekrar_aramaz():
     """240 vakalık bir turda 4982 onlarca kez geçer; her seferinde MCP'ye
     gitmek turu gereksiz yere saatlerce uzatırdı."""

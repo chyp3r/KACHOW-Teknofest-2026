@@ -30,6 +30,27 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   "atıf yanlış" sayılmaz.
 
 ### Değiştirildi
+- (#284) Aşama 4 çekirdek vaka üretimi; gelen evraktan kopan takvim/yıl
+  sıçramaları, desteklenmeyen tutar-yüzde-gün süreleri, kaldırılmış büyükşehir
+  il özel idareleri, uydurma kurum/yetki dağılımları ve cevap taslağındaki yeni
+  somut olgular için fail-closed kapılarla genişletildi. Olgu ile kurum/yetki
+  semantik denetimleri tek Evren çağrısında birleştirildi ve varsayılan tekrar
+  sayısı ikiye düşürüldü. LLM tekrarlarında sürekli bozulan altı çekirdek kayıt,
+  gerçek üretim yöntemini `deterministic_curated_core` olarak bildiren yeniden
+  çalıştırılabilir `scripts/seed_curated_core_cases.py` ile tamamlandı. Çekirdek
+  checkpoint 18 benzersiz vaka ve sıfır kalite bulgusuyla kapıdan geçti; manuel
+  reddedilen tüm sürümler denetim/ret arşivinde korunuyor ve RAG'a karışmıyor.
+- (#284) 16 vakalık Aşama 4 denemesinde kalite kapısının yakaladığı hatalar
+  üzerine vaka üretimi fail-closed biçimde sertleştirildi. Kişi adlarına ek
+  olarak kurgusal özel tüzel kişi adları da tüm serbest metadata alanlarında
+  semantik olarak maskeleniyor; yer tutucu envanteri artık JSON kapsayıcı
+  köşeli parantezlerini yanlışlıkla yer tutucu saymıyor. `required_facts`,
+  `kaynak_satir` ve `must_include` anotasyonları belge gövdeleriyle
+  deterministik olarak hizalanıyor; en az bir izlenebilir olgu ve bir gerçek
+  zorunlu ifade kalmayan vaka yazılmadan reddediliyor. Tarih, evrak sayısı ve
+  diğer sayısal olgular kalite kontrolünde artık genellenmiyor, birebir
+  doğrulanıyor. İlk başarısız 16 vaka silinmeden denetim arşivinde tutuluyor
+  ve RAG çıktısına karıştırılmıyor.
 - (#284) `scripts/generate_yazisma_vaka_pilotu.py`: `legal_basis` artık
   `list[str]` değil, `type`/`number`/`title`/`article`/`verification_source`/
   `verification_status` alanlı yapısal kayıt listesi (Aşama 3.2 şeması).

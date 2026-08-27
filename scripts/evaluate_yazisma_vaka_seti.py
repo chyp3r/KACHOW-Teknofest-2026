@@ -20,9 +20,16 @@ from generate_yazisma_vaka_pilotu import (
     INCOMING_TYPE_ITIRAZ,
     MAIN_OUTPUT,
     MAIN_ROOT,
+    MIN_MUST_INCLUDE,
+    MIN_TRACEABLE_FACTS,
     TARGET_DECISIONS,
     _anonymization_findings,
+    _chronology_validation_codes,
+    _draft_citation_contract_codes,
+    _institution_plausibility_codes,
     _itiraz_count_for,
+    _normalized_quality_text,
+    _unsupported_numeric_claim_codes,
 )
 
 REQUIRED_FIELDS = {
@@ -197,10 +204,14 @@ def _validate_case(case: dict[str, Any], findings: list[dict[str, Any]]) -> None
                 detail=f"{field}:{','.join(kinds)}",
             )
 
-    draft_normalized = _normalized_text(case["gold_draft"])
-    incoming_normalized = _normalized_text(case["incoming_document"])
+    draft_normalized = _normalized_quality_text(case["gold_draft"])
+    incoming_normalized = _normalized_quality_text(case["incoming_document"])
+    if len(case["required_facts"]) < MIN_TRACEABLE_FACTS:
+        _finding(findings, case_id=case_id, code="required_facts_yetersiz")
+    if len(case["must_include"]) < MIN_MUST_INCLUDE:
+        _finding(findings, case_id=case_id, code="must_include_listesi_yetersiz")
     for phrase in case["must_include"]:
-        if _normalized_text(str(phrase)) not in draft_normalized:
+        if _normalized_quality_text(str(phrase)) not in draft_normalized:
             _finding(
                 findings,
                 case_id=case_id,
@@ -208,7 +219,7 @@ def _validate_case(case: dict[str, Any], findings: list[dict[str, Any]]) -> None
                 detail=hashlib.sha256(str(phrase).encode("utf-8")).hexdigest()[:12],
             )
     for phrase in case["must_not_invent"]:
-        normalized = _normalized_text(str(phrase))
+        normalized = _normalized_quality_text(str(phrase))
         if normalized and normalized in draft_normalized:
             _finding(
                 findings,
@@ -221,14 +232,27 @@ def _validate_case(case: dict[str, Any], findings: list[dict[str, Any]]) -> None
         if not isinstance(fact, dict) or not {"alan", "deger", "kaynak_satir"} <= fact.keys():
             _finding(findings, case_id=case_id, code="required_fact_sema_hatasi")
             continue
-        value = _normalized_text(str(fact["deger"]))
-        source_line = _normalized_text(str(fact["kaynak_satir"]))
+        value = _normalized_quality_text(str(fact["deger"]))
+        source_line = _normalized_quality_text(str(fact["kaynak_satir"]))
         if value and value not in incoming_normalized:
             _finding(findings, case_id=case_id, code="olgu_gelen_evrakta_yok")
         if value and value not in draft_normalized:
             _finding(findings, case_id=case_id, code="olgu_taslagina_tasinmadi")
         if source_line and source_line not in incoming_normalized:
             _finding(findings, case_id=case_id, code="kaynak_satir_bulunamadi")
+
+    for code in _chronology_validation_codes(
+        case["incoming_document"], case["gold_draft"]
+    ):
+        _finding(findings, case_id=case_id, code=code)
+    for code in _institution_plausibility_codes(
+        case["incoming_document"], case["gold_draft"]
+    ):
+        _finding(findings, case_id=case_id, code=code)
+    for code in _unsupported_numeric_claim_codes(
+        case["incoming_document"], case["gold_draft"]
+    ):
+        _finding(findings, case_id=case_id, code=code)
 
     if decision in {"eksik_belge", "belirsiz_basvuru"}:
         if not case["missing_information"]:
@@ -256,8 +280,13 @@ def _validate_case(case: dict[str, Any], findings: list[dict[str, Any]]) -> None
             _finding(findings, case_id=case_id, code="mevzuat_dogrulanmamis")
         if not str(legal_reference["verification_source"]).startswith("mevzuat-mcp:"):
             _finding(findings, case_id=case_id, code="mevzuat_kaynagi_gecersiz")
+    for code in _draft_citation_contract_codes(case["gold_draft"], case["legal_basis"]):
+        _finding(findings, case_id=case_id, code=code)
 
     references = case.get("provenance", {}).get("uslup_referanslari", [])
+    institution = case.get("provenance", {}).get("kurum_tahmini")
+    if not institution or "[" in str(institution) or "]" in str(institution):
+        _finding(findings, case_id=case_id, code="kurum_anteti_bulunamadi")
     if not references:
         _finding(findings, case_id=case_id, code="provenance_referansi_yok")
     for reference in references:

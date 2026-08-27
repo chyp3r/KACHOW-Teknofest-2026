@@ -1,0 +1,34 @@
+{
+  "case_count": 18,
+  "decision_distribution": {
+    "belirsiz_basvuru": 2,
+    "coklu_talep": 2,
+    "eksik_belge": 2,
+    "kismi_kabul": 2,
+    "ret": 3,
+    "tam_kabul": 3,
+    "yalnizca_bilgilendirme": 2,
+    "yetkisizlik": 2
+  },
+  "error_count": 0,
+  "finding_distribution": {},
+  "findings": [],
+  "gate_status": "passed",
+  "institution_distribution": {
+    "ANKARA SU VE KANALİZASYON İDARESİ GENEL MÜDÜRLÜĞÜ": 1,
+    "ANKARA VALİLİĞİ": 4,
+    "BURSA BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI": 1,
+    "BURSA VALİLİĞİ": 1,
+    "BURSA İL MİLLÎ EĞİTİM MÜDÜRLÜĞÜ": 2,
+    "ESHOT GENEL MÜDÜRLÜĞÜ": 1,
+    "KAYSERİ VALİLİĞİ": 1,
+    "SAMSUN VALİLİĞİ": 1,
+    "ÇANAKKALE ONSEKİZ MART ÜNİVERSİTESİ": 1,
+    "İSTANBUL BÜYÜKŞEHİR BELEDİYESİ": 2,
+    "İZMİR VALİLİĞİ": 2,
+    "İZMİR İLİ KARŞIYAKA KAYMAKAMLIĞI": 1
+  },
+  "schema_version": 1,
+  "unique_case_count": 18,
+  "warning_count": 0
+}

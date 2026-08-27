@@ -22,12 +22,17 @@ def _valid_case(case_id="GKC-TAM_KABUL-008"):
                 "alan": "başvuru konusu",
                 "deger": "eğitim desteği",
                 "kaynak_satir": "Başvuru konusu eğitim desteğidir.",
-            }
+            },
+            {
+                "alan": "muhatap kurum",
+                "deger": "İZMİR VALİLİĞİ",
+                "kaynak_satir": "İZMİR VALİLİĞİ",
+            },
         ],
         "missing_information": [],
         "expected_questions": [],
         "gold_draft": "T.C.\nİZMİR VALİLİĞİ\nEğitim desteği talebiniz uygun bulunmuştur.",
-        "must_include": ["uygun bulunmuştur"],
+        "must_include": ["Eğitim desteği", "uygun bulunmuştur"],
         "must_not_invent": ["olmayan sözleşme numarası"],
         "legal_basis": [],
         "evidence": [{"tur": "uslup_referansi"}],
@@ -93,8 +98,39 @@ def test_unverified_legal_basis_fails_the_gate():
 
 def test_missing_required_fact_in_draft_fails_the_gate():
     case = _valid_case()
-    case["gold_draft"] = "Talebiniz uygun bulunmuştur."
+    case["gold_draft"] = "İZMİR VALİLİĞİ\nTalebiniz uygun bulunmuştur."
 
     report = evaluator.evaluate_cases([case])
 
     assert report["finding_distribution"]["olgu_taslagina_tasinmadi"] == 1
+
+
+def test_chronology_jump_fails_the_gate():
+    case = _valid_case()
+    case["incoming_document"] += "\nBaşvuru tarihi 18.02.2025'tir."
+    case["gold_draft"] += "\nTarih: 25.02.2026\nSayı: E-2026/1123"
+
+    report = evaluator.evaluate_cases([case])
+
+    assert report["finding_distribution"]["taslak_tarih_kronolojisi_gecersiz"] == 1
+    assert report["finding_distribution"]["taslak_evrak_yili_gecersiz"] == 1
+
+
+def test_abolished_metropolitan_special_administration_fails_the_gate():
+    case = _valid_case()
+    case["incoming_document"] = case["incoming_document"].replace(
+        "İZMİR VALİLİĞİ", "MERSİN İL ÖZEL İDARESİ"
+    )
+    case["gold_draft"] = case["gold_draft"].replace(
+        "İZMİR VALİLİĞİ", "MERSİN İL ÖZEL İDARESİ"
+    )
+    case["required_facts"][1]["deger"] = "MERSİN İL ÖZEL İDARESİ"
+    case["required_facts"][1]["kaynak_satir"] = "MERSİN İL ÖZEL İDARESİ"
+    case["provenance"]["kurum_tahmini"] = "MERSİN İL ÖZEL İDARESİ"
+
+    report = evaluator.evaluate_cases([case])
+
+    assert (
+        report["finding_distribution"]["kaldirilmis_buyuksehir_il_ozel_idaresi"]
+        == 1
+    )

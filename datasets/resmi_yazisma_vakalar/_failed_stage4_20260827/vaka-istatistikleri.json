@@ -1,0 +1,616 @@
+{
+  "case_count": 16,
+  "decision_distribution": {
+    "belirsiz_basvuru": 2,
+    "coklu_talep": 2,
+    "eksik_belge": 2,
+    "kismi_kabul": 2,
+    "ret": 2,
+    "tam_kabul": 2,
+    "yalnizca_bilgilendirme": 2,
+    "yetkisizlik": 2
+  },
+  "error_count": 96,
+  "finding_distribution": {
+    "beklenen_soru_listesi_bos": 3,
+    "eksik_bilgi_listesi_bos": 3,
+    "kaynak_satir_bulunamadi": 21,
+    "must_include_eksik": 32,
+    "olgu_gelen_evrakta_yok": 18,
+    "olgu_taslagina_tasinmadi": 19
+  },
+  "findings": [
+    {
+      "case_id": "GKC-TAM_KABUL-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "must_include_eksik",
+      "detail": "0ac6bb05a758",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "must_include_eksik",
+      "detail": "8643a904213e",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-001",
+      "code": "must_include_eksik",
+      "detail": "253f1d3d56ef",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-001",
+      "code": "must_include_eksik",
+      "detail": "ccf5c88abf06",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-001",
+      "code": "must_include_eksik",
+      "detail": "17010ce6e75a",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-001",
+      "code": "must_include_eksik",
+      "detail": "aa7a9e7d9157",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-001",
+      "code": "must_include_eksik",
+      "detail": "466c177cfb81",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-001",
+      "code": "must_include_eksik",
+      "detail": "2134046449cc",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-001",
+      "code": "must_include_eksik",
+      "detail": "b44a871e8941",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-001",
+      "code": "must_include_eksik",
+      "detail": "9407cd1425f0",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-001",
+      "code": "must_include_eksik",
+      "detail": "2de4727fa038",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-001",
+      "code": "must_include_eksik",
+      "detail": "6f6ddcb15e15",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-001",
+      "code": "must_include_eksik",
+      "detail": "65a20c03ee26",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-001",
+      "code": "must_include_eksik",
+      "detail": "f08c9663bda6",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "must_include_eksik",
+      "detail": "e2fcbc59974c",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "must_include_eksik",
+      "detail": "fde174bb76fa",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "eksik_bilgi_listesi_bos",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-001",
+      "code": "beklenen_soru_listesi_bos",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-001",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "must_include_eksik",
+      "detail": "f678d95359d6",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "must_include_eksik",
+      "detail": "833ba3cf72ce",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-TAM_KABUL-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-002",
+      "code": "must_include_eksik",
+      "detail": "bbb88a408f16",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-002",
+      "code": "must_include_eksik",
+      "detail": "ba1fa21823ff",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-002",
+      "code": "must_include_eksik",
+      "detail": "346ec2e0da07",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-RET-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-002",
+      "code": "must_include_eksik",
+      "detail": "78313b8ea0db",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-KISMI_KABUL-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "must_include_eksik",
+      "detail": "40fbc5281cf5",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "must_include_eksik",
+      "detail": "1e2b40c6020b",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "eksik_bilgi_listesi_bos",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-002",
+      "code": "beklenen_soru_listesi_bos",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-002",
+      "code": "must_include_eksik",
+      "detail": "61c09bd7483b",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-002",
+      "code": "must_include_eksik",
+      "detail": "1ef592cd5652",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YETKISIZLIK-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "must_include_eksik",
+      "detail": "2217ca7d8ac7",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "olgu_gelen_evrakta_yok",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "olgu_taslagina_tasinmadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-002",
+      "code": "must_include_eksik",
+      "detail": "c42d0333677a",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-002",
+      "code": "must_include_eksik",
+      "detail": "fbc173a33403",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-002",
+      "code": "eksik_bilgi_listesi_bos",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-002",
+      "code": "beklenen_soru_listesi_bos",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "must_include_eksik",
+      "detail": "6123f43a734f",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "must_include_eksik",
+      "detail": "8a1844f35603",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "must_include_eksik",
+      "detail": "6799776725f2",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    },
+    {
+      "case_id": "GKC-COKLU_TALEP-002",
+      "code": "kaynak_satir_bulunamadi",
+      "detail": "",
+      "severity": "error"
+    }
+  ],
+  "gate_status": "failed",
+  "institution_distribution": {
+    "ANKARA VALİLİĞİ": 3,
+    "ANTALYA VALİLİĞİ": 1,
+    "KARS VALİLİĞİ": 1,
+    "MALTEPE KAYMAKAMLIĞI": 1,
+    "MERSİN İLİ AKDENİZ İLÇESİ BELEDİYE BAŞKANLIĞI": 1,
+    "Muğla Valiliği": 1,
+    "bilinmiyor": 1,
+    "Çankaya Kaymakamlığı": 1,
+    "İSTANBUL VALİLİĞİ": 1,
+    "İZMİR VALİLİĞİ": 5
+  },
+  "schema_version": 1,
+  "unique_case_count": 16,
+  "warning_count": 0
+}

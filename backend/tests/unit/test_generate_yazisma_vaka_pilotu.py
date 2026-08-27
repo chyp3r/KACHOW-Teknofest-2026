@@ -65,6 +65,18 @@ def test_case_targets_preserve_all_240_quotas():
         assert sum(target_decision == decision for target_decision, _, _ in targets) == spec["adet"]
 
 
+def test_every_planned_case_id_is_unique_and_targetable():
+    case_ids = [
+        pilot._case_id(decision, index)
+        for decision, _spec, index in pilot._iter_case_targets()
+    ]
+
+    assert len(case_ids) == 240
+    assert len(set(case_ids)) == 240
+    assert "GKC-EKSIK_BELGE-002" in case_ids
+    assert "GKC-BELIRSIZ_BASVURU-002" in case_ids
+
+
 def test_itiraz_quota_meets_minimum_and_overall_share_target():
     """Every decision type must carry at least ITIRAZ_MIN_PER_DECISION
     itiraz cases, and the total itiraz share across all 240 must land in
@@ -193,6 +205,498 @@ def test_scrub_reported_names_ignores_names_shorter_than_two_characters():
     assert scrubbed == text
 
 
+def test_scrub_reported_organizations_masks_private_legal_entity_names():
+    text = "Başvuru Mavi Ufuk Enerji A.Ş. adına yapılmıştır."
+
+    scrubbed = pilot._scrub_reported_organizations(text, ["Mavi Ufuk Enerji A.Ş."])
+
+    assert "Mavi Ufuk" not in scrubbed
+    assert "[KURUM ADI]" in scrubbed
+
+
+def test_public_institutions_are_not_treated_as_private_organizations():
+    organizations = ["Sivas Valiliği", "Mavi Ufuk Enerji A.Ş."]
+
+    assert pilot._private_organization_names(organizations) == [
+        "Mavi Ufuk Enerji A.Ş."
+    ]
+
+
+def test_collect_placeholders_does_not_capture_json_container_brackets():
+    value = {
+        "required_facts": [{"deger": "[KİŞİ ADI]"}],
+        "must_not_invent": ["belirtilmeyen bir tarih"],
+    }
+
+    assert pilot._collect_placeholders(value) == ["[KİŞİ ADI]"]
+
+
+def test_content_gate_accepts_only_traceable_verbatim_fields():
+    codes = pilot._content_validation_codes(
+        decision="eksik_belge",
+        incoming_document=(
+            "Başvuru 12.03.2026 tarihinde yapılmıştır. "
+            "Dosya numarası E-2026/42 olarak bildirilmiştir."
+        ),
+        gold_draft=(
+            "Başvurunuz 12.03.2026 tarihinde yapılmıştır. "
+            "E-2026/42 numaralı dosya incelenmiştir. "
+            "Kimlik fotokopisini sunmanız gerekmektedir."
+        ),
+        required_facts=[
+            {
+                "alan": "başvuru tarihi",
+                "deger": "12.03.2026",
+                "kaynak_satir": "Başvuru 12.03.2026 tarihinde yapılmıştır.",
+            },
+            {
+                "alan": "dosya numarası",
+                "deger": "E-2026/42",
+                "kaynak_satir": "Dosya numarası E-2026/42 olarak bildirilmiştir.",
+            },
+        ],
+        missing_information=[{"alan": "kimlik fotokopisi", "neden": "dosyada yok"}],
+        expected_questions=["Kimlik fotokopisini sunabilir misiniz?"],
+        must_include=[
+            "E-2026/42 numaralı dosya incelenmiştir.",
+            "Kimlik fotokopisini sunmanız gerekmektedir.",
+        ],
+        must_not_invent=["gelen evrakta olmayan karar numarası"],
+    )
+
+    assert codes == []
+
+
+def test_content_gate_rejects_paraphrased_source_and_empty_required_lists():
+    codes = pilot._content_validation_codes(
+        decision="belirsiz_basvuru",
+        incoming_document="Başvuru 12.03.2026 tarihinde yapılmıştır.",
+        gold_draft="Başvurunuz incelenmiştir.",
+        required_facts=[
+            {
+                "alan": "başvuru tarihi",
+                "deger": "12.03.2026",
+                "kaynak_satir": "Başvuru ... tarihinde yapılmıştır.",
+            }
+        ],
+        missing_information=[],
+        expected_questions=[],
+        must_include=["Ek açıklama sununuz."],
+        must_not_invent=[],
+    )
+
+    assert "kaynak_satir_bulunamadi" in codes
+    assert "olgu_taslagina_tasinmadi" in codes
+    assert "must_include_eksik" in codes
+    assert "eksik_bilgi_listesi_bos" in codes
+    assert "beklenen_soru_listesi_bos" in codes
+
+
+def test_must_not_invent_alignment_removes_existing_facts_and_gate_rejects_hallucination():
+    incoming = "Başvuru numarası E-2026/42 olarak bildirilmiştir."
+    forbidden = pilot._align_must_not_invent(
+        incoming,
+        ["E-2026/42", "E-2026/999", "gerçekte belirtilmeyen bir karar tarihi"],
+    )
+
+    assert "E-2026/42" not in forbidden
+    assert "E-2026/999" in forbidden
+
+    codes = pilot._content_validation_codes(
+        decision="tam_kabul",
+        incoming_document=incoming,
+        gold_draft="E-2026/999 sayılı işlem tesis edilmiştir. Talep kabul edilmiştir.",
+        required_facts=[
+            {
+                "alan": "başvuru numarası",
+                "deger": "E-2026/42",
+                "kaynak_satir": incoming,
+            },
+            {
+                "alan": "başvuru",
+                "deger": "Başvuru",
+                "kaynak_satir": incoming,
+            },
+        ],
+        missing_information=[],
+        expected_questions=[],
+        must_include=["işlem tesis edilmiştir", "Talep kabul edilmiştir"],
+        must_not_invent=forbidden,
+    )
+
+    assert "must_not_invent_ihlali" in codes
+
+
+def test_draft_citation_contract_requires_matching_structured_article():
+    draft = "4982 sayılı Bilgi Edinme Hakkı Kanunu'nun 27. maddesi uygulanmıştır."
+
+    missing_article = pilot._draft_citation_contract_codes(
+        draft,
+        [{"type": "kanun", "number": "4982", "title": "BİLGİ EDİNME HAKKI KANUNU", "article": ""}],
+    )
+    matching_article = pilot._draft_citation_contract_codes(
+        draft,
+        [{"type": "kanun", "number": "4982", "title": "BİLGİ EDİNME HAKKI KANUNU", "article": "27"}],
+    )
+
+    assert "taslak_madde_yapisal_kayit_uyusmazligi" in missing_article
+    assert matching_article == []
+
+
+def test_draft_legal_reference_is_structured_before_mcp_verification():
+    references = pilot._merge_draft_legal_references(
+        "4982 sayılı Bilgi Edinme Hakkı Kanunu'nun 27. maddesi uygulanmıştır.",
+        [],
+    )
+
+    assert [reference.model_dump() for reference in references] == [
+        {
+            "type": "kanun",
+            "number": "4982",
+            "title": "Bilgi Edinme Hakkı Kanunu",
+            "article": "27",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_recovered_draft_references_are_limited_to_numbers_in_draft():
+    class _Client:
+        async def generate_structured(self, **_kwargs):
+            return pilot._ExtractedLegalBasis(
+                references=[
+                    pilot._LegalReference(
+                        type="kanun", number="6698", title="Kişisel Verilerin Korunması Kanunu"
+                    ),
+                    pilot._LegalReference(
+                        type="kanun", number="9999", title="Uydurma Kanun"
+                    ),
+                ]
+            )
+
+    references = await pilot._recover_missing_draft_references(
+        _Client(), "6698 sayılı KVKK hükümleri uygulanmıştır.", []
+    )
+
+    assert [reference.number for reference in references] == ["6698"]
+
+
+@pytest.mark.asyncio
+async def test_quality_metadata_recovery_uses_a_structured_second_pass():
+    expected = pilot._RecoveredQualityMetadata(
+        required_facts=[
+            pilot._RequiredFact(alan="tarih", deger="12.03.2026", kaynak_satir="Başvuru 12.03.2026 tarihinde yapılmıştır."),
+            pilot._RequiredFact(alan="konu", deger="destek", kaynak_satir="Destek talep edilmiştir."),
+        ],
+        missing_information=[pilot._MissingInformation(alan="kimlik", neden="dosyada yok")],
+        expected_questions=["Kimlik belgesini sunabilir misiniz?"],
+        must_include=["eksik belge", "başvuru sonuçlandırılamamıştır"],
+    )
+
+    class _Client:
+        async def generate_structured(self, **_kwargs):
+            return expected
+
+    recovered = await pilot._recover_quality_metadata(
+        _Client(),
+        decision="eksik_belge",
+        incoming_document="Başvuru 12.03.2026 tarihinde yapılmıştır. Destek talep edilmiştir.",
+        gold_draft="Eksik belge nedeniyle başvuru sonuçlandırılamamıştır.",
+    )
+
+    assert recovered == expected
+
+
+@pytest.mark.asyncio
+async def test_legal_relevance_judge_fails_closed_and_accepts_supported_article():
+    class _Client:
+        async def generate_structured(self, **_kwargs):
+            return pilot._LegalRelevanceResult(relevant=True, reason_code="dogrudan_destek")
+
+    assert await pilot._judge_legal_relevance(
+        _Client(),
+        requested_action="Bilgi talebi",
+        decision_reason="Madde kapsamındaki bilgi verilir.",
+        gold_draft="Bilgi verilmiştir.",
+        official_reference={"number": "4982", "article": "11"},
+        official_article_text="MADDE 11 - Kurumlar başvuruyu cevaplandırır.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_legal_relevance_judge_checks_title_only_references():
+    class _Client:
+        async def generate_structured(self, **kwargs):
+            payload = kwargs["messages"][1]["content"]
+            assert "BİLGİ EDİNME HAKKI KANUNU" in payload
+            return pilot._LegalRelevanceResult(
+                relevant=False, reason_code="konu_disi"
+            )
+
+    assert not await pilot._judge_legal_relevance(
+        _Client(),
+        requested_action="Kurs ücreti iadesi",
+        decision_reason="Ücret iadesi uygun bulunmuştur.",
+        gold_draft="Kurs ücreti iade edilmiştir.",
+        official_reference={
+            "number": "4982",
+            "title": "BİLGİ EDİNME HAKKI KANUNU",
+            "article": "",
+        },
+        official_article_text="",
+    )
+
+
+@pytest.mark.asyncio
+async def test_draft_groundedness_judge_rejects_unsupported_claims():
+    class _Client:
+        async def generate_structured(self, **kwargs):
+            assert kwargs["response_model"] is pilot._DraftGroundednessResult
+            return pilot._DraftGroundednessResult(
+                grounded=False,
+                reason_code="desteksiz_sistem_kaydi",
+                unsupported_claims=["Rapor 14.01.2026 tarihinde sisteme işlendi."],
+            )
+
+    assert not await pilot._judge_draft_groundedness(
+        _Client(),
+        incoming_document="Rapor 10.01.2026 tarihinde alınmıştır.",
+        requested_action="Rapor durumunun bildirilmesi",
+        decision="yalnizca_bilgilendirme",
+        decision_reason="Mevcut durum bildirilecektir.",
+        gold_draft="Rapor 14.01.2026 tarihinde sisteme işlenmiştir.",
+    )
+
+
+def test_chronology_gate_rejects_one_year_response_jump():
+    codes = pilot._chronology_validation_codes(
+        "Başvuru 18.02.2025 tarihinde yapılmıştır. E-2025/8890 sayılıdır.",
+        "Cevap tarihi 25.02.2026 ve sayısı E-2026/1123'tür.",
+    )
+
+    assert codes == [
+        "taslak_evrak_yili_gecersiz",
+        "taslak_tarih_kronolojisi_gecersiz",
+    ]
+
+
+def test_chronology_gate_allows_prompt_response_date():
+    assert pilot._chronology_validation_codes(
+        "Başvuru 18.02.2025 tarihinde yapılmıştır.",
+        "Cevap tarihi 25.02.2025 ve sayısı E-2025/1123'tür.",
+    ) == []
+
+
+def test_chronology_gate_rejects_impossible_calendar_date():
+    assert pilot._chronology_validation_codes(
+        "Başvuru 18.02.2026 tarihinde yapılmıştır.",
+        "Cevap tarihi 30.02.2026'dır.",
+    ) == ["taslak_takvim_tarihi_gecersiz"]
+
+
+def test_chronology_gate_rejects_multiple_new_operational_dates():
+    assert pilot._chronology_validation_codes(
+        "Başvuru 20.05.2026 tarihinde yapılmıştır.",
+        (
+            "Cevap tarihi 28.05.2026'dır. Dosya 22.05.2026 tarihinde sevk "
+            "edilmiş ve 26.05.2026 tarihinde kurul gündemine alınmıştır."
+        ),
+    ) == ["taslak_desteksiz_ek_tarih"]
+
+
+def test_metropolitan_special_administration_is_rejected():
+    assert pilot._institution_plausibility_codes(
+        "T.C.\nMERSİN İL ÖZEL İDARESİ",
+        "Mersin İl Özel İdaresi tarafından işlem yapılmıştır.",
+    ) == ["kaldirilmis_buyuksehir_il_ozel_idaresi"]
+
+
+def test_unsupported_numeric_claims_are_rejected():
+    assert pilot._unsupported_numeric_claim_codes(
+        "Başvuruda 300.000,00 TL talep edilmiştir.",
+        (
+            "300.000,00 TL kabul edilmiştir. Üretimin %50 olduğu ve ödemenin "
+            "30 iş günü içinde yapılacağı değerlendirilmiştir."
+        ),
+    ) == ["taslak_desteksiz_gun_suresi", "taslak_desteksiz_yuzde"]
+
+
+@pytest.mark.asyncio
+async def test_institution_competence_judge_fails_closed():
+    class _Client:
+        async def generate_structured(self, **kwargs):
+            assert kwargs["response_model"] is pilot._InstitutionCompetenceResult
+            return pilot._InstitutionCompetenceResult(
+                valid=False, reason_code="kaldirilmis_kurum"
+            )
+
+    assert not await pilot._judge_institution_competence(
+        _Client(),
+        institution="MERSİN İL ÖZEL İDARESİ",
+        incoming_document="Araç çevre testi hakkında başvuru.",
+        decision="yalnizca_bilgilendirme",
+        decision_reason="Süreç bildirilecektir.",
+        gold_draft="Ruhsat süreci devam etmektedir.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_combined_quality_review_uses_one_structured_call():
+    class _Client:
+        calls = 0
+
+        async def generate_structured(self, **kwargs):
+            self.calls += 1
+            assert kwargs["response_model"] is pilot._CaseQualityReviewResult
+            return pilot._CaseQualityReviewResult(
+                grounded=True,
+                institution_valid=True,
+                reason_code="uygun",
+                unsupported_claims=[],
+            )
+
+    client = _Client()
+    result = await pilot._review_case_quality(
+        client,
+        institution="İZMİR VALİLİĞİ",
+        incoming_document="Başvuru 01.02.2026 tarihinde yapılmıştır.",
+        requested_action="Bilgi talebi",
+        decision="yalnizca_bilgilendirme",
+        decision_reason="Mevcut durum bildirilecektir.",
+        gold_draft="Başvurunuz hakkında mevcut durum bildirilmiştir.",
+    )
+
+    assert client.calls == 1
+    assert result and result.grounded and result.institution_valid
+
+
+def test_uncovered_number_citation_becomes_official_resolution_candidate():
+    references = pilot._add_uncovered_number_references(
+        "6698 sayılı KVKK ile 4982 sayılı Kanun hükümleri uygulanmıştır.", []
+    )
+
+    assert [(reference.number, reference.title) for reference in references] == [
+        ("6698", ""),
+        ("4982", ""),
+    ]
+
+
+def test_document_number_is_not_mistaken_for_legislation_number():
+    text = (
+        "12.02.2026 tarihli ve 45678 sayılı onay yazısı incelenmiştir. "
+        "4982 sayılı Bilgi Edinme Hakkı Kanunu uygulanmıştır."
+    )
+
+    assert [match.group("number") for match in pilot._DRAFT_LAW_NUMBER.finditer(text)] == [
+        "4982"
+    ]
+
+
+def test_repair_checkpoint_filters_false_forbidden_facts_and_quarantines_hallucination():
+    base = {
+        "case_id": "GKC-TAM_KABUL-008",
+        "decision": "tam_kabul",
+        "incoming_document": "Başvuru E-2026/42 sayısıyla yapılmıştır.",
+        "gold_draft": "E-2026/42 sayılı başvuru kabul edilmiştir. İşlem tamamlanmıştır.",
+        "required_facts": [
+            {"alan": "sayı", "deger": "E-2026/42", "kaynak_satir": "Başvuru E-2026/42 sayısıyla yapılmıştır."},
+            {"alan": "işlem", "deger": "Başvuru", "kaynak_satir": "Başvuru E-2026/42 sayısıyla yapılmıştır."},
+        ],
+        "missing_information": [],
+        "expected_questions": [],
+        "must_include": ["başvuru kabul edilmiştir", "İşlem tamamlanmıştır"],
+        "must_not_invent": ["E-2026/42"],
+        "provenance": {"kurum_tahmini": "İZMİR VALİLİĞİ"},
+    }
+    bad = pilot.json.loads(pilot.json.dumps(base, ensure_ascii=False))
+    bad["case_id"] = "GKC-TAM_KABUL-009"
+    bad["gold_draft"] += " E-2026/999 sayılı yeni işlem kurulmuştur."
+    bad["must_not_invent"].append("E-2026/999")
+
+    accepted, rejected = pilot._repair_checkpoint_cases([base, bad])
+
+    assert [case["case_id"] for case in accepted] == ["GKC-TAM_KABUL-008"]
+    assert accepted[0]["must_not_invent"] == []
+    assert [record["case_id"] for record in rejected] == ["GKC-TAM_KABUL-009"]
+    assert "must_not_invent_ihlali" in rejected[0]["basarisizlik_kategorileri"]
+
+
+def test_repair_checkpoint_keeps_latest_duplicate_and_archives_older_one():
+    older = {
+        "case_id": "GKC-TAM_KABUL-008",
+        "decision": "tam_kabul",
+        "incoming_document": "Başvuru E-2026/42 sayısıyla yapılmıştır.",
+        "gold_draft": "E-2026/42 sayılı başvuru kabul edilmiştir. İşlem tamamlanmıştır.",
+        "required_facts": [
+            {"alan": "sayı", "deger": "E-2026/42", "kaynak_satir": "Başvuru E-2026/42 sayısıyla yapılmıştır."},
+            {"alan": "işlem", "deger": "Başvuru", "kaynak_satir": "Başvuru E-2026/42 sayısıyla yapılmıştır."},
+        ],
+        "missing_information": [],
+        "expected_questions": [],
+        "must_include": ["başvuru kabul edilmiştir", "İşlem tamamlanmıştır"],
+        "must_not_invent": [],
+        "legal_basis": [],
+        "provenance": {"kurum_tahmini": "İZMİR VALİLİĞİ"},
+        "version": "older",
+    }
+    latest = pilot.json.loads(pilot.json.dumps(older, ensure_ascii=False))
+    latest["version"] = "latest"
+
+    accepted, rejected = pilot._repair_checkpoint_cases([older, latest])
+
+    assert [case["version"] for case in accepted] == ["latest"]
+    assert rejected[0]["basarisizlik_kategorileri"] == [
+        "tekrar_case_id_eski_checkpoint"
+    ]
+
+
+def test_partition_manual_rejections_preserves_case_and_reason():
+    cases = [{"case_id": "GKC-RET-001"}, {"case_id": "GKC-RET-002"}]
+
+    accepted, rejected, found = pilot._partition_manual_rejections(
+        cases, {"GKC-RET-002": "karar_anlami_uyusmazligi"}
+    )
+
+    assert accepted == [{"case_id": "GKC-RET-001"}]
+    assert found == {"GKC-RET-002"}
+    assert rejected[0]["case"] == {"case_id": "GKC-RET-002"}
+    assert rejected[0]["manuel_ret_nedeni"] == "karar_anlami_uyusmazligi"
+
+
+def test_align_traceability_repairs_source_lines_and_drops_false_claims():
+    facts, must_include = pilot._align_traceability_fields(
+        incoming_document=(
+            "Başvuru 12.03.2026 tarihinde yapılmıştır.\n"
+            "Dosya numarası E-2026/42 olarak bildirilmiştir."
+        ),
+        gold_draft=(
+            "12.03.2026 tarihli ve E-2026/42 numaralı başvurunuz kabul edilmiştir."
+        ),
+        required_facts=[
+            {
+                "alan": "başvuru tarihi",
+                "deger": "12.03.2026",
+                "kaynak_satir": "Başvuru ... tarihinde yapılmıştır.",
+            },
+            {
+                "alan": "dosya numarası",
+                "deger": "E-2026/42",
+                "kaynak_satir": "Dosya numarası E-2026/42 olarak bildirilmiştir.",
+            },
+            {
+                "alan": "uydurma",
+                "deger": "99.99.2099",
+                "kaynak_satir": "Kaynakta yoktur.",
+            },
+        ],
+        must_include=["başvurunuz kabul edilmiştir", "taslakta olmayan ifade"],
+    )
+
+    assert len(facts) == 2
+    assert facts[0]["kaynak_satir"] == "Başvuru 12.03.2026 tarihinde yapılmıştır."
+    assert must_include == ["başvurunuz kabul edilmiştir"]
+
+
 # --- Aşama 3.2: mevzuat doğrulamasının üretim hattındaki sözleşmesi ----
 
 
@@ -238,7 +742,11 @@ def _gecersiz_sonuc():
 def _sahte_llm(monkeypatch, legal_basis):
     """``_generate_one``'ın Evren çağrısını sabit bir çıktıyla değiştirir."""
     case = pilot._GeneratedCase(
-        incoming_document="T.C.\nİZMİR VALİLİĞİ\n\nSayı: E-2026/1\n\nTalebimiz ekte sunulmuştur.",
+        incoming_document=(
+            "T.C.\nİZMİR VALİLİĞİ\n\nSayı: E-2026/1\n\n"
+            "Başvuru 12.03.2026 tarihinde yapılmıştır. "
+            "Belge örneği talebi ekte sunulmuştur."
+        ),
         incoming_type="dilekce",
         requested_action="Belge örneği talebi",
         decision_reason="Talep mevzuata uygundur.",
@@ -248,17 +756,46 @@ def _sahte_llm(monkeypatch, legal_basis):
                 alan="başvuru tarihi",
                 deger="12.03.2026",
                 kaynak_satir="Başvuru 12.03.2026 tarihinde yapılmıştır.",
-            )
+            ),
+            pilot._RequiredFact(
+                alan="talep türü",
+                deger="Belge örneği",
+                kaynak_satir="Belge örneği talebi ekte sunulmuştur.",
+            ),
         ],
-        gold_draft="T.C.\nİZMİR VALİLİĞİ\n\nTalebiniz uygun görülmüştür.",
-        must_include=["uygun görülmüştür"],
+        gold_draft=(
+            "T.C.\nİZMİR VALİLİĞİ\n\n12.03.2026 tarihli belge örneği talebiniz "
+            "uygun görülmüştür."
+        ),
+        must_include=["belge örneği talebiniz", "uygun görülmüştür"],
         must_not_invent=["gerçekte belirtilmeyen bir evrak sayısı"],
         legal_basis=legal_basis,
         used_person_names=[],
     )
 
     class _Client:
-        async def generate_structured(self, **_kwargs):
+        async def generate_structured(self, **kwargs):
+            if kwargs.get("response_model") is pilot._LegalRelevanceResult:
+                return pilot._LegalRelevanceResult(
+                    relevant=True, reason_code="test_dogrudan_destek"
+                )
+            if kwargs.get("response_model") is pilot._DraftGroundednessResult:
+                return pilot._DraftGroundednessResult(
+                    grounded=True,
+                    reason_code="test_olgular_destekli",
+                    unsupported_claims=[],
+                )
+            if kwargs.get("response_model") is pilot._InstitutionCompetenceResult:
+                return pilot._InstitutionCompetenceResult(
+                    valid=True, reason_code="test_kurum_uygun"
+                )
+            if kwargs.get("response_model") is pilot._CaseQualityReviewResult:
+                return pilot._CaseQualityReviewResult(
+                    grounded=True,
+                    institution_valid=True,
+                    reason_code="test_uygun",
+                    unsupported_claims=[],
+                )
             return case
 
     monkeypatch.setattr(pilot, "get_llm_client", lambda **_kwargs: _Client())
@@ -341,9 +878,27 @@ async def test_generate_one_masks_pii_in_all_free_text_metadata(monkeypatch):
     generated.used_person_names = ["Mehmet Demir"]
     generated.requested_action = "Mehmet Demir adına belge örneği talebi"
     generated.required_facts[0].deger = "Mehmet Demir"
+    generated.required_facts[0].kaynak_satir = "Başvuran Mehmet Demir'dir."
+    generated.incoming_document += " Başvuran Mehmet Demir'dir."
+    generated.gold_draft += " Başvuran Mehmet Demir adına işlem yapılmıştır."
 
     class _Client:
-        async def generate_structured(self, **_kwargs):
+        async def generate_structured(self, **kwargs):
+            if kwargs.get("response_model") is pilot._DraftGroundednessResult:
+                return pilot._DraftGroundednessResult(
+                    grounded=True, reason_code="test_uygun", unsupported_claims=[]
+                )
+            if kwargs.get("response_model") is pilot._InstitutionCompetenceResult:
+                return pilot._InstitutionCompetenceResult(
+                    valid=True, reason_code="test_kurum_uygun"
+                )
+            if kwargs.get("response_model") is pilot._CaseQualityReviewResult:
+                return pilot._CaseQualityReviewResult(
+                    grounded=True,
+                    institution_valid=True,
+                    reason_code="test_uygun",
+                    unsupported_claims=[],
+                )
             return generated
 
     monkeypatch.setattr(pilot, "get_llm_client", lambda **_kwargs: _Client())
@@ -356,6 +911,51 @@ async def test_generate_one_masks_pii_in_all_free_text_metadata(monkeypatch):
     assert reason == ""
     assert "Mehmet Demir" not in pilot.json.dumps(case, ensure_ascii=False)
     assert case["requested_action"].startswith("[KİŞİ ADI]")
+
+
+@pytest.mark.asyncio
+async def test_generate_one_masks_reported_organizations_everywhere(monkeypatch):
+    _sahte_llm(monkeypatch, [])
+    original_factory = pilot.get_llm_client
+    client = original_factory(provider="evren", model="ignored", temperature=0.8)
+    generated = await client.generate_structured()
+    generated.used_organization_names = ["Mavi Ufuk Enerji A.Ş."]
+    generated.incoming_document += " Başvuran Mavi Ufuk Enerji A.Ş.'dir."
+    generated.gold_draft += " Mavi Ufuk Enerji A.Ş. adına işlem yapılmıştır."
+    generated.requested_action = "Mavi Ufuk Enerji A.Ş. adına belge örneği talebi"
+
+    class _Client:
+        async def generate_structured(self, **kwargs):
+            if kwargs.get("response_model") is pilot._DraftGroundednessResult:
+                return pilot._DraftGroundednessResult(
+                    grounded=True, reason_code="test_uygun", unsupported_claims=[]
+                )
+            if kwargs.get("response_model") is pilot._InstitutionCompetenceResult:
+                return pilot._InstitutionCompetenceResult(
+                    valid=True, reason_code="test_kurum_uygun"
+                )
+            if kwargs.get("response_model") is pilot._CaseQualityReviewResult:
+                return pilot._CaseQualityReviewResult(
+                    grounded=True,
+                    institution_valid=True,
+                    reason_code="test_uygun",
+                    unsupported_claims=[],
+                )
+            return generated
+
+    monkeypatch.setattr(pilot, "get_llm_client", lambda **_kwargs: _Client())
+
+    case, reason, _ = await pilot._generate_one(
+        "tam_kabul",
+        pilot.TARGET_DECISIONS["tam_kabul"],
+        8,
+        dogrulayici=_SahteDogrulayici(set()),
+    )
+
+    assert reason == ""
+    serialized = pilot.json.dumps(case, ensure_ascii=False)
+    assert "Mavi Ufuk" not in serialized
+    assert "[KURUM ADI]" in serialized
 
 
 @pytest.mark.asyncio
@@ -397,3 +997,17 @@ def test_rejected_refs_are_fed_back_into_the_retry_prompt():
 
     assert "5615" in messages[-1]["content"]
     assert "TEKRAR KULLANMA" in messages[-1]["content"]
+
+
+def test_quality_gate_feedback_is_fed_back_into_retry_prompt():
+    examples = [pilot.FewShotExample("Örnek", "cevap_yazisi", "gövde")]
+
+    messages = pilot._build_messages(
+        "kismi_kabul",
+        pilot.TARGET_DECISIONS["kismi_kabul"],
+        examples,
+        quality_feedback=["taslak_mevzuat_yapisal_kayit_yok"],
+    )
+
+    assert "İÇERİK KAPISINDAN GEÇMEDİ" in messages[-1]["content"]
+    assert "taslak_mevzuat_yapisal_kayit_yok" in messages[-1]["content"]

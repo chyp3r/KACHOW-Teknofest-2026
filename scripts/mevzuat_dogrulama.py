@@ -334,6 +334,7 @@ class MevzuatDogrulayici:
     def __init__(self) -> None:
         self._arama: dict[tuple[str, str], Optional[tuple[str, str]]] = {}
         self._maddeler: dict[str, set[int]] = {}
+        self._metinler: dict[str, str] = {}
 
     async def _cozumle(self, tur: str, numara: str) -> Optional[tuple[str, str]]:
         key = (tur, numara)
@@ -347,9 +348,80 @@ class MevzuatDogrulayici:
 
     async def _madde_numaralari(self, mevzuat_id: str) -> set[int]:
         if mevzuat_id not in self._maddeler:
-            metin = await _cagir("get_mevzuat_content", {"mevzuat_id": mevzuat_id})
+            metin = await self._tam_metin(mevzuat_id)
             self._maddeler[mevzuat_id] = {int(n) for n in _MADDE_NO.findall(metin)}
         return self._maddeler[mevzuat_id]
+
+    async def _tam_metin(self, mevzuat_id: str) -> str:
+        if mevzuat_id not in self._metinler:
+            self._metinler[mevzuat_id] = await _cagir(
+                "get_mevzuat_content", {"mevzuat_id": mevzuat_id}
+            )
+        return self._metinler[mevzuat_id]
+
+    async def madde_metni(self, mevzuat_id: str, madde_raw: str) -> str:
+        """Resmî tam metinden tek madde bloğunu semantik hakem için çıkar."""
+        madde_no = re.search(r"\d+", madde_raw)
+        if madde_no is None:
+            return ""
+        metin = await self._tam_metin(mevzuat_id)
+        pattern = re.compile(
+            rf"(?ims)^\s*(?:EK\s+|GEÇİCİ\s+)?MADDE\s+{int(madde_no.group())}\b.*?"
+            r"(?=^\s*(?:EK\s+|GEÇİCİ\s+)?MADDE\s+\d+\b|\Z)"
+        )
+        match = pattern.search(metin)
+        return match.group(0).strip()[:8000] if match else ""
+
+    async def numaradan_dogrula(
+        self, tur_raw: str, numara_raw: str, madde_raw: str = ""
+    ) -> DogrulamaSonucu:
+        """Başlığı yalnız kısaltma olan atfı numarayla resmî kayda çöz.
+
+        Bu yol yalnız taslakta açık bir ``NNNN sayılı KVKK`` benzeri atıf
+        bulunduğunda çağrılır. Resmî başlık modelden alınmaz; MCP arama
+        sonucundan gelir. Madde varsa tam metinde ayrıca doğrulanır.
+        """
+        tur = kanonik_tur(tur_raw)
+        if tur is None:
+            return DogrulamaSonucu(False, f"taninmayan_tur:{tur_raw[:40]}")
+        numara = numara_raw.strip()
+        if not numara:
+            return DogrulamaSonucu(False, "numarasiz_atif")
+        bulunan = await self._cozumle(tur, numara)
+        if bulunan is None:
+            return DogrulamaSonucu(False, f"bulunamadi:{tur}/{numara}")
+        mevzuat_id, resmi_baslik = bulunan
+
+        madde = ""
+        if madde_raw.strip():
+            madde_no = re.search(r"\d+", madde_raw)
+            if madde_no is None:
+                return DogrulamaSonucu(False, f"okunamayan_madde:{madde_raw[:20]}")
+            mevcut = await self._madde_numaralari(mevzuat_id)
+            if mevcut and int(madde_no.group()) not in mevcut:
+                return DogrulamaSonucu(
+                    False,
+                    f"madde_yok:{tur}/{numara}/{madde_no.group()}",
+                    resmi_baslik=resmi_baslik,
+                    mevzuat_id=mevzuat_id,
+                    kanonik_tur=tur,
+                )
+            madde = madde_raw.strip()
+
+        return DogrulamaSonucu(
+            True,
+            resmi_baslik=resmi_baslik,
+            mevzuat_id=mevzuat_id,
+            kanonik_tur=tur,
+            kayit={
+                "type": tur,
+                "number": numara,
+                "title": resmi_baslik,
+                "article": madde,
+                "verification_source": f"mevzuat-mcp:{mevzuat_id}",
+                "verification_status": "dogrulandi",
+            },
+        )
 
     async def dogrula(self, atif: MevzuatAtfi) -> DogrulamaSonucu:
         """Tek bir atfı doğrula.
