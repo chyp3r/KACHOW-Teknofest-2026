@@ -23,14 +23,14 @@ logger = logging.getLogger(__name__)
 #: bütçesini patlatır.
 MAX_TOOL_TURNS_LOCAL = 2
 
-#: Evren'e (çevrimiçi, TEKNOFEST barındırmalı API) bağlıyken çok daha yüksek
-#: bir tavan. Uzak çıkarım yerel bir turdan belirgin biçimde daha hızlıdır,
-#: bu yüzden "assist" node'unun zaman bütçesi çok sayıda araç turunu rahatça
-#: kaldırır; bu da modele, çok sayfalı bir belgeyi baştan sona tarayıp
-#: (belge erişimi, mevzuat, birim yönlendirme, ...) yanıt için gereken tüm
-#: bilgiyi toplama alanı verir. Tavana vurulursa döngü, modele elindekiyle
-#: cevap verdirir (bkz. ``_BUDGET_EXHAUSTED_INSTRUCTION`` ve ``run_stream``).
-MAX_TOOL_TURNS_EVREN = 10
+#: Evren'e (çevrimiçi, TEKNOFEST barındırmalı API) bağlıyken daha yüksek bir
+#: tavan. Uzak çıkarım yerel bir turdan belirgin biçimde daha hızlıdır, bu
+#: yüzden "assist" node'unun zaman bütçesi birkaç araç turunu rahatça
+#: kaldırır; bu da modele, yanıt için gereken bilgiye ulaşana kadar farklı
+#: araçları (belge erişimi, mevzuat, birim yönlendirme, ...) sırayla deneme
+#: alanı verir. Tavana vurulursa döngü, modele elindekiyle cevap verdirir
+#: (bkz. ``_BUDGET_EXHAUSTED_INSTRUCTION`` ve ``run_stream``).
+MAX_TOOL_TURNS_EVREN = 5
 
 
 def _max_tool_turns() -> int:

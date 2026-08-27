@@ -560,8 +560,8 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
 @pytest.mark.asyncio
 async def test_tool_turn_cap_follows_provider(fake_llm):
     """Local (Ollama) mode keeps the tight 2-turn cap; connected to Evren the
-    agent gets a much wider cap so it can sweep a multi-page document before
-    it converges on an answer."""
+    agent gets the wider 5-turn cap so it can try several tools before it
+    converges on an answer."""
     handler = AsyncMock(return_value="sonuç")
     tool = ToolSpec(
         name="search_document", description="test", args_schema=_NoArgs, handler=handler
