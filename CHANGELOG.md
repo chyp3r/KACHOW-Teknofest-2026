@@ -30,6 +30,14 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   "atıf yanlış" sayılmaz.
 
 ### Değiştirildi
+- (#284) Vaka üretiminde paralel Evren çağrıları (`--concurrency`) ve ölçüm
+  raporu eklendi. Serbest LLM üretimiyle yapılan iki küçük denemede manuel
+  kabul oranı sıfır kaldığı için çekirdek yöntem fail-closed biçimde tam
+  deterministik belge/metadata üretimi + paralel Evren kalite hakemine
+  dönüştürüldü. Üç vakalık kota-uyumlu prototip 1,9 saniyede 3/3 otomatik ve
+  manuel kabul aldı; ana checkpoint 21 benzersiz vaka, sıfır hata ve sıfır
+  uyarıyla Aşama 4 kapısından geçti. Başarısız tüm ara sürümler ret/audit
+  arşivinde korundu ve üretim RAG kümesine karıştırılmadı.
 - (#284) Aşama 4 çekirdek vaka üretimi; gelen evraktan kopan takvim/yıl
   sıçramaları, desteklenmeyen tutar-yüzde-gün süreleri, kaldırılmış büyükşehir
   il özel idareleri, uydurma kurum/yetki dağılımları ve cevap taslağındaki yeni

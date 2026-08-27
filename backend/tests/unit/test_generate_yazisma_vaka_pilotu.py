@@ -5,6 +5,8 @@ network, and are exercised manually per VAKA_URETIM_PLAYBOOK.md. This file
 only covers the deterministic schema guard and text-safety helpers.
 """
 
+import asyncio
+import json
 import os
 import sys
 
@@ -1011,3 +1013,82 @@ def test_quality_gate_feedback_is_fed_back_into_retry_prompt():
 
     assert "İÇERİK KAPISINDAN GEÇMEDİ" in messages[-1]["content"]
     assert "taslak_mevzuat_yapisal_kayit_yok" in messages[-1]["content"]
+
+
+def test_deterministic_blueprint_is_binding_in_prompt():
+    examples = [pilot.FewShotExample("Örnek", "cevap_yazisi", "gövde")]
+    blueprint = pilot.DETERMINISTIC_PROTOTYPES["GKC-EKSIK_BELGE-003"]
+
+    messages = pilot._build_messages(
+        "eksik_belge",
+        pilot.TARGET_DECISIONS["eksik_belge"],
+        examples,
+        deterministic_blueprint=blueprint,
+    )
+
+    content = messages[-1]["content"]
+    assert "DETERMİNİSTİK İSKELET" in content
+    assert blueprint["institution"] in content
+    assert blueprint["decision_reason"] in content
+    assert "Yalnız incoming_document ve gold_draft" in content
+
+
+def test_blueprint_facts_are_bound_to_exact_source_lines():
+    incoming = "Konu: Diploma\n12.06.2021 tarihli diplomam için soyadı düzeltme talep ederim."
+
+    facts = pilot._blueprint_required_facts(
+        incoming,
+        [("diploma_tarihi", "12.06.2021"), ("talep", "soyadı düzeltme")],
+    )
+
+    assert facts[0]["kaynak_satir"] == facts[1]["kaynak_satir"]
+    assert facts[0]["deger"] == "12.06.2021"
+
+
+@pytest.mark.asyncio
+async def test_parallel_run_limits_concurrency_and_centralizes_writes(
+    monkeypatch, tmp_path
+):
+    active = 0
+    maximum_active = 0
+
+    async def fake_generate(decision, _spec, index, **_kwargs):
+        nonlocal active, maximum_active
+        active += 1
+        maximum_active = max(maximum_active, active)
+        await asyncio.sleep(0.01)
+        active -= 1
+        case_id = pilot._case_id(decision, index)
+        return (
+            {
+                "case_id": case_id,
+                "incoming_document": f"T.C.\nİZMİR VALİLİĞİ\n{case_id}",
+                "provenance": {"kurum_tahmini": "İZMİR VALİLİĞİ"},
+                "legal_basis": [],
+            },
+            "",
+            [],
+        )
+
+    monkeypatch.setattr(pilot, "_generate_one", fake_generate)
+    monkeypatch.setattr(pilot, "MAIN_ROOT", tmp_path)
+    monkeypatch.setattr(pilot, "MAIN_OUTPUT", tmp_path / "vakalar.jsonl")
+    monkeypatch.setattr(pilot, "MAIN_ERRORS", tmp_path / "hatalar.jsonl")
+
+    cases = await pilot._run_parallel(
+        apply=True,
+        resume=False,
+        max_cases=5,
+        max_retries=1,
+        concurrency=2,
+    )
+
+    assert len(cases) == 5
+    assert maximum_active == 2
+    assert len((tmp_path / "vakalar.jsonl").read_text(encoding="utf-8").splitlines()) == 5
+    benchmark = json.loads(
+        (tmp_path / "son-paralel-benchmark.json").read_text(encoding="utf-8")
+    )
+    assert benchmark["requested"] == 5
+    assert benchmark["accepted"] == 5
+    assert benchmark["concurrency"] == 2

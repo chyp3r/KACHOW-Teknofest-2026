@@ -1,0 +1,31 @@
+{
+  "requested": 3,
+  "accepted": 3,
+  "failed": 0,
+  "concurrency": 3,
+  "max_retries": 1,
+  "deterministic_prototype": true,
+  "elapsed_seconds": 1.898,
+  "average_wall_seconds_per_accepted": 0.633,
+  "throughput_cases_per_minute": 94.837,
+  "case_results": [
+    {
+      "case_id": "GKC-BELIRSIZ_BASVURU-003",
+      "accepted": true,
+      "seconds": 1.308,
+      "failure_reason": ""
+    },
+    {
+      "case_id": "GKC-EKSIK_BELGE-003",
+      "accepted": true,
+      "seconds": 1.738,
+      "failure_reason": ""
+    },
+    {
+      "case_id": "GKC-YALNIZCA_BILGILENDIRME-003",
+      "accepted": true,
+      "seconds": 1.577,
+      "failure_reason": ""
+    }
+  ]
+}

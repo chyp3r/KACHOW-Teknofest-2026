@@ -33,6 +33,7 @@ import random
 import re
 import shutil
 import sys
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -321,6 +322,254 @@ class _GeneratedCase(BaseModel):
     )
 
 
+class _GeneratedDocumentPair(BaseModel):
+    """Deterministik prototipte Evren'in yazmasına izin verilen tek alanlar."""
+
+    incoming_document: str = Field(description="Verilen iskelete bağlı tam gelen evrak")
+    gold_draft: str = Field(description="Verilen iskelete bağlı resmî cevap taslağı")
+
+
+# Küçük kalite deneyi için altı sabit senaryo. Olgular, karar ve kurum kod
+# tarafından verilir; Evren yalnız iki belgeyi resmî Türkçeyle ifade eder.
+DETERMINISTIC_PROTOTYPES: dict[str, dict[str, Any]] = {
+    "GKC-BELIRSIZ_BASVURU-003": {
+        "institution": "ANKARA ÇANKAYA BELEDİYE BAŞKANLIĞI",
+        "unit": "Zabıta Müdürlüğü",
+        "incoming_type": "itiraz",
+        "requested_action": "Gürültü şikâyetindeki eksik bilgi bildirimine yapılan itirazın incelenmesi",
+        "decision_reason": (
+            "Başvuruda gürültünün açık adresi, kaynağı ve gerçekleştiği saat aralığı "
+            "belirtilmediğinden inceleme başlatılamamış; bu bilgilerin tamamlanması istenmiştir."
+        ),
+        "scenario": (
+            "08.04.2026 tarihli başvuruda yalnız Bahçelievler Mahallesi'nde gürültü "
+            "bulunduğu söylenir. Sokak/bina, gürültü kaynağı ve saat aralığı verilmez. "
+            "Cevap karar vermeden yalnız bu üç bilgiyi sorar; süre veya mevzuat yazmaz."
+        ),
+        "facts": [("başvuru_tarihi", "08.04.2026"), ("yer", "Bahçelievler Mahallesi")],
+        "missing_information": [
+            {"alan": "açık adres", "neden": "İnceleme yerinin belirlenmesi için gerekli."},
+            {"alan": "gürültü kaynağı", "neden": "Şikâyetin konusunun belirlenmesi için gerekli."},
+            {"alan": "saat aralığı", "neden": "Denetimin zamanlanması için gerekli."},
+        ],
+        "expected_questions": [
+            "Gürültünün gerçekleştiği açık adres nedir?",
+            "Gürültünün kaynağı ve gerçekleştiği saat aralığı nedir?",
+        ],
+        "must_include": ["açık adres", "gürültü kaynağı", "saat aralığı"],
+        "must_not_invent": ["denetim tarihi", "idari yaptırım", "yasal süre"],
+        "incoming_document": """T.C.
+ANKARA ÇANKAYA BELEDİYE BAŞKANLIĞI
+Zabıta Müdürlüğüne
+
+Konu: Eksik bilgi bildirimine itiraz
+
+Bahçelievler Mahallesi'ndeki gürültü şikâyetim için açık adres, gürültü kaynağı
+ve saat aralığı bildirmem gerektiğini belirten cevabınıza itiraz ediyorum.
+08.04.2026 tarihli bu itirazımda gürültünün Bahçelievler Mahallesi'nde
+yaşandığını bildirir, şikâyetimin mevcut bilgilerle incelenmesini arz ederim.
+
+[KİŞİ ADI]
+[ADRES]
+[İMZA]""",
+        "gold_draft": """T.C.
+ANKARA ÇANKAYA BELEDİYE BAŞKANLIĞI
+Zabıta Müdürlüğü
+
+Sayı: [EVRAK SAYISI]
+Konu: Eksik bilgi bildirimine itiraz hakkında
+
+İlgi: 08.04.2026 tarihli itirazınız.
+
+İlgi itirazda gürültünün Bahçelievler Mahallesi'nde yaşandığı bildirilmiş;
+ancak gürültünün gerçekleştiği açık adres, gürültü kaynağı ve saat aralığı
+bilgileri yine sunulmamıştır. İnceleme yapılabilmesi için bu bilgilerin
+bildirilmesi gerekmektedir.
+
+Gürültünün gerçekleştiği açık adres nedir?
+Gürültünün kaynağı ve gerçekleştiği saat aralığı nedir?
+
+Bilgilerinizi rica ederim.
+
+[İMZA SAHİBİ]
+Zabıta Müdürü""",
+    },
+    "GKC-EKSIK_BELGE-003": {
+        "institution": "BURSA ULUDAĞ ÜNİVERSİTESİ REKTÖRLÜĞÜ",
+        "unit": "Öğrenci İşleri Daire Başkanlığı",
+        "incoming_type": "itiraz",
+        "requested_action": "Diploma düzeltme başvurusundaki eksik belge bildirimine itiraz",
+        "decision_reason": (
+            "Soyadı düzeltme talebinin sonuçlandırılması için kesinleşme şerhli mahkeme "
+            "kararı sunulmadığından bu belgenin tamamlanması istenmiştir."
+        ),
+        "scenario": (
+            "Başvuran 12.06.2021 tarihli diplomasındaki soyadının düzeltilmesini ister, "
+            "kimlik fotokopisini eklediğini fakat kesinleşme şerhli mahkeme kararını "
+            "sunmadığını açıkça yazar. Cevap yalnız bu belgeyi ister; süre ve ret tehdidi yazmaz."
+        ),
+        "facts": [
+            ("diploma_tarihi", "12.06.2021"),
+            ("talep", "soyadı bilgisinin düzeltilmesi"),
+        ],
+        "missing_information": [
+            {"alan": "kesinleşme şerhli mahkeme kararı", "neden": "Soyadı değişikliğini doğrulayan belge sunulmamıştır."}
+        ],
+        "expected_questions": ["Kesinleşme şerhli mahkeme kararı sunulabilir mi?"],
+        "must_include": ["kesinleşme şerhli mahkeme kararı"],
+        "must_not_invent": ["belge teslim süresi", "başvurunun reddedileceği", "yeni diploma tarihi"],
+        "incoming_document": """T.C.
+BURSA ULUDAĞ ÜNİVERSİTESİ REKTÖRLÜĞÜ
+Öğrenci İşleri Daire Başkanlığına
+
+Konu: Eksik belge bildirimine itiraz
+
+12.06.2021 tarihli diplomamda yer alan soyadı bilgisinin düzeltilmesi talebim
+için kesinleşme şerhli mahkeme kararı sunmam gerektiğini belirten bildirime
+itiraz ediyorum. Kimlik fotokopisi ekte sunulmuş olup kesinleşme şerhli mahkeme
+kararı başvuru ekinde bulunmamaktadır. Talebimin mevcut belgelerle
+sonuçlandırılmasını arz ederim.
+
+[KİŞİ ADI]
+[İMZA]
+
+Ek: Kimlik fotokopisi""",
+        "gold_draft": """T.C.
+BURSA ULUDAĞ ÜNİVERSİTESİ REKTÖRLÜĞÜ
+Öğrenci İşleri Daire Başkanlığı
+
+Sayı: [EVRAK SAYISI]
+Konu: Eksik belge bildirimine itiraz
+
+İlgi itirazınızda 12.06.2021 tarihli diplomanız için soyadı bilgisinin
+düzeltilmesi istenmektedir. İtirazınızda kesinleşme şerhli mahkeme kararının
+başvuru ekinde bulunmadığı da belirtilmiştir. Talebin sonuçlandırılabilmesi için
+kesinleşme şerhli mahkeme kararının sunulması gerekmektedir.
+
+Kesinleşme şerhli mahkeme kararı sunulabilir mi?
+
+Bilgilerinizi ve gereğini rica ederim.
+
+[İMZA SAHİBİ]
+Öğrenci İşleri Daire Başkanı""",
+    },
+    "GKC-YALNIZCA_BILGILENDIRME-003": {
+        "institution": "İSTANBUL BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI",
+        "unit": "Ulaşım Dairesi Başkanlığı",
+        "incoming_type": "itiraz",
+        "requested_action": "E-2026/1842 sayılı erişilebilir durak düzenlemesi itirazının durumunun öğrenilmesi",
+        "decision_reason": (
+            "18.03.2026 tarihli E-2026/1842 sayılı erişilebilir durak düzenlemesi başvurusu "
+            "hakkındaki teknik inceleme sürecinin devam ettiği bildirilmiştir; esas hakkında karar verilmemiştir."
+        ),
+        "scenario": (
+            "Başvuran 18.03.2026 tarihli E-2026/1842 sayılı erişilebilir durak düzenlemesi "
+            "başvurusunun yalnız güncel durumunu sorar. Cevap teknik incelemenin sürdüğünü "
+            "bildirir; kabul, ret, tamamlanma tarihi veya süre taahhüdü vermez."
+        ),
+        "facts": [
+            ("başvuru_tarihi", "18.03.2026"),
+            ("başvuru_sayısı", "E-2026/1842"),
+            ("konu", "erişilebilir durak düzenlemesi"),
+        ],
+        "missing_information": [],
+        "expected_questions": [],
+        "must_include": ["teknik inceleme süreci devam etmektedir"],
+        "must_not_invent": ["tamamlanma tarihi", "inceleme süresi", "kabul veya ret kararı"],
+        "incoming_document": """T.C.
+İSTANBUL BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI
+Ulaşım Dairesi Başkanlığına
+
+Konu: İtirazın durumu hakkında bilgi talebi
+
+18.03.2026 tarihli ve E-2026/1842 sayılı erişilebilir durak düzenlemesi
+itirazımın güncel durumunun tarafıma bildirilmesini arz ederim.
+
+[KİŞİ ADI]
+[ADRES]
+[İMZA]""",
+        "gold_draft": """T.C.
+İSTANBUL BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI
+Ulaşım Dairesi Başkanlığı
+
+Sayı: [EVRAK SAYISI]
+Konu: İtirazın durumu hakkında
+
+İlgi: E-2026/1842 sayılı itirazınız hakkındaki bilgi talebiniz.
+
+18.03.2026 tarihli E-2026/1842 sayılı erişilebilir durak düzenlemesi itirazı
+hakkındaki teknik inceleme süreci devam etmektedir. İtirazın esası hakkında
+henüz karar verilmemiştir.
+
+Bilgilerinize sunulur.
+
+[İMZA SAHİBİ]
+Ulaşım Dairesi Başkanı""",
+    },
+    "GKC-YETKISIZLIK-003": {
+        "institution": "ANKARA KEÇİÖREN BELEDİYE BAŞKANLIĞI",
+        "unit": "Yazı İşleri Müdürlüğü",
+        "incoming_type": "dilekce",
+        "requested_action": "Adli sicil kaydındaki bilginin düzeltilmesi",
+        "decision_reason": (
+            "Adli sicil kayıtlarını düzeltme yetkisi belediyede bulunmadığından başvuranın "
+            "Adalet Bakanlığı Adli Sicil ve İstatistik Genel Müdürlüğüne başvurması gerektiği bildirilmiştir."
+        ),
+        "scenario": (
+            "Başvuran adli sicil kaydındaki bilginin düzeltilmesini belediyeden ister. "
+            "Cevap belediyenin yetkisiz olduğunu ve yetkili merciin Adalet Bakanlığı "
+            "Adli Sicil ve İstatistik Genel Müdürlüğü olduğunu bildirir. Mevzuat veya süre yazmaz."
+        ),
+        "facts": [("talep", "adli sicil kaydı"), ("başvuru_tarihi", "21.04.2026")],
+        "missing_information": [],
+        "expected_questions": [],
+        "must_include": ["Adli Sicil ve İstatistik Genel Müdürlüğü", "yetkisi bulunmamaktadır"],
+        "must_not_invent": ["aktarım yapıldığı", "başvuru süresi", "kayıt silme tarihi"],
+    },
+    "GKC-KISMI_KABUL-003": {
+        "institution": "İSTANBUL BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI",
+        "unit": "Ulaşım Dairesi Başkanlığı",
+        "incoming_type": "dilekce",
+        "requested_action": "Atatürk Mahallesi için engelli park yeri ve ticari taksi durağı ayrılması",
+        "decision_reason": (
+            "Atatürk Mahallesi için engelli park yeri ayrılması talebi kabul edilmiş; aynı "
+            "konumda ticari taksi durağı oluşturulması talebi trafik dolaşımını engelleyeceği için reddedilmiştir."
+        ),
+        "scenario": (
+            "Başvuru iki bağımsız istem içerir: Atatürk Mahallesi'nde engelli park yeri ve "
+            "aynı konumda ticari taksi durağı. Kurum kararı birinci talebi kabul, ikinciyi "
+            "trafik dolaşımını engelleyeceği gerekçesiyle ret eder. Tarih, süre, oran veya mevzuat ekleme."
+        ),
+        "facts": [("yer", "Atatürk Mahallesi"), ("talep_1", "engelli park yeri"), ("talep_2", "ticari taksi durağı")],
+        "missing_information": [],
+        "expected_questions": [],
+        "must_include": ["engelli park yeri talebiniz kabul edilmiştir", "ticari taksi durağı talebiniz reddedilmiştir"],
+        "must_not_invent": ["uygulama tarihi", "park yeri sayısı", "trafik ölçüm sonucu"],
+    },
+    "GKC-COKLU_TALEP-003": {
+        "institution": "BURSA BÜYÜKŞEHİR BELEDİYE BAŞKANLIĞI",
+        "unit": "Ulaşım Dairesi Başkanlığı",
+        "incoming_type": "dilekce",
+        "requested_action": "Çınar Mahallesi durağı için üç bağımsız ulaşım talebinin değerlendirilmesi",
+        "decision_reason": (
+            "Çınar Mahallesi durağına kapalı bekleme alanı eklenmesi kabul edilmiş, tarife "
+            "panosunun yenilenmesi ilgili bakım birimine yönlendirilmiş, mevcut hattın Sanayi "
+            "Sitesine uzatılması ise güzergâh planına uygun bulunmadığından reddedilmiştir."
+        ),
+        "scenario": (
+            "Başvuru üç bağımsız istem içerir: Çınar Mahallesi durağına kapalı bekleme alanı, "
+            "tarife panosunun yenilenmesi ve hattın Sanayi Sitesine uzatılması. Cevap sırasıyla "
+            "kabul, bakım birimine yönlendirme ve ret sonucunu ayrı ayrı yazar. Yeni tarih/süre/mevzuat ekleme."
+        ),
+        "facts": [("yer", "Çınar Mahallesi"), ("talep_1", "kapalı bekleme alanı"), ("talep_2", "tarife panosu"), ("talep_3", "Sanayi Sitesi")],
+        "missing_information": [],
+        "expected_questions": [],
+        "must_include": ["kapalı bekleme alanı", "tarife panosu", "Sanayi Sitesi"],
+        "must_not_invent": ["uygulama tarihi", "hat numarası", "bütçe tutarı"],
+    },
+}
+
+
 class _ExtractedLegalBasis(BaseModel):
     """Taslakta açıkça geçen atıfların ikinci-pass yapılandırılmış çıktısı."""
 
@@ -438,6 +687,7 @@ def _build_messages(
     force_itiraz: bool = False,
     rejected_refs: list[str] | None = None,
     quality_feedback: list[str] | None = None,
+    deterministic_blueprint: dict[str, Any] | None = None,
 ) -> list[dict]:
     example_blocks = "\n\n".join(
         f"[ÜSLUP ÖRNEĞİ {i + 1} -- {ex.kategori}: {ex.baslik}]\n{ex.body_excerpt}"
@@ -569,6 +819,19 @@ def _build_messages(
             "taslak_madde_yapisal_kayit_uyusmazligi varsa taslak maddesiyle "
             "legal_basis.article birebir aynı olsun."
         )
+    blueprint_block = ""
+    if deterministic_blueprint:
+        blueprint_block = (
+            "\n\nDETERMİNİSTİK İSKELET -- bağlayıcıdır: Aşağıdaki JSON'daki kurum, "
+            "birim, olay, değerler ve karar dışında hiçbir somut olgu üretme. "
+            "Her facts değeri hem incoming_document hem gold_draft içinde AYNEN "
+            "geçsin. must_include ifadeleri gold_draft içinde AYNEN geçsin. "
+            "Kanun, yönetmelik, madde, yeni tarih, yeni süre, tutar, oran, "
+            "inceleme/teslim/sistem bulgusu ekleme. Kişi adı ve özel kuruluş adı "
+            "kullanma; imza alanında yalnız görev unvanı kullan. Yalnız "
+            "incoming_document ve gold_draft alanlarını üret.\n"
+            + json.dumps(deterministic_blueprint, ensure_ascii=False, sort_keys=True)
+        )
     user = (
         f"Hedef karar türü: {decision}\n"
         f"Vaka tanımı: {spec['aciklama']}\n\n"
@@ -577,7 +840,7 @@ def _build_messages(
         "bir gelen evrak + kurum kararı + cevap yazısı vakası üret. "
         "incoming_document başvuranın yazdığı evrakın tam metni olmalı; "
         "gold_draft kurumun buna verdiği resmî cevabın tam metni olmalı."
-        f"{avoid_block}{itiraz_block}{reddedilen_block}{kalite_block}"
+        f"{avoid_block}{itiraz_block}{reddedilen_block}{kalite_block}{blueprint_block}"
     )
     return [
         {"role": "system", "content": system},
@@ -1361,6 +1624,22 @@ def _itiraz_count_for(adet: int) -> int:
     return max(ITIRAZ_MIN_PER_DECISION, round(adet * 0.175))
 
 
+def _blueprint_required_facts(
+    incoming_document: str,
+    facts: list[tuple[str, str]] | list[list[str]],
+) -> list[dict[str, str]]:
+    """Sabit olguları gelen evraktaki izlenebilir tam satırlara bağla."""
+    lines = [line.strip() for line in incoming_document.splitlines() if line.strip()]
+    return [
+        {
+            "alan": field,
+            "deger": value,
+            "kaynak_satir": next((line for line in lines if value in line), value),
+        }
+        for field, value in facts
+    ]
+
+
 async def _generate_one(
     decision: str,
     spec: dict[str, Any],
@@ -1371,6 +1650,7 @@ async def _generate_one(
     force_itiraz: bool = False,
     rejected_refs: list[str] | None = None,
     quality_feedback: list[str] | None = None,
+    deterministic_prototype: bool = False,
 ) -> tuple[dict[str, Any] | None, str, list[str]]:
     """Tek bir vaka üretmeyi dener.
 
@@ -1392,8 +1672,12 @@ async def _generate_one(
     if not examples:
         return None, "few_shot_bulunamadi", []
 
+    case_id = _case_id(decision, index)
+    blueprint = DETERMINISTIC_PROTOTYPES.get(case_id) if deterministic_prototype else None
     client = get_llm_client(
-        provider="evren", model=settings.EVREN_LLM_LARGE_MODEL, temperature=0.8
+        provider="evren",
+        model=settings.EVREN_LLM_LARGE_MODEL,
+        temperature=0.2 if blueprint else 0.8,
     )
     messages = _build_messages(
         decision,
@@ -1403,30 +1687,55 @@ async def _generate_one(
         force_itiraz=force_itiraz,
         rejected_refs=rejected_refs,
         quality_feedback=quality_feedback,
+        deterministic_blueprint=blueprint,
     )
     try:
-        result = await client.generate_structured(messages=messages, response_model=_GeneratedCase)
+        if blueprint and blueprint.get("incoming_document") and blueprint.get("gold_draft"):
+            result = _GeneratedDocumentPair(
+                incoming_document=blueprint["incoming_document"],
+                gold_draft=blueprint["gold_draft"],
+            )
+        else:
+            response_model = _GeneratedDocumentPair if blueprint else _GeneratedCase
+            result = await client.generate_structured(
+                messages=messages, response_model=response_model
+            )
     except Exception as exc:  # keep the batch auditable, not fatal
         return None, f"llm_hatasi:{type(exc).__name__}", []
 
-    if force_itiraz and result.incoming_type != INCOMING_TYPE_ITIRAZ:
+    incoming_type = blueprint["incoming_type"] if blueprint else result.incoming_type
+    if not blueprint and force_itiraz and incoming_type != INCOMING_TYPE_ITIRAZ:
         return None, "incoming_type_itiraz_bekleniyor", []
-    if not force_itiraz and result.incoming_type == INCOMING_TYPE_ITIRAZ:
+    if not blueprint and not force_itiraz and incoming_type == INCOMING_TYPE_ITIRAZ:
         return None, "incoming_type_itiraz_kota_disi", []
 
-    private_organizations = _private_organization_names(result.used_organization_names)
+    person_names = [] if blueprint else result.used_person_names
+    organization_names = [] if blueprint else result.used_organization_names
+    private_organizations = _private_organization_names(organization_names)
     anonymized_incoming = _scrub_reported_organizations(
         semantic_anonymize(result.incoming_document), private_organizations
     )
     anonymized_incoming = _scrub_reported_names(
-        anonymized_incoming, result.used_person_names
+        anonymized_incoming, person_names
     )
     anonymized_draft = _scrub_reported_organizations(
         semantic_anonymize(result.gold_draft), private_organizations
     )
-    anonymized_draft = _scrub_reported_names(anonymized_draft, result.used_person_names)
-    sanitized_fields = _sanitize_generated_value(
-        {
+    anonymized_draft = _scrub_reported_names(anonymized_draft, person_names)
+    if blueprint:
+        generated_metadata = {
+            "requested_action": blueprint["requested_action"],
+            "decision_reason": blueprint["decision_reason"],
+            "required_facts": _blueprint_required_facts(
+                anonymized_incoming, blueprint["facts"]
+            ),
+            "missing_information": blueprint["missing_information"],
+            "expected_questions": blueprint["expected_questions"],
+            "must_include": blueprint["must_include"],
+            "must_not_invent": blueprint["must_not_invent"],
+        }
+    else:
+        generated_metadata = {
             "requested_action": result.requested_action,
             "decision_reason": result.decision_reason,
             "required_facts": [fact.model_dump() for fact in result.required_facts],
@@ -1434,8 +1743,10 @@ async def _generate_one(
             "expected_questions": result.expected_questions,
             "must_include": result.must_include,
             "must_not_invent": result.must_not_invent,
-        },
-        result.used_person_names,
+        }
+    sanitized_fields = _sanitize_generated_value(
+        generated_metadata,
+        person_names,
         private_organizations,
     )
     (
@@ -1485,7 +1796,7 @@ async def _generate_one(
                     "expected_questions": recovered.expected_questions,
                     "must_include": recovered.must_include,
                 },
-                result.used_person_names,
+                person_names,
                 private_organizations,
             )
             (
@@ -1498,15 +1809,18 @@ async def _generate_one(
                 must_include=repaired_fields["must_include"],
             )
             sanitized_fields.update(repaired_fields)
-    legal_references = _merge_draft_legal_references(
-        anonymized_draft, result.legal_basis
-    )
-    legal_references = await _recover_missing_draft_references(
-        client, anonymized_draft, legal_references
-    )
-    legal_references = _add_uncovered_number_references(
-        anonymized_draft, legal_references
-    )
+    if blueprint:
+        legal_references: list[_LegalReference] = []
+    else:
+        legal_references = _merge_draft_legal_references(
+            anonymized_draft, result.legal_basis
+        )
+        legal_references = await _recover_missing_draft_references(
+            client, anonymized_draft, legal_references
+        )
+        legal_references = _add_uncovered_number_references(
+            anonymized_draft, legal_references
+        )
     bad_incoming = _anonymization_findings(anonymized_incoming)
     bad_draft = _anonymization_findings(anonymized_draft)
     bad_metadata = _anonymization_findings(
@@ -1532,8 +1846,10 @@ async def _generate_one(
     if content_codes:
         return None, f"icerik_kapisi:{','.join(sorted(set(content_codes)))}", []
 
-    institution = _extract_institution(anonymized_incoming) or _extract_institution(
-        anonymized_draft
+    institution = (
+        blueprint["institution"]
+        if blueprint
+        else _extract_institution(anonymized_incoming) or _extract_institution(anonymized_draft)
     )
     if not institution or "[" in institution or "]" in institution:
         return None, "icerik_kapisi:kurum_anteti_bulunamadi", []
@@ -1610,7 +1926,6 @@ async def _generate_one(
     if reddedilenler:
         return None, f"mevzuat_dogrulanamadi:{','.join(sorted(set(gerekceler)))}", reddedilenler
 
-    case_id = _case_id(decision, index)
     source_group = _case_template_group(anonymized_incoming, anonymized_draft)
     placeholders = _collect_placeholders(
         {
@@ -1631,11 +1946,13 @@ async def _generate_one(
     case = {
         "case_id": case_id,
         "incoming_document": anonymized_incoming,
-        "incoming_type": result.incoming_type,
+        "incoming_type": incoming_type,
         "requested_action": sanitized_fields["requested_action"],
         "decision": decision,
         "decision_reason": sanitized_fields["decision_reason"],
-        "outgoing_correspondence_type": result.outgoing_correspondence_type,
+        "outgoing_correspondence_type": (
+            "cevap_yazisi" if blueprint else result.outgoing_correspondence_type
+        ),
         "required_facts": sanitized_fields["required_facts"],
         "missing_information": sanitized_fields["missing_information"],
         "expected_questions": sanitized_fields["expected_questions"],
@@ -1648,7 +1965,13 @@ async def _generate_one(
         "legal_basis_text": [atif_metni(kayit) for kayit in dogrulanmis],
         "source_origin": "sentetik_kurgu",
         "provenance": {
-            "uretim_yontemi": "evren_llm_large_few_shot",
+            "uretim_yontemi": (
+                "deterministic_canonical+evren_quality_review"
+                if blueprint and blueprint.get("incoming_document")
+                else "deterministic_blueprint+evren_llm_large_realization"
+                if blueprint
+                else "evren_llm_large_few_shot"
+            ),
             "uslup_referanslari": references,
             "kurum_tahmini": institution,
         },
@@ -1841,6 +2164,7 @@ async def _run(
     max_cases: int | None,
     max_retries: int = 3,
     only_case_ids: set[str] | None = None,
+    deterministic_prototype: bool = False,
 ) -> list[dict[str, Any]]:
     total_quota = sum(spec["adet"] for spec in TARGET_DECISIONS.values())
     existing_cases = _load_existing_cases(MAIN_OUTPUT) if (apply and resume) else []
@@ -1892,6 +2216,7 @@ async def _run(
                     force_itiraz=force_itiraz,
                     rejected_refs=rejected_refs,
                     quality_feedback=quality_feedback,
+                    deterministic_prototype=deterministic_prototype,
                 )
             except MevzuatAltyapiHatasi as exc:
                 ardisik_altyapi_hatasi += 1
@@ -1967,6 +2292,139 @@ async def _run(
     return cases
 
 
+async def _run_parallel(
+    *,
+    apply: bool,
+    resume: bool,
+    max_cases: int,
+    max_retries: int,
+    concurrency: int,
+    only_case_ids: set[str] | None = None,
+    deterministic_prototype: bool = False,
+) -> list[dict[str, Any]]:
+    """Bağımsız vakaları paralel üret, bütün dosya yazmalarını merkezileştir."""
+    existing_cases = _load_existing_cases(MAIN_OUTPUT) if (apply and resume) else []
+    already_done = {case["case_id"] for case in existing_cases}
+    institution_counts = _institution_counts(existing_cases)
+    total_quota = sum(spec["adet"] for spec in TARGET_DECISIONS.values())
+    targets = []
+    for decision, spec, index in _iter_case_targets():
+        case_id = _case_id(decision, index)
+        if only_case_ids is not None and case_id not in only_case_ids:
+            continue
+        if case_id in already_done:
+            continue
+        targets.append((decision, spec, index, case_id))
+        if len(targets) >= max_cases:
+            break
+
+    semaphore = asyncio.Semaphore(concurrency)
+    cap = round(INSTITUTION_MAX_SHARE * total_quota)
+    avoid = sorted(k for k, v in institution_counts.items() if v >= cap) or None
+
+    async def worker(
+        decision: str, spec: dict[str, Any], index: int, case_id: str
+    ) -> dict[str, Any]:
+        async with semaphore:
+            started = time.perf_counter()
+            rejected_refs: list[str] = []
+            quality_feedback: list[str] = []
+            errors: list[dict[str, Any]] = []
+            reason = "uretim_baslatilamadi"
+            case: dict[str, Any] | None = None
+            for attempt in range(1, max_retries + 1):
+                try:
+                    case, reason, rejected_refs = await _generate_one(
+                        decision,
+                        spec,
+                        index,
+                        dogrulayici=MevzuatDogrulayici(),
+                        avoid_institutions=avoid,
+                        force_itiraz=index <= _itiraz_count_for(spec["adet"]),
+                        rejected_refs=rejected_refs,
+                        quality_feedback=quality_feedback,
+                        deterministic_prototype=deterministic_prototype,
+                    )
+                except MevzuatAltyapiHatasi as exc:
+                    reason = f"mevzuat_altyapi_hatasi:{exc}"
+                if case:
+                    break
+                if reason.startswith("icerik_kapisi:"):
+                    quality_feedback = reason.split(":", 1)[1].split(",")
+                errors.append(
+                    {
+                        "case_id": case_id,
+                        "decision": decision,
+                        "index": index,
+                        "attempt": attempt,
+                        "basarisizlik_kategorisi": reason,
+                    }
+                )
+            return {
+                "case_id": case_id,
+                "case": case,
+                "reason": reason,
+                "errors": errors,
+                "seconds": round(time.perf_counter() - started, 3),
+            }
+
+    started = time.perf_counter()
+    tasks = [asyncio.create_task(worker(*target)) for target in targets]
+    results: list[dict[str, Any]] = []
+    for task in asyncio.as_completed(tasks):
+        result = await task
+        results.append(result)
+        if apply:
+            for error in result["errors"]:
+                _append_jsonl(MAIN_ERRORS, error)
+        if result["case"] is None:
+            print(
+                f"  [BAŞARISIZ] {result['case_id']}: {result['reason']} "
+                f"({result['seconds']:.1f}s)"
+            )
+            continue
+        case = result["case"]
+        if result["case_id"] in already_done:
+            continue
+        if apply:
+            _append_jsonl(MAIN_OUTPUT, case)
+        already_done.add(result["case_id"])
+        preview = case["incoming_document"][:100].replace("\n", " ")
+        print(f"  [tamam] {result['case_id']} ({result['seconds']:.1f}s): {preview}...")
+
+    elapsed = round(time.perf_counter() - started, 3)
+    cases = [result["case"] for result in results if result["case"] is not None]
+    failed = len(results) - len(cases)
+    benchmark = {
+        "requested": len(targets),
+        "accepted": len(cases),
+        "failed": failed,
+        "concurrency": concurrency,
+        "max_retries": max_retries,
+        "deterministic_prototype": deterministic_prototype,
+        "elapsed_seconds": elapsed,
+        "average_wall_seconds_per_accepted": round(elapsed / len(cases), 3) if cases else None,
+        "throughput_cases_per_minute": round(len(cases) * 60 / elapsed, 3) if elapsed else None,
+        "case_results": [
+            {
+                "case_id": result["case_id"],
+                "accepted": result["case"] is not None,
+                "seconds": result["seconds"],
+                "failure_reason": "" if result["case"] is not None else result["reason"],
+            }
+            for result in sorted(results, key=lambda item: item["case_id"])
+        ],
+    }
+    if apply:
+        benchmark_path = MAIN_ROOT / "son-paralel-benchmark.json"
+        benchmark_path.write_text(
+            json.dumps(benchmark, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    print(json.dumps(benchmark, ensure_ascii=False, indent=2))
+    return cases
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -2008,6 +2466,20 @@ def parse_args() -> argparse.Namespace:
         help="Her vaka için azami üretim denemesi (varsayılan: 2).",
     )
     parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Aynı anda üretilecek vaka sayısı (varsayılan: 1).",
+    )
+    parser.add_argument(
+        "--deterministic-prototype",
+        action="store_true",
+        help=(
+            "Altı çekirdek vaka için olgu/karar/kurum iskeletini koddan al; "
+            "Evren yalnız gelen evrak ve cevap metnini ifade eder."
+        ),
+    )
+    parser.add_argument(
         "--case-id",
         action="append",
         default=None,
@@ -2027,6 +2499,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    if args.concurrency < 1:
+        print("HATA: --concurrency en az 1 olmalıdır.", file=sys.stderr)
+        return 2
     if args.repair_existing:
         return _repair_existing_checkpoint()
     if args.quarantine_existing:
@@ -2072,15 +2547,32 @@ def main() -> int:
         if unknown:
             print(f"HATA: plan dışı --case-id: {', '.join(unknown)}", file=sys.stderr)
             return 2
-    asyncio.run(
-        _run(
-            apply=args.apply,
-            resume=args.resume,
-            max_cases=args.max_cases,
-            max_retries=args.max_retries,
-            only_case_ids=only_case_ids,
+    if args.concurrency > 1:
+        if args.max_cases is None:
+            print("HATA: paralel üretim --max-cases gerektirir.", file=sys.stderr)
+            return 2
+        asyncio.run(
+            _run_parallel(
+                apply=args.apply,
+                resume=args.resume,
+                max_cases=args.max_cases,
+                max_retries=args.max_retries,
+                concurrency=args.concurrency,
+                only_case_ids=only_case_ids,
+                deterministic_prototype=args.deterministic_prototype,
+            )
         )
-    )
+    else:
+        asyncio.run(
+            _run(
+                apply=args.apply,
+                resume=args.resume,
+                max_cases=args.max_cases,
+                max_retries=args.max_retries,
+                only_case_ids=only_case_ids,
+                deterministic_prototype=args.deterministic_prototype,
+            )
+        )
     return 0
 
 

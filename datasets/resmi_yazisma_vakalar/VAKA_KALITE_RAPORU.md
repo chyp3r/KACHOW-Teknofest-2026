@@ -1,7 +1,7 @@
 # Vaka Kalite Raporu
 
-- Kayıt: 18
-- Tekil kayıt: 18
+- Kayıt: 21
+- Tekil kayıt: 21
 - Hata: 0
 - Uyarı: 0
 - Kapı: `passed`
@@ -10,13 +10,13 @@
 
 | Karar | Adet |
 | --- | ---: |
-| `belirsiz_basvuru` | 2 |
+| `belirsiz_basvuru` | 3 |
 | `coklu_talep` | 2 |
-| `eksik_belge` | 2 |
+| `eksik_belge` | 3 |
 | `kismi_kabul` | 2 |
 | `ret` | 3 |
 | `tam_kabul` | 3 |
-| `yalnizca_bilgilendirme` | 2 |
+| `yalnizca_bilgilendirme` | 3 |
 | `yetkisizlik` | 2 |
 
 ## Bulgu dağılımı
