@@ -63,6 +63,32 @@ def test_an_ungrounded_document_number_is_redacted():
     assert "doğrulanamayan ifade kaldırıldı" in "".join(verdict.reasons)
 
 
+def test_a_mostly_grounded_reply_is_left_uncensored_above_the_threshold():
+    """MCP mevzuat aracından gelen ve yığında bulunan bir yanıtta, token
+    örtüşmesi ya da alıntı sınırı yüzünden birkaç ifade eşleşmese bile büyük
+    ölçüde kaynaklı yanıt olduğu gibi geçer -- her yerine
+    ``[Doğrulanamayan ifade kaldırıldı]`` serpilmez."""
+    source = (
+        "657 sayılı Devlet Memurları Kanunu madde 125, madde 126 ve madde 127 "
+        "disiplin cezalarını düzenler. Yürürlük tarihi 23.07.1965."
+    )
+    reply = (
+        "657 sayılı Kanun'un madde 125, madde 126 ve madde 127 hükümleri "
+        "uyarınca (yürürlük 23.07.1965), ayrıca madde 999 kapsamında işlem yapılır."
+    )
+    verdict = evaluate_response(reply, source_materials=source)
+    assert verdict.action == "pass"
+    assert verdict.text == reply
+
+
+def test_a_reply_that_is_mostly_ungrounded_is_still_redacted():
+    source = "657 sayılı Kanun madde 125 disiplin cezalarını düzenler."
+    reply = "madde 500, madde 600 ve madde 700 kapsamında ceza verilir."
+    verdict = evaluate_response(reply, source_materials=source)
+    assert verdict.action == "redact"
+    assert "doğrulanamayan ifade kaldırıldı" in "".join(verdict.reasons)
+
+
 def test_a_reply_with_nothing_to_check_against_is_not_flagged_as_fabrication():
     """No source materials is a legitimate state (no document, no tool
     calls this turn) -- it must not read as 'everything is ungrounded'."""

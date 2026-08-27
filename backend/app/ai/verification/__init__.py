@@ -3,6 +3,7 @@ from app.ai.verification.draft_verifier import (
     UnsupportedClaim,
     VerificationReport,
     check_groundedness,
+    groundedness_report,
     verify_draft,
 )
 from app.ai.verification.llm_judge import (
@@ -37,6 +38,7 @@ __all__ = [
     "UnsupportedClaim",
     "VerificationReport",
     "check_groundedness",
+    "groundedness_report",
     "verify_draft",
     "CombinedVerdict",
     "DraftJudgeVerdict",
