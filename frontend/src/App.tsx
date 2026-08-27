@@ -140,7 +140,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       historyLoading={chat.historyLoading}
       historyError={chat.historyError}
       documentError={documents.error}
-      selectedDocument={documents.selectedDocument}
+      selectedDocument={documents.selectedDocument} documentText={documents.documentText}
       messages={chat.messages}
       streamingText={chat.streamingText}
       loading={chat.loading}

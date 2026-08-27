@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import { MarkdownMessage } from "./MarkdownMessage";
+import type { CitationTarget } from "./MarkdownMessage";
 
 const FRAME_INTERVAL_MS = 24;
 const MAX_ANIMATION_STEPS = 220;
@@ -8,10 +9,12 @@ export function AnimatedMessageText({
   text,
   animate = false,
   onProgress,
+  onCitationClick,
 }: {
   text: string;
   animate?: boolean;
   onProgress?: () => void;
+  onCitationClick?: (target: CitationTarget) => void;
 }) {
   const animationTarget = useRef<string | null>(animate ? text : null);
   const [visibleLength, setVisibleLength] = useState(animate ? Math.min(1, text.length) : text.length);
@@ -51,13 +54,17 @@ export function AnimatedMessageText({
 
   const isAnimating = visibleLength < text.length;
   if (!isAnimating) {
-    return <div className="markdown-content"><ReactMarkdown>{text}</ReactMarkdown></div>;
+    return <div className="markdown-content"><MarkdownMessage text={text} onCitationClick={onCitationClick} /></div>;
   }
 
   return (
     <div className="markdown-content">
       <div aria-hidden="true">
-        <ReactMarkdown>{text.slice(0, visibleLength)}</ReactMarkdown>
+        <MarkdownMessage
+          text={text.slice(0, visibleLength)}
+          citationSource={text}
+          onCitationClick={onCitationClick}
+        />
         <span className="streaming-caret" />
       </div>
       <span className="sr-only">{text}</span>

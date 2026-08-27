@@ -235,3 +235,54 @@ describe("MessageList", () => {
     expect(screen.queryByText("Nasıl yardımcı olabilirim?")).not.toBeInTheDocument();
   });
 });
+
+// ==========================================
+// Page citations reaching the rendered message
+// ==========================================
+describe("MessageList page citations", () => {
+  const citedMessage: ChatMessage[] = [
+    {
+      id: "m1",
+      sender: "assistant",
+      text: "Not ortalaması 3.83'tür [1].\n\nKAYNAKLAR:\n[1] (s. 1) Genel not ortalaması 3.83.",
+    } as ChatMessage,
+  ];
+
+  it("renders a citation in a finished message as a badge, hiding the block", () => {
+    const { container } = renderWithQueryClient(
+      <MessageList {...baseProps} messages={citedMessage} />,
+    );
+
+    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
+    expect(container.textContent).not.toContain("KAYNAKLAR");
+  });
+
+  it("makes the badge clickable once a citation handler is wired through", () => {
+    const onCitationClick = vi.fn();
+    renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        messages={citedMessage}
+        onCitationClick={onCitationClick}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
+
+    expect(onCitationClick).toHaveBeenCalledWith(
+      expect.objectContaining({ page: 1, quote: "Genel not ortalaması 3.83." }),
+    );
+  });
+
+  it("badges a citation in the streaming preview too", () => {
+    const { container } = renderWithQueryClient(
+      <MessageList
+        {...baseProps}
+        loading
+        streamingText={"Sonuç şudur [1].\n\nKAYNAKLAR:\n[1] (s. 2) Kaynak cümlesi."}
+      />,
+    );
+
+    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
+  });
+});

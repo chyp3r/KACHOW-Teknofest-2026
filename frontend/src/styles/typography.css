@@ -710,6 +710,21 @@ th {
   overflow-wrap: anywhere;
 }
 
+/* Chat provenance and guardrail chips. Layout/colour for these lives in
+   integration.css; type scale and weight belong here with the rest of the
+   system (see typography.test.ts's "keeps arbitrary typography declarations
+   out of legacy layout styles"). */
+.page-citation {
+  font-size: var(--text-overline);
+  font-weight: var(--weight-semibold);
+}
+.chat-guardrail-removed > summary {
+  font-size: var(--text-overline);
+  font-weight: var(--weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
 @media (max-width: 47.5rem) {
   .sidebar-compact .nav-item,
   .sidebar-compact .login-link {

@@ -360,7 +360,117 @@
 }
 .chat-layout { display: block; min-height: 0; }
 .messages-area { width: 100%; padding: var(--space-3) var(--space-1) var(--space-6); }
-.chat-guardrail-stack { display: grid; gap: var(--space-2); flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
+/* Page-citation badge: the backend's `[s. N]` anchor (format_anchor), shown
+   as a labelled chip so the provenance reads as provenance instead of as
+   stray punctuation in the sentence. See features/chat/MarkdownMessage.tsx. */
+.page-citation {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0.15em;
+  padding: 0.05em 0.45em;
+  border: 1px solid color-mix(in srgb, var(--accent-blue) 35%, var(--border-default));
+  border-radius: var(--radius-full, 999px);
+  background: color-mix(in srgb, var(--accent-blue) 10%, transparent);
+  color: var(--text-secondary);
+  white-space: nowrap;
+  vertical-align: baseline;
+  /* Never the target of a text selection drag more than the prose itself. */
+  user-select: none;
+}
+
+/* A citation badge the reader can open. Inherits .page-citation's look and
+   adds only the affordance, so a clickable and a plain citation read as the
+   same object. */
+.page-citation-button {
+  cursor: pointer;
+  appearance: none;
+  transition: background-color 120ms ease, border-color 120ms ease;
+}
+.page-citation-button:hover,
+.page-citation-button:focus-visible {
+  border-color: var(--accent-blue);
+  background: color-mix(in srgb, var(--accent-blue) 20%, transparent);
+  color: var(--text-primary);
+}
+
+/* Sources the model defined but never referenced in a sentence -- trailing
+   the answer as one row, not stacked into a list. See MarkdownMessage.tsx. */
+.citation-trailing {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin: var(--space-2) 0 0;
+}
+
+/* Source view: the cited page, with the matched passage highlighted. */
+.source-peek-drawer { width: min(46rem, 100vw); padding: var(--space-5); gap: var(--space-3); }
+.source-peek-drawer > div { display: flex; flex-direction: column; gap: var(--space-3); }
+.source-peek-document {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--text-secondary);
+}
+.source-peek-note { margin: 0; color: var(--text-muted); }
+.source-peek-quote {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+  color: var(--text-primary);
+}
+.source-peek-page {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-4);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--surface-subtle);
+  /* The extracted text carries its own line breaks; they are part of what the
+     reader is checking against. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.source-peek-page mark {
+  padding: 0.1em 0.15em;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-running) 35%, transparent);
+  color: inherit;
+}
+
+/* Compact by design: the detail is behind a <details>, so the stack sizes to
+   its content and never needs its own scrollbar. The cap is a last resort for
+   an unusual pile-up of events, not the normal case. */
+.chat-guardrail-stack {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  max-height: 40dvh;
+  overflow-y: auto;
+}
+/* Long, unbroken model text (a stray URL, a run-on token) must wrap instead
+   of stretching the alert and forcing the whole stack to scroll sideways. */
+.chat-guardrail-stack .alert-content { min-width: 0; overflow-wrap: anywhere; }
+.chat-guardrail-reasons { display: grid; gap: var(--space-2); }
+.chat-guardrail-reasons > p { margin: 0; }
+.chat-guardrail-removed {
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid color-mix(in srgb, var(--status-failed) 55%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--status-failed) 8%, transparent);
+}
+.chat-guardrail-removed > summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+.chat-guardrail-removed[open] > summary { margin-bottom: var(--space-2); }
+.chat-guardrail-removed ul { margin: 0; padding-left: var(--space-4); display: grid; gap: var(--space-1); }
+.chat-guardrail-removed li { font-style: italic; color: var(--text-secondary); }
 .chat-content > .interrupt-panel { flex: 0 1 auto; min-height: 0; max-height: 42dvh; overflow-y: auto; }
 .chat-content .interrupt-panel .draft-preview { max-height: none; overflow: visible; }
 .chat-content > .alert,

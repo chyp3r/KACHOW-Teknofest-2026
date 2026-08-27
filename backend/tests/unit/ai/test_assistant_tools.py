@@ -13,7 +13,21 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from pydantic import BaseModel
 
-from app.ai.agents.assistant import MAX_TOOL_TURNS, AssistantAgent
+from app.ai.agents.assistant import (
+    MAX_TOOL_TURNS_EVREN,
+    MAX_TOOL_TURNS_LOCAL,
+    AssistantAgent,
+    _BUDGET_EXHAUSTED_INSTRUCTION,
+    _FINAL_ANSWER_INSTRUCTION,
+    _GIVEUP_RETRY_NUDGE,
+    _NARRATION_NUDGE,
+    _NO_RETRIEVAL_NUDGE,
+    _final_answer_nudge,
+    _looks_like_giveup,
+    _without_sources_block,
+    _looks_like_narration,
+    _max_tool_turns,
+)
 from app.ai.llms.base import ToolCallResponse
 from app.ai.tools.document_tools import (
     GetDocumentDetailsArgs,
@@ -521,7 +535,8 @@ async def test_assistant_reuses_the_tool_loops_own_final_answer_without_restream
 @pytest.mark.asyncio
 async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     """A model that keeps requesting tools must not loop forever -- after
-    MAX_TOOL_TURNS rounds the agent forces a plain-text final answer."""
+    the provider's tool-turn cap the agent forces a plain-text final answer."""
+    max_turns = _max_tool_turns()
     handler = AsyncMock(return_value="sonuç")
     tool = ToolSpec(
         name="search_document", description="test", args_schema=_NoArgs, handler=handler
@@ -529,7 +544,7 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     always_calls_tool = ToolCallResponse(
         content="", tool_calls=[{"id": "x", "name": "search_document", "args": {}}]
     )
-    fake_llm.generate_with_tools_side_effect = [always_calls_tool] * MAX_TOOL_TURNS
+    fake_llm.generate_with_tools_side_effect = [always_calls_tool] * max_turns
     fake_llm.stream_chunks = ["nihayetinde cevap"]
     agent = AssistantAgent(fake_llm)
 
@@ -538,8 +553,509 @@ async def test_assistant_stops_after_max_tool_turns_and_still_answers(fake_llm):
     ]
 
     assert "".join(chunks) == "nihayetinde cevap"
-    assert len(fake_llm.generate_with_tools_calls) == MAX_TOOL_TURNS
-    assert handler.await_count == MAX_TOOL_TURNS
+    assert len(fake_llm.generate_with_tools_calls) == max_turns
+    assert handler.await_count == max_turns
+
+
+@pytest.mark.asyncio
+async def test_tool_turn_cap_follows_provider(fake_llm):
+    """Local (Ollama) mode keeps the tight 2-turn cap; connected to Evren the
+    agent gets the wider 5-turn cap so it can try several tools before it
+    converges on an answer."""
+    handler = AsyncMock(return_value="sonuç")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    always_calls_tool = ToolCallResponse(
+        content="", tool_calls=[{"id": "x", "name": "search_document", "args": {}}]
+    )
+
+    for local_mode, expected in ((True, MAX_TOOL_TURNS_LOCAL), (False, MAX_TOOL_TURNS_EVREN)):
+        handler.reset_mock()
+        fake_llm.generate_with_tools_calls.clear()
+        fake_llm.generate_with_tools_side_effect = [always_calls_tool] * (expected + 2)
+        fake_llm.stream_chunks = ["cevap"]
+        agent = AssistantAgent(fake_llm)
+
+        with patch("app.ai.agents.assistant.settings.LOCAL_MODE", local_mode):
+            _ = [
+                chunk
+                async for chunk in agent.run_stream(
+                    query="soru", history=[], tools=[tool]
+                )
+            ]
+
+        assert len(fake_llm.generate_with_tools_calls) == expected
+        assert handler.await_count == expected
+
+
+# ==========================================
+# "Bulamadım" için erken pes etme koruması
+# ==========================================
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Yüklü evrakta bu bilgiye ulaşamadım.",
+        "Belgede böyle bir ifade geçmiyor.",
+        "Bu konuda bir bilgi bulamadım.",
+        "İlgili tarih belgede belirtilmemiş.",
+        "Evrakta bu isimden söz edilmemektedir.",
+    ],
+)
+def test_looks_like_giveup_matches_common_phrasings(text):
+    assert _looks_like_giveup(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Evrak 12.03.2026 tarihli olup konu yıllık izin talebidir.",
+        "Belgede 657 sayılı Kanun'a atıf yapılmıştır.",
+        "",
+        None,
+    ],
+)
+def test_looks_like_giveup_leaves_real_answers_alone(text):
+    assert _looks_like_giveup(text) is False
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        # The exact reported regression.
+        "Şimdi de \"Hacettepe\" kelimesiyle birlikte \"R&D\" veya \"Community\" "
+        "gibi kelimeleri içeren tüm geçişleri kontrol edelim:",
+        "Bir de şu terimleri arayalım.",
+        "Önce belgenin sayfa dökümüne bakalım.",
+        "Şimdi ilgili bölümü inceleyelim:",
+        "Bir sonraki adımda tam metni okuyacağım.",
+    ],
+)
+def test_looks_like_narration_catches_an_announced_next_step(text):
+    assert _looks_like_narration(text) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Evrak, 15 günlük yıllık izin talebidir [s. 2].",
+        "Belgede ACM ICPC'ye dair bir bilgi bulunmamaktadır.",
+        "Merhaba, size nasıl yardımcı olabilirim?",
+        "",
+        None,
+    ],
+)
+def test_looks_like_narration_leaves_real_answers_alone(text):
+    assert _looks_like_narration(text) is False
+
+
+def test_an_announced_next_step_is_rejected_even_after_searching():
+    """The reported breakage: the model replied with a search plan instead of
+    an answer, and because it carried no tool call the loop shipped it to the
+    user as the final reply. Rejected regardless of how many searches ran."""
+    assert (
+        _final_answer_nudge(
+            content='Şimdi de "Hacettepe" ile "R&D" geçişlerini kontrol edelim:',
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=3,
+            max_tool_turns=5,
+        )
+        == _NARRATION_NUDGE
+    )
+
+
+def test_a_quoted_source_line_does_not_read_as_the_model_giving_up():
+    """The KAYNAKLAR block quotes the document verbatim. A source sentence
+    that happens to say "...bahsedilmemektedir" is the document's wording, not
+    the model conceding -- checking it would fire a pointless retry turn."""
+    reply = (
+        "Belgede iki yıllık deneyim belirtiliyor [1].\n\n"
+        "KAYNAKLAR:\n"
+        "[1] (s. 2) Adayın sertifikasyonundan bu raporda bahsedilmemektedir."
+    )
+
+    assert _looks_like_giveup(_without_sources_block(reply)) is False
+    assert (
+        _final_answer_nudge(
+            content=reply,
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=1,
+            max_tool_turns=5,
+        )
+        is None
+    )
+
+
+def test_without_sources_block_keeps_a_reply_that_has_none():
+    assert _without_sources_block("Düz bir cevap.") == "Düz bir cevap."
+
+
+def test_the_model_still_gets_nudged_when_its_own_prose_gives_up():
+    """The strip must not blunt the guard itself -- a give-up written in the
+    model's own words, above the block, is still caught."""
+    reply = "Bu bilgiye ulaşamadım.\n\nKAYNAKLAR:\n[1] (s. 1) Alakasız bir cümle."
+
+    assert (
+        _final_answer_nudge(
+            content=reply,
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=1,
+            max_tool_turns=5,
+        )
+        == _GIVEUP_RETRY_NUDGE
+    )
+
+
+def test_a_confident_answer_written_without_any_search_is_rejected():
+    """The reported bug: the model answers about the document having called
+    nothing at all. It reads as a real answer, so the give-up pattern never
+    matches -- the only signal is the zero tool-call count."""
+    assert (
+        _final_answer_nudge(
+            content="Evrak, 15 günlük yıllık izin talebidir.",
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=0,
+            max_tool_turns=5,
+        )
+        == _NO_RETRIEVAL_NUDGE
+    )
+
+
+def test_a_giveup_after_one_search_still_gets_the_giveup_nudge():
+    assert (
+        _final_answer_nudge(
+            content="Bu bilgiye ulaşamadım.",
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=1,
+            max_tool_turns=5,
+        )
+        == _GIVEUP_RETRY_NUDGE
+    )
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        # Small talk / no document -- nothing to search, never second-guess.
+        dict(require_retrieval=False, has_tools=True, tool_calls_made=0, max_tool_turns=5),
+        # Nothing bound to call.
+        dict(require_retrieval=True, has_tools=False, tool_calls_made=0, max_tool_turns=5),
+        # Searched, and the answer is a real answer.
+        dict(require_retrieval=True, has_tools=True, tool_calls_made=2, max_tool_turns=5),
+    ],
+)
+def test_final_answer_nudge_accepts_legitimate_answers(kwargs):
+    assert _final_answer_nudge(content="Evrak bir izin talebidir.", **kwargs) is None
+
+
+def test_a_giveup_once_the_budget_is_spent_is_accepted():
+    """Every allowed tool call was made -- 'couldn't find it' is genuine now."""
+    assert (
+        _final_answer_nudge(
+            content="Bu bilgiye ulaşamadım.",
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=5,
+            max_tool_turns=5,
+        )
+        is None
+    )
+
+
+@pytest.mark.asyncio
+async def test_an_answer_with_zero_searches_is_not_accepted_and_the_model_is_nudged(fake_llm):
+    """End-to-end: a document-attached turn whose first reply is a confident
+    answer with no tool call at all must not reach the user -- the loop pushes
+    the model back to its tools and only then accepts."""
+    handler = AsyncMock(return_value="[s. 3] ... on beş gün ...")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        # Straight to an answer, nothing called -- the reported bug.
+        ToolCallResponse(content="Evrak 10 günlük izin talebidir.", tool_calls=[]),
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document", "args": {"query": "izin"}}],
+        ),
+        ToolCallResponse(content="Belgede 15 gün olarak belirtilmiş.", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="Kaç gün izin isteniyor?",
+            history=[],
+            tools=[tool],
+            require_retrieval=True,
+        )
+    ]
+
+    # The un-searched answer never reached the user.
+    assert "".join(chunks) == "Belgede 15 gün olarak belirtilmiş."
+    assert "10 günlük" not in "".join(chunks)
+    assert handler.await_count == 1
+    last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
+    assert any(
+        msg.get("role") == "user" and msg.get("content") == _NO_RETRIEVAL_NUDGE
+        for msg in last_messages
+    )
+    # The rejected text must not survive in context -- keeping it let the
+    # hallucinated answer bleed back into the final reply.
+    assert not any("10 günlük" in (msg.get("content") or "") for msg in last_messages)
+
+
+@pytest.mark.asyncio
+async def test_a_search_plan_never_reaches_the_user_as_the_final_answer(fake_llm):
+    """End-to-end for the reported breakage: after being nudged the model
+    answered with a plan ('şimdi de ... kontrol edelim:') and no tool call.
+    That text must be rejected, not streamed to the user as the reply."""
+    handler = AsyncMock(return_value="[s. 1] ACM Hacettepe -- TEKNOFEST Teams Lead")
+    tool = ToolSpec(
+        name="search_document_regex", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document_regex", "args": {"pattern": "ICPC"}}],
+        ),
+        ToolCallResponse(
+            content='Şimdi de "Hacettepe" ile "R&D" geçişlerini kontrol edelim:',
+            tool_calls=[],
+        ),
+        ToolCallResponse(
+            content="Belgede ACM Hacettepe'de TEKNOFEST Teams Lead görevi kayıtlıdır [s. 1].",
+            tool_calls=[],
+        ),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="ICPC madalyası var mı?",
+            history=[],
+            tools=[tool],
+            require_retrieval=True,
+        )
+    ]
+
+    answer = "".join(chunks)
+    assert answer == "Belgede ACM Hacettepe'de TEKNOFEST Teams Lead görevi kayıtlıdır [s. 1]."
+    assert "kontrol edelim" not in answer
+    last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
+    assert any(
+        msg.get("role") == "user" and msg.get("content") == _NARRATION_NUDGE
+        for msg in last_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_giveup_reply_with_a_document_is_not_accepted_and_the_model_is_nudged(fake_llm):
+    """Belge ekliyken, model erişim bütçesini tüketmeden 'bulamadım' diyerek
+    turu bitirmeye çalışırsa yanıt kabul edilmez; bir düzeltme mesajıyla
+    yeniden denemesi istenir."""
+    handler = AsyncMock(return_value="3. sayfada geçiyor")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c0", "name": "search_document", "args": {"query": "a"}}],
+        ),
+        ToolCallResponse(content="Bu bilgiye ulaşamadım.", tool_calls=[]),
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document", "args": {"query": "b"}}],
+        ),
+        ToolCallResponse(content="Belgede 15 gün olarak belirtilmiş.", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="Kaç gün izin isteniyor?",
+            history=[],
+            tools=[tool],
+            require_retrieval=True,
+        )
+    ]
+
+    assert "".join(chunks) == "Belgede 15 gün olarak belirtilmiş."
+    assert handler.await_count == 2
+    # The corrective nudge reached the model as a user message.
+    last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
+    assert any(
+        msg.get("role") == "user" and msg.get("content") == _GIVEUP_RETRY_NUDGE
+        for msg in last_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_giveup_reply_without_a_document_is_accepted_immediately(fake_llm):
+    """require_retrieval=False -- an out-of-scope 'I can't help with that'
+    must not be second-guessed."""
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs,
+        handler=AsyncMock(return_value="x"),
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(content="Bu konuda bilgi bulamadım.", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="hava nasıl?", history=[], tools=[tool], require_retrieval=False
+        )
+    ]
+
+    assert "".join(chunks) == "Bu konuda bilgi bulamadım."
+    assert len(fake_llm.generate_with_tools_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_no_nudge_ever_sends_a_system_turn_mid_conversation(fake_llm):
+    """Regression: the nudges were first injected with role="system", which
+    Evren's vLLM rejects outright --
+
+        400 ... "System message must be at the beginning"
+
+    -- failing the whole turn with "Yanıt üretilemedi". It also violated
+    BaseAgent._prepare_messages' own contract (exactly one system turn, at
+    index 0, owned by the agent). Every provider call this loop makes must
+    carry a system message only as its first message."""
+    handler = AsyncMock(return_value="sonuç")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    # Drive every nudge branch in one run: a bare answer with no search, then
+    # a search plan, then a premature give-up.
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(content="Evrak bir izin talebidir.", tool_calls=[]),
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document", "args": {}}],
+        ),
+        ToolCallResponse(content="Şimdi de diğer sayfalara bakalım:", tool_calls=[]),
+        ToolCallResponse(content="Bu bilgiye ulaşamadım.", tool_calls=[]),
+        ToolCallResponse(content="Belgede 15 gün yazıyor [s. 2].", tool_calls=[]),
+    ]
+    fake_llm.stream_chunks = ["yedek"]
+    agent = AssistantAgent(fake_llm)
+
+    _ = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="soru", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    sent = fake_llm.generate_with_tools_calls + fake_llm.stream_calls
+    assert len(sent) > 1, "expected the nudge branches to actually run"
+    for call in sent:
+        roles = [msg.get("role") for msg in call["messages"]]
+        assert roles[0] == "system"
+        assert "system" not in roles[1:], f"mid-conversation system turn: {roles}"
+
+
+@pytest.mark.asyncio
+async def test_when_the_tool_budget_runs_out_the_model_answers_with_what_it_has(fake_llm):
+    """Sweeping a multi-page document, the model keeps requesting tools until
+    the cap is hit. It must not fall through to a "couldn't reach it" answer
+    -- it is told to answer from whatever it gathered so far."""
+    handler = AsyncMock(return_value="[s. N] proje bilgisi")
+    tool = ToolSpec(
+        name="get_document_section", description="test", args_schema=_NoArgs, handler=handler
+    )
+    # Every turn asks for another page -- never converges on its own.
+    always_reads = ToolCallResponse(
+        content="", tool_calls=[{"id": "x", "name": "get_document_section", "args": {}}]
+    )
+    fake_llm.generate_with_tools_side_effect = [always_reads] * (_max_tool_turns() + 5)
+    fake_llm.stream_chunks = ["Bulunan projeler: A, B, C."]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="Projeleri listele", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    assert "".join(chunks) == "Bulunan projeler: A, B, C."
+    # The cap held.
+    assert len(fake_llm.generate_with_tools_calls) == _max_tool_turns()
+    # The final streaming call was told to answer with what it has, not the
+    # generic "give the answer or say not found" instruction.
+    final_messages = fake_llm.stream_calls[-1]["messages"]
+    assert any(
+        msg.get("content") == _BUDGET_EXHAUSTED_INSTRUCTION for msg in final_messages
+    )
+    assert not any(
+        msg.get("content") == _FINAL_ANSWER_INSTRUCTION for msg in final_messages
+    )
+
+
+@pytest.mark.asyncio
+async def test_no_budget_instruction_when_the_model_converges_on_its_own(fake_llm):
+    """The budget-exhausted instruction is only for hitting the ceiling. A
+    model that answers before the cap must not see it."""
+    handler = AsyncMock(return_value="[s. 1] bulundu")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(
+            content="", tool_calls=[{"id": "c1", "name": "search_document", "args": {}}]
+        ),
+        ToolCallResponse(content="Cevap [1].\n\nKAYNAKLAR:\n[1] (s. 1) bulundu", tool_calls=[]),
+    ]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="soru", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    assert "Cevap [1]." in "".join(chunks)
+    assert fake_llm.stream_calls == []  # reused the converged answer, no extra stream
+
+
+@pytest.mark.asyncio
+async def test_a_stubborn_model_still_terminates(fake_llm):
+    """A model that keeps answering with no tool call must not loop forever --
+    the nudge budget is capped, so the turn still ends."""
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs,
+        handler=AsyncMock(return_value="x"),
+    )
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(content="Evrak bir izin talebidir.", tool_calls=[])
+    ] * (_max_tool_turns() + 3)
+    fake_llm.stream_chunks = ["yedek cevap"]
+    agent = AssistantAgent(fake_llm)
+
+    chunks = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="soru", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    assert "".join(chunks)
+    assert len(fake_llm.generate_with_tools_calls) <= _max_tool_turns()
 
 
 # ==========================================
