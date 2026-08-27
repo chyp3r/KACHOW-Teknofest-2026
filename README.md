@@ -704,10 +704,7 @@ Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin be
 | `llm-large` | Evren Sunucu — *Qwen-122B* | 75 | 99 | 99 | 99 | **93.00** |
 | `llm-fast` | Evren Sunucu — *Qwen-35B* | 105 | 94 | 95 | 95 | **97.25** |
 | `router` | Evren Sunucu — *Qwen-8B* | 160 | 92 | N/A | N/A | **98.50** |
-| `glm-ocr` | Ollama Yerel — *Vision OCR* | Görüntü | 94* | N/A | N/A | **N/A** |
-| `llm-fast` | Evren Sunucu — *Vision OCR* | Görüntü | 98† | N/A | N/A | **N/A** |
 
-*\* `glm-ocr`'ın doğruluğu, gerçek 23 belgelik derlem üzerinde ölçülmüş ağırlıklı alan-kurtarma oranıdır (bkz. [OCR ve Alan Çıkarımı Karşılaştırması](#ocr-ve-alan-çıkarımı-karşılaştırması-gerçek-derlem) aşağıda) — üretim yolunun gerçekten kullandığı değer. † `llm-fast` (Evren, barındırılan Vision OCR) bu gerçek-derlem koşumuna dahil edilmedi, değeri hâlâ tahminidir.*
 
 #### Model Başarım Grafikleri (Üretim Modelleri)
 
@@ -749,23 +746,23 @@ xychart-beta
     bar [94, 91, 91, 90, 99, 95]
 ```
 
-### OCR ve Alan Çıkarımı Karşılaştırması (Gerçek Derlem)
+### OCR ve Alan Çıkarımı Karşılaştırması
 
-Yukarıdaki LLM tablolarının aksine bu bölüm **sentetik değil, gerçek** resmî
-yazışma derlemi üzerinde ölçüldü: `datasets/resmi_yazisma` altındaki **23
-belge / 52 sayfa**, her biri **7 etiketli alanla** (başlık bloğundan Sayı,
-Tarih, Konu, Muhatap, Gönderen Kurum; imza bloğundan İmza Sahibi, İmza
-Unvanı — toplam 134 alan) elle doğrulanmış zemin gerçeği (`ground truth`) ile
-karşılaştırıldı. Ölçüm A100 üzerinde Colab'da koşuldu; her motor üretimin
-kendi `FallbackDocumentExtractor` zincirine ("zincir" sütunu) ve tek başına
-ham çağrısına ("ham" sütunu) karşı ayrı ayrı test edildi.
+Yukarıdaki LLM tabloları sentetik veriyle üretildi; bu bölümü ise gerçek bir
+resmî yazışma derlemi üzerinde ölçtük. `datasets/resmi_yazisma` altındaki 23
+belge / 52 sayfa, her biri 7 etiketli alanla (başlık bloğundan Sayı, Tarih,
+Konu, Muhatap, Gönderen Kurum; imza bloğundan İmza Sahibi, İmza Unvanı —
+toplam 134 alan) elle doğrulanmış zemin gerçeğiyle (`ground truth`)
+karşılaştırıldı. Ölçüm A100 üzerinde Colab'da koşuldu; her motor, üretimdeki
+`FallbackDocumentExtractor` zincirine ("zincir" sütunu) ve tek başına ham
+çağrısına ("ham" sütunu) karşı ayrı ayrı test edildi.
 
-**Neden ayrı bir imza bloğu?** Header-band onarımı (aşağıda) her motorun
-başlık alanlarını zaten birbirine yakınsatıyor — sadece başlığa bakmak tüm
-motorları "aynıymış" gibi gösterir. İmza bloğu header band'ın altında kalır
-ve motorlar arasında gerçek farkın ortaya çıktığı yer burasıdır: ıslak imza
-mürekkebi basılı ismin üzerine bindiğinde (`"İF; BOZDAG ;"` → `"Bekir
-BOZDAĞ"` gibi) OpenDataLoader/Tesseract ismi ya kaybediyor ya da bozuyor.
+İmza bloğunu ayrı bir sütunda tuttuk çünkü header-band onarımı (aşağıda)
+zaten her motorun başlık alanlarını birbirine yaklaştırıyor; yalnızca
+başlığa bakılırsa tüm motorlar aynı performansta görünür. Motorlar
+arasındaki asıl fark imza bloğunda ortaya çıkıyor: ıslak imza mürekkebi
+basılı ismin üzerine bindiğinde (`"İF; BOZDAG ;"` → `"Bekir BOZDAĞ"` gibi)
+OpenDataLoader/Tesseract ismi kaybediyor ya da bozuyor.
 
 | Motor | Başlık Doğruluğu | İmza Doğruluğu | Ağırlıklı† | Ham s/sayfa | Zincir s/sayfa |
 | :--- | ---: | ---: | ---: | ---: | ---: |
@@ -784,11 +781,12 @@ karıştırılmamalı. `paddleocr` bu tablodan çıkarıldı: ölçüm sırasın
 uyumsuzluğu yüzünden ham geçişi her belgede anında başarısız oldu (o zamandan
 beri düzeltildi, henüz yeniden ölçülmedi).*
 
-**Sonuç: `glm-ocr` üretimde kullanılan motor** (`OLLAMA_VISION_MODEL =
-"glm-ocr:latest"`), bu ölçüm o kararı doğruluyor. `deepseek-ocr` başlıkta eşit
-ama imza kurtarmada hiç-vision-yok taban çizgisiyle (%73.9) **birebir aynı**
-— yani onun kurtarma yükseltmesi bu derlemde sıfır katkı sağlıyor. `glm-ocr`
-imza bloğunda 6 belgede daha iyi, hiçbir belgede daha kötü sonuç verdi.
+Üretimde kullanılan motor `glm-ocr` (`OLLAMA_VISION_MODEL =
+"glm-ocr:latest"`) ve bu ölçüm de o kararı doğruluyor. `deepseek-ocr`
+başlıkta eşit sonuç veriyor ama imza kurtarmada vision kullanmayan taban
+çizgiyle (%73.9) tamamen aynı çıkıyor, yani kurtarma yükseltmesi bu derlemde
+hiçbir katkı sağlamıyor. `glm-ocr` ise imza bloğunda 6 belgede daha iyi,
+hiçbir belgede daha kötü sonuç verdi.
 
 ![OCR motor karşılaştırması — başlık/imza kurtarma](docs/images/ocr-benchmark-bars.png)
 
