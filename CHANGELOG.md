@@ -7,7 +7,7 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - (#284) `scripts/generate_yazisma_vaka_pilotu.py`: gerçek anonimleştirilmiş
   korpus kartlarını few-shot referans alıp Evren (`llm-large`) ile
   az-temsil-edilen karar türlerinden (yetkisizlik, belirsiz başvuru, çoklu
-  talep, itiraz) kurgusal gelen evrak-karar-cevap vakası üreten betik. Üretim
+  talep) kurgusal gelen evrak-karar-cevap vakası üreten betik. Üretim
   sonrası: (1) LLM'in kendi bildirdiği kurgusal isimler dahil aynı
   anonimleştirme/denetim hattından geçer, (2) numaralı mevzuat referansları
   mevzuat.gov.tr MCP'si ile başlık eşleşmesi kontrol edilerek doğrulanır,
@@ -42,6 +42,21 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   "Ham kaynaklar" bölümü.
 
 ### Düzeltildi
+- (#284) Gelen evrak-karar-cevap şeması düzeltildi: `itiraz`, pilot vaka
+  üretiminde yanlışlıkla ayrı bir `decision` değeri gibi kullanılmıştı;
+  itiraz aslında bir gelen evrak türüdür (`incoming_type`), sonucu yine
+  standart 8'li `decision` enum'undan (`tam_kabul`, `ret`, `kismi_kabul`,
+  `eksik_belge`, `yetkisizlik`, `yalnizca_bilgilendirme`,
+  `belirsiz_basvuru`, `coklu_talep`) biri olmalı. Pilot'taki 5 itiraz
+  vakasının `decision_reason`'ı okunarak hepsinin gerçekte "itirazın
+  kabulü" olduğu doğrulandı, `decision: tam_kabul` + `incoming_type: itiraz`
+  olarak yeniden etiketlendi; `case_id`/`source_group` de bununla tutarlı
+  yeniden hesaplandı.
+  `scripts/generate_yazisma_vaka_pilotu.py`'ye bu 8'li kümeyi kanonik
+  tutan `ALLOWED_DECISIONS` sabiti ve `TARGET_DECISIONS`'ın yalnız bu
+  kümenin üyelerini anahtar olarak kullanabildiğini garanti eden bir
+  import-zamanı doğrulama eklendi -- aynı hatanın büyük ölçekli (240
+  vakalık) üretimde sessizce tekrarlanmasını engeller.
 - (#284) `OS-*` sentetik örneklem kalite kapısı fail-closed hale getirildi.
   `os_body_kind`, tanımadığı her gövde kalıbını `"genel"` kovasına
   düşürüyordu ve `os_is_coherent` bu kovayı **koşulsuz** geçiriyordu —

@@ -53,10 +53,33 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 PILOT_ROOT = REPO_ROOT / "datasets" / "resmi_yazisma_vakalar_pilot"
 PILOT_OUTPUT = PILOT_ROOT / "vakalar-taslak.jsonl"
 
-# Aşama 0'da belirlenen açık: bu dört karar türü mevcut korpusta ya hiç
+#: Kanonik karar sonucu kümesi -- GELEN_EVRAK_KARAR_CEVAP_VERI_PLANI.md'nin
+#: 8'li ``decision`` enum'u. ``itiraz`` bu kümede YOKTUR: itiraz bir gelen
+#: evrak türüdür (``incoming_type``), kararı yine bu 8 değerden biridir.
+#: İlk pilot turunda ``itiraz`` yanlışlıkla ayrı bir decision değeri gibi
+#: üretilmişti; 5 vaka da gerçekte "itirazın kabulü" olduğu için
+#: ``tam_kabul``'e taşındı (bkz. CHANGELOG). TARGET_DECISIONS'ın her
+#: anahtarı bu kümenin bir üyesi olmak zorundadır -- aşağıdaki assert bunu
+#: import zamanında garanti eder.
+ALLOWED_DECISIONS: frozenset[str] = frozenset(
+    {
+        "tam_kabul",
+        "ret",
+        "kismi_kabul",
+        "eksik_belge",
+        "yetkisizlik",
+        "yalnizca_bilgilendirme",
+        "belirsiz_basvuru",
+        "coklu_talep",
+    }
+)
+
+# Aşama 0'da belirlenen açık: bu üç karar türü mevcut korpusta ya hiç
 # yok ya da başka bir türle karışık etiketli. Betik yalnız bunlardan
 # üretir -- zaten bol olan türlerden (bilgi_edinme, ek_belge_iletimi)
 # üretmek sahte bir hacim artışı olur, çeşitlilik açığını kapatmaz.
+# NOT: tam kapsamlı 8-türlü kota (240 vakalık ana üretim) ayrı bir aşamada
+# bu sabitin üzerine yazılacak; pilot yalnız 3 türü kapsar.
 TARGET_DECISIONS: dict[str, dict[str, Any]] = {
     "yetkisizlik": {
         "adet": 5,
@@ -89,19 +112,20 @@ TARGET_DECISIONS: dict[str, dict[str, Any]] = {
         ),
         "few_shot_glob": "02_cevap_yazisi/*/*.md",
     },
-    "itiraz": {
-        "adet": 5,
-        "aciklama": (
-            "Başvuru sahibi önceki bir karara itiraz ediyor; kurum "
-            "itirazı inceleyip kabul veya ret yönünde gerekçeli cevap "
-            "veriyor."
-        ),
-        "few_shot_glob": "00_gelen_kaynaklar/bilgilendirme_metni/YARG-*.md",
-    },
 }
+
+assert TARGET_DECISIONS.keys() <= ALLOWED_DECISIONS, (
+    "TARGET_DECISIONS yalnız ALLOWED_DECISIONS üyelerini anahtar olarak "
+    f"kullanabilir, geçersiz: {TARGET_DECISIONS.keys() - ALLOWED_DECISIONS}"
+)
 
 FEW_SHOT_PER_TYPE = 3
 MAX_EXAMPLE_CHARS = 2200
+
+#: İtiraz artık ayrı bir karar türü değil -- ana 240 vakalık üretimde her
+#: kotanın İÇİNDE, ``incoming_type: "itiraz"`` olarak, kotanın kendi
+#: decision değeriyle üretilir (bkz. VAKA_URETIMI_240_PROMPT.md Aşama 2).
+INCOMING_TYPE_ITIRAZ = "itiraz"
 
 
 class _GeneratedCase(BaseModel):
