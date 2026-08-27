@@ -82,11 +82,17 @@ async def test_a_short_affirmative_continues_a_revise_offer():
 # ===========================================================================
 @pytest.mark.asyncio
 async def test_a_probability_at_or_above_tau_high_commits_without_a_model_call():
+    """LOCAL_MODE=True pinned explicitly -- under LOCAL_MODE=False the model
+    is now always consulted even for a decisive fused result (the dead
+    semantic rung's "second opinion" role falls to it instead), so this
+    must not silently depend on the ambient config default."""
     classify = AsyncMock(return_value="assist")
     with patch(
         "app.ai.workflows.planner.predict_proba",
         return_value=_flat_above("draft", _TAU_HIGH + 0.05),
-    ), patch("app.ai.workflows.planner.classify_intent_with_model", new=classify):
+    ), patch("app.ai.workflows.planner.classify_intent_with_model", new=classify), patch.multiple(
+        "app.core.config.settings", LOCAL_MODE=True
+    ):
         decision = await resolve_plan("Bu evrağa bir cevap yazısı hazırla.", None, llm_client=MagicMock())
 
     assert decision.intent == "draft"

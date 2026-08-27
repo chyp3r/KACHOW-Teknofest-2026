@@ -2,326 +2,560 @@
 
 # KACHOW
 
-**Kamu kurumlarının resmî evrak süreçlerini uçtan uca otomatize eden; belgeleri okuyan, niyet odaklı Multi-Agent yapay zeka ile analiz eden ve kurumsal mevzuata tam uyumlu taslaklar üreten otonom karar destek platformu.**
+**Kamu kurumlarındaki resmî evrak süreçlerini yapay zekâ desteğiyle analiz eden, taslak oluşturan, doğrulayan ve doğru birime yönlendiren karar destek platformu.**
 
-TEKNOFEST 2026 · Türkçe kamu yazışma otomasyonu için LangGraph üzerine kurulmuş, çok katmanlı doğrulama ve insan onaylı bir çok-ajan mimarisi.
+TEKNOFEST 2026 · LangGraph tabanlı çok-ajan mimarisi · İnsan onaylı karar akışları · Türkçe resmî yazışma otomasyonu
 
 [![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
-[![Evren API](https://img.shields.io/badge/Evren-API%20%7C%20Cloud-E30A17)](#)
-[![Qwen](https://img.shields.io/badge/Qwen-3.5%20%7C%20Yerel%20LLM-E30A17)](#)
-[![Ollama](https://img.shields.io/badge/Ollama-Local%20LLM-E30A17?logo=ollama&logoColor=white)](compose.yml)
 [![Python](https://img.shields.io/badge/Python-3.12-3178C6?logo=python&logoColor=white)](backend/requirements.txt)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.141-3178C6?logo=fastapi&logoColor=white)](backend/requirements.txt)
 [![LangGraph](https://img.shields.io/badge/LangGraph-1.2-3178C6)](backend/requirements.txt)
 [![React](https://img.shields.io/badge/React-18-06B6D4?logo=react&logoColor=white)](frontend/package.json)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.2-06B6D4?logo=typescript&logoColor=white)](frontend/package.json)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RLS-8B5CF6?logo=postgresql&logoColor=white)](compose.yml)
-[![Qdrant](https://img.shields.io/badge/Qdrant-vector%20search-8B5CF6)](backend/app/ai/retrieval)
-[![Redis](https://img.shields.io/badge/Redis-8B5CF6?logo=redis&logoColor=white)](compose.yml)
-[![Docker](https://img.shields.io/badge/Docker-0F766E?logo=docker&logoColor=white)](compose.yml)
-[![Kubernetes](https://img.shields.io/badge/Kubernetes-prod%20ready-0F766E?logo=kubernetes&logoColor=white)](deploy/kubernetes)
-[![Nginx](https://img.shields.io/badge/Nginx-0F766E?logo=nginx&logoColor=white)](deploy/docker)
-[![Prometheus](https://img.shields.io/badge/Prometheus-0F766E?logo=prometheus&logoColor=white)](compose.yml)
-[![Grafana](https://img.shields.io/badge/Grafana-0F766E?logo=grafana&logoColor=white)](compose.yml)
-[![Jaeger](https://img.shields.io/badge/Jaeger-0F766E?logo=jaeger&logoColor=white)](compose.yml)
-[![CI](https://github.com/chyp3r/KACHOW-Teknofest-2026/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Backend tests](https://img.shields.io/badge/backend%20tests-2588%2F2588%20passing-22C55E)](backend/tests)
-[![Frontend tests](https://img.shields.io/badge/frontend%20tests-332%2F332%20passing-22C55E)](frontend/src)
+[![Qdrant](https://img.shields.io/badge/Qdrant-Hybrid%20Search-8B5CF6)](backend/app/ai/retrieval)
+[![Docker](https://img.shields.io/badge/Docker-ready-0F766E?logo=docker&logoColor=white)](compose.yml)
+[![Backend tests](https://img.shields.io/badge/backend-2588%20tests-22C55E)](backend/tests)
+[![Frontend tests](https://img.shields.io/badge/frontend-332%20tests-22C55E)](frontend/src)
 [![License](https://img.shields.io/badge/license-Apache%202.0-64748B)](LICENSE)
 
-
-**Multi-Agent Orchestration** · **RAG** · **Hybrid Search (BM25+Dense** · **Compliance Knowledge Graph** · **Human-in-the-Loop** · **RBAC/ABAC** · **Multi-Tenant SaaS** · **Row-Level Security** · **LoRA/DPO Fine-Tuning** · **Adaptive Learning** · **Groundedness Verification** · **LLM-as-a-Judge** · **Prompt-Injection Defense** · **PII Redaction** · **OpenTelemetry Observability**
+**Multi-Agent Orchestration** · **RAG** · **Hybrid Search** · **Human-in-the-Loop** · **RBAC + ABAC** · **Multi-Tenant** · **PostgreSQL RLS** · **Groundedness Verification** · **Adaptive Learning**
 
 </div>
 
-## Platform Önizlemesi ve Arayüz Ekranları
-
-*Not: Aşağıdaki alanlar sistem arayüzünün çeşitli bileşenlerini göstermektedir.*
-
-| Dashboard & Analiz | Grafik & Raporlama |
-| :---: | :---: |
-| ![Dashboard Görünümü](placeholder_dashboard.png) <br/> *Ana Dashboard* | ![Mevzuat Grafiği](placeholder_graph.png) <br/> *Mevzuat Bilgi Grafiği* |
-| ![Evrak Analizi](placeholder_analysis.png) <br/> *Evrak Analiz Ekranı* | ![Yönlendirme Sonucu](placeholder_routing.png) <br/> *AI Birim Yönlendirme* |
-| ![Taslak Düzenleyici](placeholder_editor.png) <br/> *Taslak Revizyon Editörü* | ![Güvenlik & Log](placeholder_security.png) <br/> *ABAC & Güvenlik Logları* |
-| ![Kullanıcı Yönetimi](placeholder_users.png) <br/> *Kullanıcı ve Rol Yönetimi* | ![Performans İzleme](placeholder_metrics.png) <br/> *Langfuse / Metrik Paneli* |
-| ![Sistem Ayarları](placeholder_settings.png) <br/> *Local/Evren Mod Ayarları* | ![Mobil Görünüm](placeholder_mobile.png) <br/> *Responsive Mobil Arayüz* |
-
-
-> [!NOTE] 
-> **Demo Video & Ekran Görüntüleri:** [Buraya uygulamanın arayüzünden örnek ekran görüntüleri veya YouTube/Loom video linki eklenecek]
-
-Sistemin kalbinde yer alan, hiçbir işlemi kullanıcıdan gizlemeyen ve "kara kutu" yapısını reddeden şeffaf ekranı:
-1. Evrak yükleme arayüzü
-2. Ajanların adım adım ilerleme ekranı (SSE ile canlı yayın)
-3. İnsan Onayı - Eksik/hatalı bilgide sistemin kullanıcıyı beklemesi
-
-
 ---
 
-## İçindekiler
+## KACHOW nedir?
 
-1. [Proje Hakkında](#proje-hakkında)
-2. [Sistemin Yetenekleri](#sistemin-yetenekleri)
-3. [Demo ve Uygulama Akışı](#demo-ve-uygulama-akışı)
-4. [Mimari Stil](#mimari-stil)
-5. [Sistem Mimarisi](#sistem-mimarisi)
-6. [Çok Kiracılı Roller ve İzinler](#çok-kiracılı-roller-ve-izinler)
-7. [Mevzuat ve Uyum Grafiği](#mevzuat-ve-uyum-grafiği)
-8. [Kuruma Özel Öğrenme](#kuruma-özel-öğrenme)
-9. [Önemli Mimari Kararlar](#önemli-mimari-kararlar)
-10. [Kullanılan Teknolojiler](#kullanılan-teknolojiler)
-11. [Baştan Sona İşlem Adımları](#baştan-sona-işlem-adımları)
-12. [Gelen İsteğin Yönlendirme Adımları](#gelen-isteğin-yönlendirme-adımları)
-13. [Otomatik Doğrulama ve Onay Mekanizması](#otomatik-doğrulama-ve-onay-mekanizması)
-14. [Kullanıcı Onayı ve Müdahale Sistemi](#kullanıcı-onayı-ve-müdahale-sistemi)
-15. [Test Süreçleri ve Kalite Kontrol](#test-süreçleri-ve-kalite-kontrol)
-16. [Eğitim ve Test Verileri](#eğitim-ve-test-verileri)
-17. [Başarım Ölçümleri ve Model Sonuçları](#başarım-ölçümleri-ve-model-sonuçları)
-18. [Sistem İzleme ve Metrikler](#sistem-izleme-ve-metrikler)
-19. [Hızlı Başlangıç](#hızlı-başlangıç)
-20. [Ortam Değişkenleri ve Gerekli Dosyalar](#ortam-değişkenleri-ve-gerekli-dosyalar)
-21. [Sunucu ve Dağıtım Altyapısı](#sunucu-ve-dağıtım-altyapısı)
-22. [Canlı Ortam Kurulumu](#canlı-ortam-kurulumu)
-23. [Proje Klasör Yapısı](#proje-klasör-yapısı)
-24. [Katkı Sağlama ve Lisans](#katkı-sağlama-ve-lisans)
+Kamu kurumlarında bir evrakın işlenmesi yalnızca metni okumaktan ibaret değildir. Evrakın türünün belirlenmesi, gerekli bilgilerin kontrol edilmesi, ilgili mevzuatın bulunması, resmî cevap hazırlanması, uygun birime yönlendirilmesi ve imza öncesinde doğrulanması gerekir.
 
----
+KACHOW bu sürecin tekrar eden bölümlerini otomatikleştirir ancak karar sürecinden insanı çıkarmayı amaçlamaz.
 
+Bir evrak yüklendiğinde sistem:
 
-## Proje Hakkında
-
-Bir memur elinize bir dilekçe, üst yazı ya da şikâyet evrakı tutuşturduğunda önündeki iş şu: evrakı oku, türünü anla, eksik ne var bak, hangi mevzuata dayanıyor öğren, resmî üslupta bir cevap yaz, imzaya çıkmadan önce her şeyi kontrol et, doğru birime havale et. KACHOW bu zincirin tamamını — insanı devre dışı bırakmadan — otomatikleştiriyor:
+1. belgeyi okur,
+2. evrak türünü ve temel alanları çıkarır,
+3. eksik bilgileri belirler,
+4. ilgili mevzuatı arar,
+5. resmî yazışma taslağı oluşturur,
+6. taslaktaki iddiaları kaynak belgeyle karşılaştırır,
+7. uygun kurumsal birimi önerir,
+8. kritik veya belirsiz durumlarda kullanıcı onayı ister.
 
 ```mermaid
-flowchart TD
-    classDef step fill:#1e3a8a,stroke:#3b82f6,stroke-width:2px,color:#fff;
-    classDef decision fill:#0f766e,stroke:#14b8a6,stroke-width:2px,color:#fff;
-    classDef human fill:#b45309,stroke:#f59e0b,stroke-width:2px,color:#fff;
-    classDef guard fill:#991b1b,stroke:#ef4444,stroke-width:2px,color:#fff;
+flowchart TB
 
-    subgraph Asama1 [Aşama 1: Analiz ve Hazırlık]
-        direction LR
-        START((Kullanıcı İsteği)) --> IN[Input Guardrail<br/>Saldırı Kontrolü]:::guard --> A[Evrakı Oku]:::step --> B[Sınıflandır]:::step --> C[Alanları Çıkar]:::step
-    end
-    
-    subgraph Asama2 [Aşama 2: Zenginleştirme ve Taslak]
-        direction LR
-        D[Eksikleri Bul]:::step --> E[Mevzuatı Öner]:::step --> F[Özetle]:::step --> G[Tür Belirle]:::step --> H[Taslak Üret]:::step
-    end
+    classDef step fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1.5px,color:#172033;
+    classDef input fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#172033;
+    classDef guard fill:#FEF2F2,stroke:#EF4444,stroke-width:1.5px,color:#172033;
+    classDef human fill:#FFF7ED,stroke:#F59E0B,stroke-width:1.5px,color:#172033;
+    classDef decision fill:#FFFBEB,stroke:#D97706,stroke-width:1.5px,color:#172033;
+    classDef done fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#172033;
 
-    subgraph Asama3 [Aşama 3: Doğrulama ve Karar]
+    subgraph TASK1["Görev 1 · Evrak Analizi"]
         direction LR
-        I[Doğrula]:::step --> OUT[Output Guardrail<br/>PII Kontrolü]:::guard --> J{Bilgi Eksik mi?}:::decision
-        J -- Evet --> K[Kullanıcıdan İste]:::human --> L[Birim Öner]:::step
-        J -- Hayır --> L
-        L --> M[Onay/Revizyon]:::human --> N[Kaydet]:::step
+
+        A[Evrak Yükleme]:::input
+        B[Okuma ve OCR]:::input
+        C[Input Guardrail]:::guard
+        D[Sınıflandırma]:::step
+        E[Alanları Çıkar]:::step
+
+        A --> B --> C --> D --> E
     end
 
-    C --> D
-    H --> I
+    subgraph TASK2["Görev 2 · Zenginleştirme ve Taslak"]
+        direction LR
+
+        F[Eksikleri Bul]:::step
+        G[Mevzuat Arama]:::step
+        H[Özetleme]:::step
+        I[Yazışma Türünü Belirle]:::step
+        J[Taslak Üretimi]:::step
+
+        F --> G --> H --> I --> J
+    end
+
+    subgraph TASK3["Görev 3 · Doğrulama ve Karar"]
+        direction LR
+
+        K[Kaynak Doğrulama]:::guard
+        L[Output Guardrail]:::guard
+        M{İnsan Onayı<br/>Gerekli mi?}:::decision
+        N[Birim Yönlendirme]:::step
+        O[Kaydet ve Gönder]:::done
+        P[İnsan Müdahalesine Aktar]:::human
+
+        K --> L --> M
+        M -->|Hayır| N --> O
+        M -->|Evet| P
+    end
+
+    TASK1 --> TASK2
+    TASK2 --> TASK3
+
+    style TASK1 fill:#EFF6FF,stroke:#93C5FD,stroke-width:1.5px
+    style TASK2 fill:#F5F3FF,stroke:#C4B5FD,stroke-width:1.5px
+    style TASK3 fill:#FEF2F2,stroke:#FCA5A5,stroke-width:1.5px
+
 ```
 
-Her adım LangGraph üzerinde ayrı bir **ajan/düğüm**; her düğümün kendi başarısızlık modu, zaman aşımı ve geri dönüş yolu var. Sistem hiçbir zaman "LLM ne dediyse odur" demiyor — **dış kaynak destekli üretim** ile üretilen her iddia (tarih, tutar, kişi, kurum, mevzuat atfı) **kaynak doğrulama** katmanında kaynak evrakla satır satır karşılaştırılıyor, ve kritik bir tutarsızlık bulunduğunda bu bulgu bir ortalama skorun içinde kaybolmuyor: taslak otomatik olarak **kullanıcı onayı** onayına düşüyor.
+Her işlem adımı LangGraph üzerinde ayrı bir düğüm olarak çalışır. Akışın durumu sunucuda tutulduğu için kullanıcı onayı gereken bir noktada işlem durabilir ve daha sonra aynı noktadan devam edebilir.
 
-## Sistemin Yetenekleri
+---
 
-**1. Evrak Analizi ve Yönlendirme Zekası**
-- **Çoklu Okuma Katmanı:** Metin katmanlı PDF ve optik karakter tanıma (OCR) destekli görsel okuma.
-- **Detaylı Sınıflandırma ve Veri Çıkarımı:** Evrakı 10 alt kategoriye ayırma ve tarih, sayı, muhatap gibi zorunlu alanları Pydantic şemaları ile yapılandırılmış şekilde dışarı aktarma.
-- **Akıllı Mevzuat Arama:** Melez (BM25 + Dense) vektör araması ile metne en uygun kanun ve yönetmelik maddelerini referanslarıyla bulma.
-- **Gerekçeli Birim Yönlendirme:** Evrakı analiz edip gideceği departmanı (Örn: Hukuk Müşavirliği) güven skoru ve hukuki dayanağı ile birlikte önerme.
-- **Böl ve Yönet Özetleme:** Kaç sayfa olursa olsun uzun evrakları parçalayarak okuyan, 3 cümlelik kısa veya detaylı yönetici özeti çıkarabilen mekanizma.
+## Demo ve Arayüz
 
-**2. Çok Ajanlı Taslak Üretimi ve Kurumsal Zeka**
-- **Canlı Yasal Bağlantı:** Dil modellerinin dış dünyayla konuşmasını sağlayan MCP (Model Context Protocol) altyapısı sayesinde canlı ve güncel mevzuat sorgusu yapabilme (yanıt alınamazsa çevrimdışı yerel korpüse düşme).
-- **Kuruma Özel Öğrenme:** Şirketlerin kendi geçmiş resmi yazışmalarından kurumun resmi "dilini ve üslubunu" öğrenen, gerekirse DPO ve ince ayar ile yapay zekayı kurum diline eğitebilen altyapı.
-- **Yapay Zeka Yargıç:** Üretilen taslak metinlerin başka bir dil modeli tarafından kurumsal üsluba uygunluk, yapı ve format açısından otonom denetlenmesi.
-- **İddia Doğrulama:** Yapay zekanın yazdığı her tarih, kişi veya tutarın kaynak evrakla eşleştiğini satır satır denetleyen güvenlik katmanı (Uydurma/Halüsinasyon engelleme).
+> **Demo videosu:** YouTube / Loom bağlantısı buraya eklenecek.
 
-**3. Güvenlik, İzinler ve Onay Mekanizması**
-- **Kullanıcı Onay Döngüsü:** Sistem kritik bir eksik (örn: evrakın imzasız olması) veya uydurma bilgi yakaladığında akışı durdurur, kullanıcıdan düzeltme talep eder ve kaldığı yerden devam eder. Sayfa yenilense dahi durum korunur.
-- **Kişisel Veri Koruması:** TCKN, IBAN gibi verileri doğrulayarak maskeleme ve kötü niyetli talimat sızdırma (Prompt Injection) saldırılarını modelden önce temizleme.
-- **Çok Kiracılı Roller ve Nitelik Tabanlı Erişim Kontrolü:** Sisteme aynı anda yüzlerce kurum eklenebilir. Yetkilendirme sadece "Admin/Kullanıcı" yetkisi değildir; kullanıcının gizlilik derecesi, belgenin sahipliği ve departmanını harmanlayarak Sıfır Güven (Zero-Trust) politikası uygular.
+### Platform görünümü
 
-**4. Mimari, Altyapı ve Veri Ağları**
-- **Mevzuat ve Uyum Grafiği:** İlişkisel veritabanından dinamik olarak türetilen, okunan evrakların hangi ortak kanunlara atıfta bulunduğunu gösteren görsel bilgi grafiği.
-- **Satır Seviyesi Güvenlik (RLS):** Veritabanı (PostgreSQL) seviyesinde şirket izolasyonu; yazılımcı koda hata yapsa bile veritabanı farklı şirketlerin verisini asla birbirine göstermez.
-- **Tam Sistem İzleme:** Hangi ajanın kaç saniyede ne kadar limit harcadığını, logları ve sunucu darboğazlarını OpenTelemetry, Jaeger, Langfuse ve Prometheus ile milisaniyesine kadar izleme.
+| Evrak ve AI Akışı | Kurumsal Analiz |
+| :---: | :---: |
+| ![Dashboard](placeholder_dashboard.png) | ![Evrak Analizi](placeholder_analysis.png) |
+| **Ana Dashboard** | **Evrak Analizi** |
+| ![Taslak Editörü](placeholder_editor.png) | ![Yönlendirme](placeholder_routing.png) |
+| **Taslak ve Revizyon** | **AI Birim Yönlendirme** |
 
+| Yönetim | İzleme |
+| :---: | :---: |
+| ![Bilgi Grafiği](placeholder_graph.png) | ![Performans](placeholder_metrics.png) |
+| **Mevzuat Bilgi Grafiği** | **Sistem Metrikleri** |
+| ![Kullanıcı Yönetimi](placeholder_users.png) | ![Güvenlik](placeholder_security.png) |
+| **Kullanıcı ve Yetki Yönetimi** | **Güvenlik ve Audit Logları** |
 
-## Mimari Stil
+Arayüzde özellikle üç nokta görünür tutulur:
 
-Backend tek bir **modüler monolit** — mikroservis değil, tek deploy edilebilir süreç (`deploy/kubernetes/backend.yaml`'da tek `Deployment`) ama içeride domain sınırları kesin ve birbirine sızmıyor. Üç katman bir arada çalışıyor:
+- evrak yükleme ve analiz süreci,
+- ajanların ilerleyişinin SSE üzerinden canlı gösterimi,
+- sistemin kullanıcıdan bilgi veya onay beklediği Human-in-the-Loop adımları.
 
-| Prensip | Nerede | Ne anlama geliyor |
-| :--- | :--- | :--- |
-| **Domain-Driven Design (DDD** — bounded context'ler | `backend/app/domains/*` (documents, drafts, routing, units, auth, audit, companies, users, training, transfers, messaging, notifications, pools, quotas, feedback, system) | Her domain kendi `model/`, `schema/`, `service.py`, `router.py` üçlüsüne sahip; birbirinin repository'sine doğrudan erişmiyor. Domain dili tip sisteminde birebir: `EvrakField`, `MissingField`, `CorrespondenceType`, `SensitivityLevel` — Türkçe bürokratik terminoloji doğrudan Pydantic şemasında. |
-| **Clean / Hexagonal Architecture** (Ports & Adapters) | `api` → `domains` → `ai` → `infrastructure` | Bağımlılık yönü hep içe doğru (**Dependency Inversion**). `infrastructure` bir adaptör katmanı — `Ollama ⇄ Evren` LLM sağlayıcısı, `local ⇄ S3` depolama arka ucu — domain kodu hiç değişmeden takas edilebiliyor. |
-| **Modüler Monolit** | Tek backend imajı, tek Postgres, tek deploy birimi | Mikroservis karmaşıklığı (dağıtık transaction, servisler-arası ağ) yok; yalnızca ağır ML bağımlılıkları (`torch`/`peft`/`trl`) olan LoRA eğitim işi ayrı bir `worker` sürecine/imajına bölünmüş. |
-| **Event-Driven + Checkpointed State Machine** | `ai/workflows/*`, SSE (`/chat/stream`) | Her iş akışı LangGraph üzerinde durum makinesi olarak modellenmiş; her adım Postgres'e checkpoint'leniyor (event-sourcing'e yakın), istemciye `node_start`/`node_end` olayları SSE ile akıyor. |
-| **CQRS'e yakın bir okuma modeli** | `GET /documents/graph` (Compliance Knowledge Graph) | Ayrı bir graph veritabanı yok — grafik, Postgres + analiz cache'inden **okuma anında** türetiliyor. |
-| **Zero-Trust yetkilendirme** | `core/authz/*` | Her istekte kimlik + rol + sahiplik + gizlilik derecesi ayrı ayrı doğrulanıyor; frontend'in "gizlemesi" hiçbir zaman tek güvenlik katmanı değil. |
+---
+
+## Temel Yetenekler
+
+### Evrak analizi
+
+KACHOW hem metin katmanı bulunan PDF'leri hem de taranmış belgeleri işleyebilir.
+
+Dijital belgelerde metin doğrudan çıkarılır. Gerekli olduğunda Tesseract ve vision tabanlı OCR katmanları devreye girer.
+
+Analiz sonucunda sistem:
+
+- evrak türünü belirler,
+- tarih, sayı, konu, muhatap ve gönderen kurum gibi alanları çıkarır,
+- eksik alanları işaretler,
+- kısa veya ayrıntılı özet oluşturur,
+- evrakla ilişkili mevzuatı arar.
+
+Çıkarılan alanlar Pydantic şemalarıyla yapılandırılır; yalnızca serbest metin olarak tutulmaz.
+
+### Mevzuat arama
+
+Mevzuat araması **BM25 + dense retrieval** kullanan hibrit bir arama katmanı üzerinden yapılır.
+
+Sistem iki kaynaktan yararlanabilir:
+
+- canlı `mevzuat-mcp` sorguları,
+- bağlantı kurulamadığında `datasets/mevzuat/` altındaki yerel fallback korpüsü.
+
+Bir kaynak bulunamadığında mevzuat referansı üretilmez.
+
+### Taslak üretimi
+
+Analiz tamamlandıktan sonra sistem resmî yazışma taslağı oluşturabilir.
+
+Taslak oluşturulurken:
+
+- kaynak evrak,
+- bulunan mevzuat,
+- yazışma türü,
+- kurumun tercihleri ve stil profili
+
+birlikte kullanılır.
+
+Üretilen taslak daha sonra ayrı bir doğrulama aşamasından geçer.
+
+### Kaynak doğrulama
+
+Taslakta geçen tarih, sayı, tutar, kişi, kurum ve mevzuat atıfları kaynak evrakla karşılaştırılır.
+
+Kritik bir tutarsızlık bulunursa yüksek genel güven skoru bu hatayı gizleyemez. Bu tür bulgular `forces_approval` üzerinden ayrı olarak işlenir ve taslak kullanıcı onayına gönderilir.
+
+### Birim yönlendirme
+
+Routing Graph evrakın içeriğine göre uygun kurumsal birimi önerir.
+
+Sonuç yalnızca bir birim adı değildir. Sistem mümkün olduğunda:
+
+- önerilen birimi,
+- güven skorunu,
+- yönlendirme gerekçesini,
+- alternatif birimleri
+
+birlikte döndürür.
+
+### İnsan onayı
+
+KACHOW'un temel tasarım kararlarından biri kritik kararların otomatik olarak geçilmemesidir.
+
+Eksik bilgi, doldurulmamış alan, olası halüsinasyon veya başka kritik bir doğrulama problemi bulunduğunda LangGraph akışı `interrupt` ile durdurulur.
+
+Kullanıcı gerekli bilgiyi sağladığında aynı thread tekrar başlatılmaz; mevcut checkpoint üzerinden devam eder.
+
+---
 
 ## Sistem Mimarisi
 
-Daha okunabilir olması için mimari yapı 3 ana modüle bölünmüştür.
+KACHOW backend'i bir **modüler monolit** olarak tasarlanmıştır.
 
-### 1. Kullanıcı Arayüzü ve API Geçidi (Frontend & Gateway)
-
-```mermaid
-graph TD
-    classDef client fill:#1e1e1e,stroke:#00a8cc,stroke-width:2px,color:#fff;
-    classDef api fill:#1c2833,stroke:#e67e22,stroke-width:2px,color:#fff;
-    classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
-    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
-
-    A[React 18 / TypeScript İstemcisi<br/>TanStack Query + Context, SSE]:::client -->|REST + SSE| B
-
-    subgraph "Backend — FastAPI"
-        B(API Router ve Middleware<br/>correlation-id, tenant, rate-limit, logging):::api
-        C{JWT Auth + ABAC<br/>rol, sahiplik, gizlilik derecesi}:::api
-        B --> C
-    end
-
-    O2[Prometheus + Grafana]:::obs
-    O3[Jaeger — OpenTelemetry trace]:::obs
-    
-    B -.-> O2
-    B -.-> O3
-```
-
-### 2. Yapay Zeka Orkestrasyonu (LangGraph)
+Tek bir deploy edilebilir backend bulunur ancak authentication, documents, drafts, routing, messaging, training ve diğer alanlar ayrı domain sınırları içinde tutulur.
 
 ```mermaid
-flowchart TD
-    classDef api fill:#1c2833,stroke:#e67e22,stroke-width:2px,color:#fff;
-    classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
-    classDef subnode fill:#117a65,stroke:#a3e4d7,stroke-width:1px,color:#fff;
-    classDef obs fill:#1b2631,stroke:#5dade2,stroke-width:1.5px,color:#fff;
-    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
+flowchart LR
+    classDef ui fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#172033;
+    classDef api fill:#EEF2FF,stroke:#6366F1,stroke-width:1.5px,color:#172033;
+    classDef ai fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1.5px,color:#172033;
+    classDef data fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#172033;
+    classDef ext fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#172033;
+    classDef safe fill:#FEF2F2,stroke:#EF4444,stroke-width:1.5px,color:#172033;
 
-    C{JWT Auth + ABAC}:::api --> IN_GUARD[Input Guardrail<br/>Saldırı Kontrolü]:::guard
+    FE[React 18 + TypeScript<br/>TanStack Query · SSE]:::ui
+    API[FastAPI<br/>Auth · Tenant · Rate Limit]:::api
+    AUTH[JWT + RBAC/ABAC<br/>Ownership · Clearance]:::safe
+    LG[LangGraph<br/>AI Workflows]:::ai
 
-    IN_GUARD --> P
-    IN_GUARD --> DA
-    IN_GUARD --> DR
-    IN_GUARD --> RV
-    IN_GUARD --> RT
+    PG[(PostgreSQL<br/>RLS + Checkpoints)]:::data
+    QD[(Qdrant<br/>Hybrid Retrieval)]:::data
+    RD[(Redis<br/>Session / Cache)]:::data
 
-    subgraph Orkestrasyon["Orkestrasyon — LangGraph"]
-        
-        subgraph P ["Planning Graph"]
-            direction TB
-            p1[Asistan Node]:::subnode -->|Tool Çağrısı| p2[Araçlar: Taslak, Yönlendirme,<br/>RAG Soru/Cevap, Genel Bilgi]:::subnode
-            p2 -->|Döngü| p1
-        end
-        
-        subgraph DA ["Document Analysis Graph"]
-            direction TB
-            da1[Extract]:::subnode --> da2[Classify]:::subnode
-            da2 --> da3[Fields]:::subnode
-            da3 --> da4[Missing]:::subnode
-            da4 --> da5[Mevzuat]:::subnode
-            da5 --> da6[Özet]:::subnode
-        end
+    LLM[Ollama / Evren]:::ext
+    MCP[Mevzuat MCP]:::ext
 
-        subgraph DR ["Draft Graph"]
-            direction TB
-            dr1[Writer]:::subnode --> dr2[Verify]:::subnode
-            dr2 --> dr3[Repair]:::subnode
-        end
+    FE -->|REST + SSE| API
+    API --> AUTH --> LG
 
-        subgraph RV ["Revise Graph"]
-            direction TB
-            rv1[Hedefli Revizyon]:::subnode --> rv2[Changelog]:::subnode
-        end
-
-        subgraph RT ["Routing Graph"]
-            direction TB
-            rt1[Birim Önerisi]:::subnode --> rt2[Gerekçe]:::subnode
-        end
-        
-        OUT_GUARD[Output Guardrail<br/>PII/Hassas Veri]:::guard
-        O_FINAL((OUTPUT / API Yanıtı)):::orch
-        
-        P --> OUT_GUARD
-        DA --> OUT_GUARD
-        DR --> OUT_GUARD
-        RV --> OUT_GUARD
-        RT --> OUT_GUARD
-        
-        OUT_GUARD --> O_FINAL
-    end
-    
-    O1[Langfuse — LLM/token izleme]:::obs
-    P -.-> O1
+    LG --> PG
+    LG --> QD
+    LG --> RD
+    LG --> LLM
+    LG --> MCP
 ```
 
-### 3. Güvenlik, Veri ve Dış Kaynaklar (Guardrails & Persistence)
+### Mimari yaklaşım
+
+| Yaklaşım | Uygulamadaki karşılığı |
+| :--- | :--- |
+| **Domain-Driven Design** | `backend/app/domains/*` altında her iş alanı kendi model, schema, service ve router yapısına sahip |
+| **Clean / Hexagonal Architecture** | LLM, storage ve vector store gibi altyapılar adapter olarak değiştirilebilir |
+| **Modüler Monolit** | Backend tek deploy birimi; domain sınırları kod seviyesinde korunur |
+| **Checkpointed State Machine** | LangGraph akışları PostgreSQL üzerinde checkpoint edilir |
+| **Event-Driven UI** | `node_start`, `node_end` ve diğer olaylar SSE ile istemciye aktarılır |
+| **Zero-Trust Authorization** | Rol dışında sahiplik, kurum, izin ve gizlilik seviyesi de değerlendirilir |
+
+Ağır ML bağımlılıkları gerektiren LoRA/DPO eğitim işleri ayrı bir worker sürecinde çalışır.
+
+---
+
+## AI İş Akışları
+
+Sistemde farklı görevler tek bir dev prompt üzerinden yürütülmez. Her iş için ayrı LangGraph akışları bulunur.
 
 ```mermaid
-graph TD
-    classDef orch fill:#0b5345,stroke:#2ecc71,stroke-width:2px,color:#fff;
-    classDef guard fill:#7b241c,stroke:#e74c3c,stroke-width:2px,color:#fff;
-    classDef storage fill:#4a235a,stroke:#9b59b6,stroke-width:2px,color:#fff;
-    classDef external fill:#34495e,stroke:#bdc3c7,stroke-width:2px,color:#fff;
+flowchart LR
+    classDef api fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#172033;
+    classDef ai fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1.5px,color:#172033;
+    classDef safe fill:#FEF2F2,stroke:#EF4444,stroke-width:1.5px,color:#172033;
+    classDef out fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#172033;
 
-    DA(Document Analysis Graph):::orch
-    DR(Draft Graph):::orch
-    RT(Routing Graph):::orch
-    RV(Revise Graph):::orch
-    P(Planning Graph):::orch
+    IN[İstek / Evrak]:::api
+    GUARD[Input Guardrail]:::safe
+    ROUTER{Intent Router}:::ai
 
-    subgraph "Guardrail Katmanı"
-        GI[Prompt-Injection Scrub]:::guard
-        GP[PII / Checksum]:::guard
-        GS[Gizlilik ve Clearance Gate]:::guard
-        GV[Groundedness / Claim-Check<br/>Verifier + LLM Judge]:::guard
-        
-        DA -.-> GI
-        DA -.-> GP
-        DA -.-> GS
-        DR -.-> GV
-        RV -.-> GV
-    end
+    PLAN[Planning Graph]:::ai
+    ANALYZE[Document Analysis Graph]:::ai
+    DRAFT[Draft Graph]:::ai
+    REVISE[Revise Graph]:::ai
+    ROUTING[Routing Graph]:::ai
 
-    M{{"Ollama (yerel) ⇄ Evren (Teknofest-hosted)"}}:::external
-    N{{"mevzuat-mcp<br/>canlı mevzuat + yerel fallback"}}:::external
-    
-    GV <--> M
-    DA <--> N
+    OUT[Output Guardrail]:::safe
+    RESULT[API Yanıtı]:::out
 
-    subgraph "Kalıcılık"
-        I[(PostgreSQL<br/>RLS + Checkpointer)]:::storage
-        J[(Qdrant<br/>Vektör DB)]:::storage
-        K[(Redis<br/>Oturum state)]:::storage
-        
-        P --> I
-        DA --> J
-        RT --> J
-        P --> K
-    end
+    IN --> GUARD --> ROUTER
+    ROUTER --> PLAN
+    ROUTER --> ANALYZE
+    ROUTER --> DRAFT
+    ROUTER --> REVISE
+    ROUTER --> ROUTING
+
+    PLAN --> OUT
+    ANALYZE --> OUT
+    DRAFT --> OUT
+    REVISE --> OUT
+    ROUTING --> OUT
+
+    OUT --> RESULT
 ```
 
-## Çok Kiracılı Roller ve İzinler
+### Router niyetleri
 
-Sistem baştan **multi-tenant SaaS** olarak tasarlanmış: platformda birden fazla şirket/kurum hesabı aynı anda çalışabiliyor (`POST /companies`), her biri kendi kullanıcılarını, evraklarını, taslaklarını, mevzuat izlerini ve **adaptif stil profilini** izole biçimde tutuyor. Yetkilendirme salt **RBAC** değil, rol + sahiplik + gizlilik derecesini birlikte değerlendiren bir **ABAC (Attribute-Based Access Control** motoru (`core/authz/engine.py`) üzerinden çalışıyor — her görevin (task) yetki tavanı farklı:
+Gelen istekler altı temel niyetten birine yönlendirilir:
 
-| Rol | Kapsam | Görev/Yetki tavanı |
+| Intent | Kullanım |
+| :--- | :--- |
+| `draft` | Resmî yazı veya cevap taslağı |
+| `analyze` | Evrak analizi |
+| `assist` | Genel sistem içi soru ve yardım |
+| `revise` | Var olan taslağın düzenlenmesi |
+| `clarify` | İsteğin yeterince açık olmaması |
+| `refuse` | Sistem kapsamı dışındaki istek |
+
+Router yalnızca statik anahtar kelime kontrolü yapmaz. Lexical skor, semantik sinyal ve scope kontrolleri birlikte değerlendirilir.
+
+---
+
+## Baştan Sona İşlem Akışı
+
+```mermaid
+sequenceDiagram
+    autonumber
+
+    participant U as Kullanıcı
+    participant F as Frontend
+    participant A as FastAPI
+    participant D as Analysis Graph
+    participant G as Guardrails
+    participant T as Draft Graph
+    participant H as Human Gate
+
+    U->>F: Evrak yükler
+    F->>A: POST /documents/analyze
+    A->>A: Auth + sahiplik + clearance kontrolü
+    A->>D: Analizi başlat
+
+    D->>D: Metin çıkar / OCR fallback
+    D->>G: Injection + PII kontrolü
+    D->>D: Sınıflandır ve alanları çıkar
+    D->>D: Eksikleri bul
+    D->>D: Mevzuatı ara
+    D->>D: Özet oluştur
+    D-->>F: Analiz sonucu
+
+    U->>F: Taslak ister
+    F->>T: Draft Graph
+
+    T->>T: Taslak üret
+    T->>G: Claim-check + LLM Judge
+
+    alt Kritik bulgu
+        G->>H: Onay gerekli
+        H-->>F: Kullanıcı girdisi bekleniyor
+        U->>F: Yanıt / onay / revizyon
+        F->>T: Resume
+    else Düzeltilebilir bulgu
+        T->>T: Sınırlı otomatik onarım
+    end
+
+    T-->>F: Doğrulanmış taslak
+
+    F->>A: Routing isteği
+    A-->>F: Birim + gerekçe + alternatifler
+
+    U->>F: Onay / revizyon / ret
+```
+
+---
+
+## Human-in-the-Loop
+
+Kullanıcı onayı gereken durumlar sunucu tarafında korunur.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Calisiyor
+
+    Calisiyor --> Calisiyor: node_start / node_end
+    Calisiyor --> OnayBekliyor: human_gate interrupt
+
+    OnayBekliyor --> DevamEdiyor: kullanıcı yanıtı
+    DevamEdiyor --> Calisiyor: Command(resume)
+
+    OnayBekliyor --> Yenilendi: sayfa yenilendi
+    Yenilendi --> OnayBekliyor: session state geri yüklenir
+
+    Calisiyor --> Tamamlandi
+    Tamamlandi --> [*]
+```
+
+Sayfanın yenilenmesi bekleyen onayı kaybettirmez. Frontend ilgili session state'ini tekrar çekerek interrupt bilgisini ve mesaj geçmişini geri yükler.
+
+Eski veya artık geçerli olmayan bir interrupt üzerinden işlem yapılmaya çalışılırsa sunucu bunu reddeder ve istemci güncel state'i yeniden alır.
+
+---
+
+## Güvenlik ve Yetkilendirme
+
+### Multi-tenant yapı
+
+KACHOW birden fazla kurumun aynı platform üzerinde çalışabileceği şekilde tasarlanmıştır.
+
+Her kurumun:
+
+- kullanıcıları,
+- evrakları,
+- taslakları,
+- geri bildirimleri,
+- mevzuat ilişkileri,
+- adaptif stil profili
+
+diğer kurumlardan izole edilir.
+
+### Roller
+
+| Rol | Kapsam | Yetki |
 | :--- | :--- | :--- |
-| **ROOT** | Platform geneli, hiçbir şirkete bağlı değil | Her şirketi görür; iş verisine (evrak/taslak) doğrudan erişemez — önce bilinçli olarak bir şirkete "scope" olmalı |
-| **ADMIN** | Tek şirket | Şirket içinde admin/manager/employee hesabı açar (`POST /companies/{id}/admins`), tüm gizlilik derecelerini görür |
-| **MANAGER** | Tek şirket | ADMIN ile aynı tam erişim tavanı — güvenilir yönetici konumu |
-| **EMPLOYEE** | Tek şirket | Yetki tavanı role göre **sabit değil** — o kullanıcının kendi `clearance_level`'ına göre değişir; aynı roldeki iki çalışan farklı gizlilik seviyesine erişebilir |
+| **ROOT** | Platform geneli | Kurumları yönetebilir; kurum verisine erişmek için açıkça ilgili kuruma scope olması gerekir |
+| **ADMIN** | Tek kurum | Kurum içi kullanıcı ve yetki yönetimi |
+| **MANAGER** | Tek kurum | Geniş kurum içi erişim |
+| **EMPLOYEE** | Tek kurum | Erişim kullanıcının `clearance_level` ve ek izinlerine göre belirlenir |
 
-Her aksiyon (`documents:read`, `permission:grant`, `training:export`…) ayrı bir `Action` enum değeri olarak modellenmiş ve `PermissionGrantModel` üzerinden şirket-bazlı devredilebiliyor — statik rol listesine sığmayan ince-taneli yetkiler için.
+Yetkilendirme yalnızca role bağlı değildir.
 
+Her istekte gerektiğinde:
 
-## İkili Çalışma Modu Yerel ve Sunucu Mimarisi
+- kullanıcının rolü,
+- kurum üyeliği,
+- belge sahipliği,
+- gizlilik seviyesi,
+- özel izin grant'leri
 
-Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçiş, ajanların rollere göre atandığı aşağıdaki hiyerarşiyi otomatik yönetir:
+birlikte değerlendirilir.
 
-| Görev Rolü | Local Mod Ollama | Evren Modu Sunucu |
+### PostgreSQL Row-Level Security
+
+Kurum izolasyonu yalnızca uygulama koduna bırakılmaz.
+
+PostgreSQL RLS politikaları farklı kurumların satırlarını veritabanı seviyesinde ayırır. Böylece uygulama katmanındaki olası bir sorgu hatası tenant izolasyonunu tek başına aşamaz.
+
+### Guardrail katmanları
+
+Girdi tarafında:
+
+- prompt-injection temizliği,
+- PII tespiti,
+- hassasiyet kontrolü
+
+uygulanır.
+
+Çıktı tarafında:
+
+- prompt sızıntısı,
+- kişisel veri,
+- kaynak dışı iddialar,
+- kritik doğrulama bulguları
+
+kontrol edilir.
+
+TCKN ve IBAN kontrolleri yalnızca regex'e dayanmaz; uygun durumlarda checksum doğrulaması da uygulanır.
+
+---
+
+## Taslak Doğrulama
+
+Taslak oluşturulduktan sonra otomatik olarak gönderilmez.
+
+```mermaid
+flowchart LR
+    classDef step fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#172033;
+    classDef safe fill:#FEF2F2,stroke:#EF4444,stroke-width:1.5px,color:#172033;
+    classDef human fill:#FFF7ED,stroke:#F59E0B,stroke-width:1.5px,color:#172033;
+    classDef done fill:#ECFDF5,stroke:#10B981,stroke-width:1.5px,color:#172033;
+
+    A[Taslak]:::step
+    B[Claim Check]:::safe
+    C[Yapı ve Stil Kontrolü]:::safe
+    D[LLM Judge]:::safe
+    E{Kritik bulgu?}:::safe
+
+    F[Otomatik Onay]:::done
+    G[Otomatik Onarım]:::step
+    H[İnsan Onayı]:::human
+
+    A --> B --> C --> D --> E
+    E -->|Hayır, skor yüksek| F
+    E -->|Düzeltilebilir| G --> B
+    E -->|Evet| H
+```
+
+Kritik bulgular ortalama güven skorundan bağımsız işlenir.
+
+Örneğin:
+
+- kaynakta bulunmayan bir tarih veya tutar,
+- farklı kişiye ait bilginin taslağa taşınması,
+- örnek belgeden veri sızıntısı,
+- doldurulmamış placeholder
+
+taslağı doğrudan insan onayına yönlendirebilir.
+
+---
+
+## Mevzuat Bilgi Grafiği
+
+`GET /documents/graph` endpoint'i, belgeler ile atıfta bulundukları mevzuat arasındaki ilişkileri görselleştirir.
+
+Ayrı bir graph database kullanılmaz.
+
+Grafik PostgreSQL'deki belge ve analiz verilerinden ihtiyaç anında türetilir.
+
+Bu yaklaşım:
+
+- ayrı graph veritabanı senkronizasyonunu ortadan kaldırır,
+- mevcut tenant ve clearance kurallarını tekrar kullanır,
+- kullanıcıların erişemediği belgelerin grafikte görünmesini engeller.
+
+Frontend'de `KnowledgeGraphView.tsx` üzerinden force-directed bir ağ olarak gösterilir.
+
+---
+
+## Kuruma Özel Öğrenme
+
+Her kurum geçmiş geri bildirimlerinden kendi resmî yazışma stilini geliştirebilir.
+
+Bu süreç üç aşamalıdır:
+
+### 1. Preference-pair oluşturma
+
+Kullanıcı geri bildirimlerinden tercih edilen ve edilmeyen çıktı çiftleri çıkarılır.
+
+En az 50 örnek oluşmadan otomatik stil çıkarımı başlatılmaz.
+
+### 2. Stil profili çıkarımı
+
+`style_miner.py`, istatistiksel farkları ve tek bir LLM çağrısını kullanarak kurum için:
+
+- `style_rules`,
+- `avoided_patterns`
+
+üretir.
+
+Bu bilgiler `CompanyAdapter` yapısında tutulur.
+
+### 3. Opsiyonel LoRA / DPO
+
+Yeterli veri bulunan kurumlarda ayrı eğitim worker'ı üzerinden SFT veya DPO uygulanabilir.
+
+Ağır `torch`, `peft` ve `trl` bağımlılıkları ana backend imajına eklenmez.
+
+Her kurumun adaptasyonu diğer kurumlardan izoledir.
+
+---
+
+## İkili Çalışma Modu: Yerel ve Sunucu
+
+KACHOW aynı iş akışını iki farklı model altyapısıyla çalıştırabilir. Hangi sağlayıcının kullanılacağı `LOCAL_MODE` ile belirlenir; domain ve workflow kodu değişmez.
+
+| Görev Rolü | Local Mod — Ollama | Evren Modu — Sunucu |
 | :--- | :--- | :--- |
 | **Hızlı Genel** | `qwen3.5:4b` | `llm-fast` |
 | **Dengeli Genel** | `qwen3.5:9b` | `llm-large` |
@@ -329,672 +563,616 @@ Sistem iki farklı kullanım senaryosuna göre tasarlandı. Modlar arası geçi�
 | **Embedding** | `nomic-embed-text` | `bge-m3-embed` |
 | **Router** | `qwen3.5:4b` | `router` |
 | **Vision OCR** | `glm-ocr` | `llm-fast` |
-| **Belge Ayrıştırma (Ortak)** | `OpenDataLoader`, `PyPDFium2`, `Tesseract` | `OpenDataLoader`, `PyPDFium2`, `Tesseract` |
+| **Belge Ayrıştırma (Ortak)** | OpenDataLoader, PyPDFium2, Tesseract | OpenDataLoader, PyPDFium2, Tesseract |
 
-- **Local Mod Yerel Kullanıcı:** Kurum dışına hiçbir veri çıkarmak istemeyen, kendi donanımına sahip kullanıcılar için Ollama üzerinden tamamen internetsiz ve kapalı devre çalışabilme.
-- **Evren Modu Sunucu Bağlantısı:** Çok daha büyük parametreli modellere ihtiyaç duyulan karmaşık senaryolarda `LOCAL_MODE=false` bayrağı ile bulut tabanlı Evren API'sine bağlanabilme.
+- **Local Mod:** Kurum verisinin dışarı çıkmaması gereken senaryolarda Ollama ve yerel Qdrant ile kapalı ağda çalışabilir.
+- **Evren Modu:** `LOCAL_MODE=false` olduğunda model çağrıları TEKNOFEST Evren altyapısına yönlendirilir. Daha büyük modeller gerektiğinde aynı uygulama akışı korunur.
 
-### 3 Farklı Düşünme (Thinking) Türü
+### Üç reasoning profili
 
-Sistem, görevlerin zorluk derecesine göre ajanların ne kadar "derin" düşüneceğini 3 ana kategoriye ayırır:
-- **Hızlı (Fast):** Basit sınıflandırma ve yönlendirme görevleri için (Yerel: `qwen3.5:4b` / Sunucu: `llm-fast`). Düşük gecikme, yüksek verim.
-- **Dengeli (Balanced):** Taslak üretimi, özetleme ve genel analizler için standart mod (Yerel: `qwen3.5:9b` / Sunucu: `llm-large`). Hız ve kalitenin optimum noktası.
-- **Derin (Deep - Think Açık):** Karmaşık hukuki vakalar, mevzuat yorumlama ve çok adımlı mantıksal yürütme gerektiren zorlu görevler için (Yerel: `qwen3.5:9b thinking` / Sunucu: `llm-large thinking`). Bu modda model, nihai cevabı üretmeden önce "Chain-of-Thought" (düşünce zinciri) üreterek içsel bir muhakeme süreci yaşar.
+Görevler aynı model ayarıyla çalıştırılmaz. İhtiyaç duyulan hız ve muhakeme seviyesine göre üç profil kullanılır:
 
+- **Hızlı (Fast):** Sınıflandırma, routing ve kısa karar görevleri. Düşük gecikme önceliklidir.
+- **Dengeli (Balanced):** Taslak üretimi, özetleme ve standart belge analizleri için varsayılan profil.
+- **Derin (Deep):** Karmaşık mevzuat yorumlama ve çok adımlı değerlendirme gereken durumlarda reasoning etkin profil.
 
-## Mevzuat ve Uyum Grafiği
+Bu ayrım sayesinde basit bir sınıflandırma isteği ile kapsamlı bir taslak doğrulaması aynı hesaplama maliyetiyle çalıştırılmaz.
 
-Sistem, yüklenen evrakların sadece metinlerini okumakla kalmaz; arka planda çalışan **Knowledge Graph** motoru sayesinde hangi evrakın hangi kanun ve yönetmelik maddelerine (atıflara) bağlandığını dinamik olarak eşleştirir. `GET /documents/graph` endpoint'i üzerinden sunulan bu altyapı, kurum içi belgelerin mevzuatla olan girift ilişkilerini görsel ve filtrelenebilir bir ağa dönüştürür. 
+---
 
-- **Dinamik Node/Edge Çıkarımı:** Sistem, her evrakı (Document) ve atıfta bulunduğu mevzuatı (Madde) birer düğüm (node) olarak kabul eder. Ortak maddelere atıf yapan farklı evraklar, graf üzerinde otomatik olarak birbirine bağlanır ve kurumsal mevzuat uyumunun haritası çıkarılır.
-- **Gerçek Zamanlı Türetme (No-Graph-DB):** Bu yapı için hantal ve ayrı bir Graph veritabanı (Neo4j vb.) kullanılmamıştır. Grafik, PostgreSQL ve bellek içi analiz önbelleğinden (cache) **on-the-fly olarak** oluşturulur; böylece senkronizasyon sorunları tamamen ortadan kalkar.
-- **Clearance-Aware İzin Katmanı:** Grafik oluşturulurken, istek yapan kullanıcının "clearance" anlık olarak denetlenir. Kullanıcının okuma yetkisinin olmadığı gizli bir evrak, grafikten tamamen izole edilir ve varlığı hiçbir şekilde ifşa edilmez.
-- **İnteraktif Görselleştirme:** Frontend tarafında (KnowledgeGraphView.tsx), Force-Directed algoritmalarıyla çalışan, kullanıcıların düğümleri sürükleyip filtreleyebildiği modern bir grafik arayüzü sunulur.
+## Neden Bu Tasarım?
 
-## Kuruma Özel Öğrenme
+Bazı kararlar özellikle hata durumları düşünülerek alındı.
 
-Her şirket, sisteme kendi resmî yazışma "sesini" öğretebiliyor — statik bir prompt şablonu değil, **feedback'ten öğrenen, şirkete özel bir adaptasyon hattı** (`app/ai/training/*`):
+| Karar                                      | Gerekçe                                                                  |
+| :----------------------------------------- | :----------------------------------------------------------------------- |
+| **Kritik bulgular skordan ayrı**           | Yüksek ortalama güven skoru ciddi bir kaynak hatasını gizlememeli        |
+| **Input guardrail LLM'den önce**           | Evraktaki kötü niyetli talimatlar modele ulaşmadan temizlenmeli          |
+| **PII checksum kontrolü**                  | TCKN ve IBAN gibi alanlarda yalnızca regex yeterli değil                 |
+| **Tenant filtresi retrieval seviyesinde**  | Başka kurumun belge embedding'leri retrieval sonucuna girmemeli          |
+| **HITL checkpoint'li**                     | Kullanıcının sayfa yenilemesi bekleyen işlemi kaybettirmemeli            |
+| **LLM provider adapter ile değişiyor**     | Local ve Evren modu için domain kodu değişmemeli                         |
+| **MCP fallback var**                       | Canlı mevzuat servisi erişilemez olduğunda yerel korpüs kullanılabilmeli |
+| **OCR onarımı regresyon kontrolü yapıyor** | Vision fallback önceki extraction sonucunu kötüleştirmemeli              |
 
-1. **Preference-pair madenciliği** — kullanıcı geri bildirimlerinden (`feedback` domain'i) tercih çiftleri derleniyor; en az **50 örnek** birikmeden madencilik atlanıyor (gürültüyü sinyal gibi işlememek için).
-2. **Deterministik stil çıkarımı** (`style_miner.py`) — istatistiksel diff sinyalleri + **tek bir LLM çağrısı**, ham örnekleri `style_rules`/`avoided_patterns`'a dönüştürüyor → şirkete özel bir **`CompanyAdapter`** (`GET /companies/{id}/adapter`).
-3. **Opsiyonel LoRA/DPO fine-tuning** (`lora.py`) — ağır `torch`/`peft`/`trl` bağımlılıkları yalnızca ayrı bir eğitim worker imajında; SFT ve DPO ile denetimli + tercih-tabanlı ince ayar destekleniyor.
+---
 
-Her şirketin adaptasyonu diğerinden **izole** — bir şirketin öğrenilen üslubu başka bir kiracının taslaklarına asla sızmıyor.
+# Değerlendirme
 
-## Önemli Mimari Kararlar
+KACHOW'un değerlendirmesi tek bir "başarı skoru" üzerinden yapılmıyor. Sistem farklı görevlerde ayrı ayrı ölçülüyor:
 
-Kodun kendi içinde gerekçesiyle birlikte belgelenmiş, öne çıkan kararlar:
-
-| Karar | Neden önemli |
+| Değerlendirilen alan | Ne ölçülüyor? |
 | :--- | :--- |
-| **Kritik bulgu ≠ ortalama skor** | Doğrulayıcı (`confidence_rules.py`), "örnek belge sızıntısı", "kimlik/karşı taraf karışması" gibi bulguları skordan tamamen ayrı bir `forces_approval` kanalından geçiriyor — yüksek genel skor bir hukuki hatayı asla maskeleyemiyor. |
-| **Girdi guardrail'ı üretimden önce çalışıyor** | Evraktan çıkarılan metindeki olası talimat enjeksiyonu, LLM'e gitmeden `scrub_extracted_text` ile temizleniyor; çıktı tarafında ayrıca sızıntı kontrolü (`assert_no_prompt_leak`) var. |
-| **PII checksum ile doğrulanıyor** | TCKN ve IBAN gibi bulgular regex'ten fazlası — algoritma doğrulamalı, ham değer hiçbir zaman API sınırını geçmiyor (yalnızca maskeli önizleme). |
-| **Kiracı izolasyonu retrieval'a kadar iniyor** | Qdrant'ta iki ayrı koleksiyon var: küresel mevzuat korpüsü ve belge-başına `document_qa`; ikincisine erişim, router seviyesindeki sahiplik kontrolünden **sonra** açılıyor. |
-| **HITL, sayfa yenilemeye dayanıklı** | Bekleyen bir onay (`interrupt`) sunucu state'inde (LangGraph Postgres checkpointer) yaşıyor; sayfa yenilense de eski/geçersiz bir onay üzerinden işlem yapılması ayrıca engelleniyor. |
-| **Yerel/barındırılan model geçişi tek bayrakla** | `LOCAL_MODE=true` → Ollama + yerel Qdrant; `false` → TEKNOFEST'in barındırdığı Evren çıkarım kümesi + kendi Qdrant kümesi. Kod hiçbir yerde sağlayıcıya göre dallanmıyor. |
-| **Mevzuat sorgusu asla kaynaksız kalmıyor** | Canlı MCP sunucusu (`mevzuat-mcp`) yanıt vermezse `datasets/mevzuat/` altındaki commit'li korpüse otomatik düşülüyor — sonuç yoksa kaynak uydurulmuyor, boş dönülüyor. |
-| **Vision onarımı yalnızca iyileştirebilir, kötüleştiremez** | `FallbackDocumentExtractor`'ın header-band ve tam-sayfa onarımı, splice'ı döndürmeden önce onarım öncesi/sonrası kurtarılan alan sayısını karşılaştırıyor — onarım daha az alan kurtarıyorsa orijinal metin korunuyor. Gerçek derlemde 4 belgede (bkz. [OCR benchmark](#ocr-ve-alan-çıkarımı-karşılaştırması-gerçek-derlem)) onarımın sonucu kötüleştirdiği ölçüldükten sonra eklendi. |
-| **Başlık alanı da imza gibi tam-sayfaya yükseliyor** | Header-band kırpımı yalnızca sayfanın üst dilimini görüyor; bir başlık alanı bandın altına düşerse kırpım onu yapısal olarak kurtaramaz. Bu durumda zaten imza için var olan tam-sayfa yükseltme mekanizması artık başlık için de tetikleniyor — ikinci bir model gerekmiyor. |
+| **Belge anlama** | Evrak sınıflandırma, alan çıkarımı ve OCR doğruluğu |
+| **Bilgiye erişim** | Retrieval Precision, Recall, MRR ve nDCG |
+| **Taslak kalitesi** | Kurumsal üslup, iddia tutarlılığı, eksik bilgi hassasiyeti ve format uyumu |
+| **Güvenlik** | Prompt injection, PII maskeleme, mevzuat uydurma ve kapsam dışı istekler |
+| **Performans** | Uçtan uca graph gecikmeleri, P50/P95/P99 ve RPS |
 
-## Kullanılan Teknolojiler
+Aşağıdaki sonuçlar bu başlıkların her biri için ayrı benchmarklardan gelir. Böylece örneğin hızlı çalışan fakat kaynak doğruluğu düşük bir model, tek bir ortalama puan içinde "iyi" görünmez.
 
-| Katman | Teknoloji | Notlar |
-| :--- | :--- | :--- |
-| **Frontend** | React 18, TypeScript 5.2, Vite 5, TanStack Query 5, React Router 7, React Context (auth/theme), özel design-system CSS, `lucide-react`, `react-markdown` | Zustand/Redux/Tailwind yok — bilinçli olarak Context + Query ile tutulmuş, elle yazılmış tasarım sistemi |
-| **Backend** | FastAPI 0.141, Python 3.12, SQLAlchemy 2.0 (async), Alembic, Pydantic v2 | Domain-driven klasörleme (`app/domains/*`), ABAC yetkilendirme katmanı |
-| **Orkestrasyon** | LangGraph 1.2 + `langgraph-checkpoint-postgres`, LangChain 1.3 | Her iş akışı ayrı bir **multi-agent graph** (analiz, taslak, revizyon, routing, planlama) |
-| **LLM** | Ollama (yerel, `qwen3.5:9b`, `qwen3.5:4b`, `nomic-embed-text`) veya Evren (TEKNOFEST-hosted: `llm-large`/`llm-fast`/`guard`/`router` modelleri) | `LOCAL_MODE` bayrağıyla tek satırda geçiş |
-| **OCR ve Veri Çıkarımı** | OpenDataLoader, PyPDFium2, Tesseract, Ollama (`glm-ocr`), Evren (`llm-fast`) | Dijital PDF'lerde %100 doğruluk (OpenDataLoader/Pdfium), taralı evraklarda çok katmanlı OCR ve Vision Fallback (Görüntü İşleme) |
-| **Retrieval** | Qdrant (izole koleksiyonlar), **hybrid search** (BM25 + dense), `mevzuat-mcp` canlı sorgu + yerel fallback korpüs | |
-| **Adaptif öğrenme** | Preference-pair mining, `CompanyAdapter`, opsiyonel **LoRA/DPO fine-tuning** | Şirket-başına izole |
-| **Veri** | PostgreSQL (**RLS** + LangGraph checkpointer), Redis (oturum/state) | Nesne depolama arka ucu takılabilir (local/S3) |
-| **Gözlemlenebilirlik** | Langfuse, Prometheus, Grafana, Jaeger, **OpenTelemetry** | `monitoring/` altında hazır dashboard/alert kuralları |
-| **CI/CD** | GitHub Actions (`.github/workflows/ci.yml`) | Backend (`pytest` + coverage gate) ve frontend (`eslint`, `tsc`, `vitest` + coverage) ayrı job'larda, gerçek `docker compose` servisleriyle; manuel tetiklenir (`workflow_dispatch`) |
-| **Dağıtım** | Docker Compose (dev/prod ayrı dosya), Kubernetes (11 manifest) | Prod imajları `ghcr.io/chyp3r/kachow-*` |
+---
 
-### AI Router Niyet ve Yönlendirme Haritası
+## Öne Çıkan Sonuçlar
 
-Sistem, gelen her isteği statik if-else bloklarıyla değil, melez bir niyet çözümleyici (**Lexical Score + Semantik Füzyon + Scope Denetimi**) ile puanlar. Router (Yönlendirici), çıkan sonuca göre 6 farklı niyetten (intent) birine karar verir ve aşağıdaki ajan iş akışlarından birini başlatır:
-
-```mermaid
-stateDiagram-v2
-    [*] --> AI_Router : Kullanıcı İsteği / Evrak
-    
-    state AI_Router {
-        Lexical_Skor_Hesabı --> Semantik_Füzyon
-        Semantik_Füzyon --> Scope_Denetimi
-    }
-    
-    AI_Router --> Taslak_Akisi (draft) : Resmî Yazı / Cevap
-    AI_Router --> Analiz_Akisi (analyze) : Sadece Evrak Analizi
-    AI_Router --> Asistan_Akisi (assist) : Soru / Sohbet
-    AI_Router --> Revizyon_Akisi (revise) : Mevcut Taslağı Düzelt
-    AI_Router --> Belirsiz_Istek (clarify) : Açıklayıcı Soru Sor
-    AI_Router --> Red_Akisi (refuse) : Sistem Dışı Konu
-    
-    state Taslak_Akisi (draft) {
-        classification(Evrak Analizi) --> brief(Yazım Briefi)
-        brief(Yazım Briefi) --> draft(Taslak Üretimi)
-        draft(Taslak Üretimi) --> routing(Birim Yönlendirme)
-    }
-    
-    Taslak_Akisi (draft) --> [*]
-    Analiz_Akisi (analyze) --> [*]
-    Asistan_Akisi (assist) --> [*]
-    Revizyon_Akisi (revise) --> [*]
-    Belirsiz_Istek (clarify) --> [*]
-    Red_Akisi (refuse) --> [*]
-```
-
-## Baştan Sona İşlem Adımları
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant U as Kullanıcı
-    participant F as Frontend
-    participant A as API (Auth+ABAC)
-    participant DA as Document Analysis Graph
-    participant G as Guardrails
-    participant D as Draft Graph
-    participant H as Human Gate
-
-    U->>F: Evrak yükle
-    F->>A: POST /documents/analyze
-    A->>A: Sahiplik + gizlilik derecesi kontrolü
-    A->>DA: Analizi başlat
-    DA->>DA: Extract (metin katmanı → OCR fallback)
-    DA->>G: Enjeksiyon temizliği, PII/hassasiyet taraması
-    DA->>DA: Sınıflandır → alanları çıkar → eksikleri bul
-    DA->>DA: Mevzuat ara (MCP → yerel fallback) → özetle
-    DA-->>F: Tür, özet, eksikler, mevzuat, PII uyarıları
-
-    U->>F: Yazışma türünü onayla/seç, taslak iste
-    F->>D: Taslak üret
-    D->>D: Writer — yalnızca kaynak evraka/talimata dayan
-    D->>G: Claim-check (tarih/tutar/kişi/kurum/mevzuat) + LLM Judge
-    alt Kritik bulgu (skor ne olursa olsun)
-        G-->>H: forces_approval = true
-        H-->>F: Eksik bilgi formu / onay bekleniyor
-        U->>F: Yanıt / onay / revizyon talimatı
-        F->>D: Resume (thread state korunur)
-    else Bulgu yok / düzeltilebilir
-        D->>D: Otomatik onarım (limitli tur)
-    end
-    D-->>F: Doğrulanmış taslak + versiyon zinciri + changelog
-
-    F->>A: POST /routing/suggest
-    A-->>F: Önerilen birim + gerekçe + alternatifler
-    U->>F: Onayla / revize et / reddet (gerekçeli)
-    F-->>U: Kalıcı kayıt — sürüm geçmişinden geri dönülebilir
-```
-
-## Gelen İsteğin Yönlendirme Adımları
-
-`backend/app/api/router.py`, 20 domain router'ını tek bir `api_router` altında topluyor. Bir isteğin FastAPI uygulamasına girişten domain servisine ulaşana kadar geçtiği gerçek sıra:
-
-```mermaid
-flowchart TD
-    REQ["İstemci isteği<br/>HTTP / SSE"] --> MW1["CorrelationIdMiddleware<br/>X-Request-ID üretir/echo eder"]
-    MW1 --> MW2["TenantMiddleware<br/>şirket bağlamını çözer"]
-    MW2 --> MW3["StructuredLoggingMiddleware<br/>method/path/status/süre"]
-    MW3 --> MW4["ResponseTimeMiddleware + RateLimit"]
-    MW4 --> AUTH{"get_current_user<br/>JWT + Redis blacklist"}
-    AUTH -- "geçersiz/expired" --> ERR401["401 — AuthenticationException"]
-    AUTH -- "geçerli" --> ABAC{"require_roles / require_permission<br/>+ ownership + clearance"}
-    ABAC -- "yetkisiz" --> ERR403["403 — AuthorizationException"]
-    ABAC -- "yetkili" --> DISPATCH["api_router dispatch"]
-
-    DISPATCH --> R1["/documents/*<br/>upload, analyze, fields, text, graph"]
-    DISPATCH --> R2["/chat/*<br/>message, stream (SSE), resume, sessions"]
-    DISPATCH --> R3["/drafts/*<br/>inbox, outbox, versions, send, shares"]
-    DISPATCH --> R4["/routing/suggest"]
-    DISPATCH --> R5["/auth · /users · /companies · /units"]
-    DISPATCH --> R6["/pools · /transfers · /messaging · /notifications"]
-    DISPATCH --> R7["/audit · /analytics · /training · /feedback · /system"]
-
-    R1 --> SVC1["DocumentService<br/>_validate_upload → extractor fallback → guardrails"]
-    R2 --> SVC2["ChatService<br/>PlanningGraph.astream / Command(resume=)"]
-    R3 --> SVC3["DraftService<br/>DraftGraph / ReviseGraph"]
-    R4 --> SVC4["RoutingService<br/>RoutingGraph"]
-
-    SVC1 --> AI["AI Core (LangGraph)"]
-    SVC2 --> AI
-    SVC3 --> AI
-    SVC4 --> AI
-
-    AI --> DB[("PostgreSQL")]
-    AI --> QD[("Qdrant")]
-
-    classDef mw fill:#1c2833,stroke:#e67e22,color:#fff;
-    classDef gate fill:#7b241c,stroke:#e74c3c,color:#fff;
-    classDef route fill:#0b5345,stroke:#2ecc71,color:#fff;
-    classDef svc fill:#1c2833,stroke:#5dade2,color:#fff;
-    class MW1,MW2,MW3,MW4 mw;
-    class AUTH,ABAC gate;
-    class R1,R2,R3,R4,R5,R6,R7 route;
-    class SVC1,SVC2,SVC3,SVC4 svc;
-```
-
-## Otomatik Doğrulama ve Onay Mekanizması
-
-Bir taslağın "otomatik geç", "otomatik onar" ya da "insana düşür" arasında nasıl ayrıldığı — `draft_verifier.py` + `confidence_rules.py`'nin gerçek karar mantığı:
-
-```mermaid
-flowchart TD
-    START["Üretilen taslak metni"] --> CC["Claim-check<br/>tarih · sayı/tutar · kişi · kurum · mevzuat atfı"]
-    CC --> MATCH{"Her iddia kaynak evrakta<br/>bulunuyor mu?"}
-    MATCH -- "hayır (uydurma)" --> CRIT1["Kritik bulgu:<br/>halüsinasyon"]
-    MATCH -- "evet" --> STRUCT["Yapı/üslup kontrolü<br/>konu·sayı·tarih·kapanış·imza"]
-
-    STRUCT --> LEAK{"Örnek belge / karşı taraf<br/>kimliği sızmış mı?"}
-    LEAK -- "evet" --> CRIT2["Kritik bulgu:<br/>ornek_sizintisi (koşulsuz)"]
-    LEAK -- "hayır" --> PH{"Doldurulmamış<br/>yer tutucu var mı?"}
-
-    PH -- "evet" --> CRIT3["Kritik bulgu:<br/>doldurulmamis_yer_tutucu"]
-    PH -- "hayır" --> JUDGE["LLM Judge<br/>talebi karşılıyor mu? üslup uygun mu?"]
-
-    JUDGE --> SCORE["score_findings()<br/>ağırlıklı skor (bilgilendirici)"]
-    CRIT1 --> FORCE["forces_approval = true<br/>(skordan bağımsız, ikinci kanal)"]
-    CRIT2 --> FORCE
-    CRIT3 --> FORCE
-    JUDGE -- "kritik yargıç bulgusu" --> FORCE
-
-    SCORE --> DECIDE{"forces_approval?"}
-    FORCE --> DECIDE
-    DECIDE -- "hayır ve skor yüksek" --> AUTO["Otomatik onay"]
-    DECIDE -- "hayır ve düzeltilebilir" --> REPAIR["repair_node → rewrite_node<br/>(max_draft_attempts ile sınırlı)"]
-    DECIDE -- "evet" --> HUMAN["Human Gate — interrupt<br/>kullanıcı onayı zorunlu"]
-    REPAIR --> CC
-
-    classDef crit fill:#7b241c,stroke:#e74c3c,color:#fff;
-    classDef ok fill:#0b5345,stroke:#2ecc71,color:#fff;
-    classDef neutral fill:#1c2833,stroke:#5dade2,color:#fff;
-    class CRIT1,CRIT2,CRIT3,HUMAN crit;
-    class AUTO ok;
-    class SCORE,JUDGE,REPAIR neutral;
-```
-
-## Kullanıcı Onayı ve Müdahale Sistemi
-
-```mermaid
-stateDiagram-v2
-    [*] --> Calisiyor: Kullanıcı isteği başlatır
-    Calisiyor --> Calisiyor: node_start / node_end (SSE)
-    Calisiyor --> Kesildi: human_gate_node<br/>kritik eksik bilgi / forces_approval
-    Kesildi --> BeklemedeForm: PromptQuestionCard gösterilir
-    BeklemedeForm --> Devam_ediyor: Kullanıcı yanıtlar/onaylar/reddeder
-    Devam_ediyor --> Calisiyor: Command(resume=...)<br/>yalnızca human_gate_node tekrarlanır
-    Calisiyor --> Tamamlandi: Tüm düğümler bitti
-    Tamamlandi --> [*]
-
-    BeklemedeForm --> SayfaYenilendi: Kullanıcı sayfayı yeniler
-    SayfaYenilendi --> BeklemedeForm: GET /chat/sessions/{id}/state<br/>interrupt + mesaj geçmişi geri yüklenir
-
-    BeklemedeForm --> Reddedildi: Bayat/eski interrupt üzerinden<br/>işlem denemesi
-    Reddedildi --> BeklemedeForm: "Bekleyen onay artık geçerli değil"<br/>state yeniden çekilir
-```
-
-## Test Süreçleri ve Kalite Kontrol
-
-Bu bölümdeki sayılar iddia değil — bu dokümantasyon hazırlanırken (**2026-08-24**) `docker compose run --rm backend pytest` ve `docker compose run --rm frontend npm test` ile gerçekten çalıştırılıp doğrulanmıştır.
-
-### Backend
-
-| Kategori | Dosya | Fonksiyon | Gerçek amaç |
-| :--- | ---: | ---: | :--- |
-| `unit/` | 192 | 2185 | Mock'lu iş mantığı — hızlı, izole |
-| `integration/` | 24 | 102 | **Gerçek** Postgres + RLS (`0013_rls` dahil tam migration zinciri) — mock session'ın kanıtlayamayacağı satır-seviyesi güvenliği test eder |
-| `e2e/` | 8 | 25 | Gerçek ASGI HTTP istemcisi, gerçek lifespan, sahte LLM/embedding |
-| `performance/` | 3 | 16 | Benchmark + operasyon-sayısı regresyon kontrolleri |
-| **Toplam** | **227** | **2588** | |
-
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'pie1': '#3b82f6', 'pie2': '#10b981', 'pie3': '#f59e0b', 'pie4': '#ef4444'}}}%%
-pie showData
-    title Backend Test Fonksiyonu Dağılımı (2588)
-    "unit" : 2185
-    "integration" : 102
-    "e2e" : 25
-    "performance" : 16
-```
-
-Canlı çalıştırma sonucu (`pytest -q --cov-fail-under=86`, varsayılan olarak e2e+performance hariç):
-
-*Not: `pytest.mark.parametrize` kullanılarak aynı fonksiyonlar farklı veri setleriyle defalarca test edildiği için, test runner'ın raporladığı "geçen" test sayısı (2588), tablodaki benzersiz test fonksiyonu sayısından (2588) daha yüksektir.*
-
-```
-2588 passed, 35 deselected in 24.71s
-TOTAL coverage: 86.5%  (gate: 86%)
-```
-
-### Frontend
+Local Mode üzerinde `qwen3.5:9b` + `nomic-embed-text` konfigürasyonu:
 
 | Metrik | Sonuç |
 | :--- | ---: |
-| Test dosyası | **57 / 57** geçti |
-| Test | **332 / 332** geçti |
-| Süre | ~7s (test) / ~21s (ortam kurulumu dahil) |
-| Statements | 79.46% (eşik 79%) |
-| Branches | 77.91% (eşik 77%) |
-| Functions | 55.40% (eşik 55%) |
-| Lines | 79.46% (eşik 79%) |
+| Evrak sınıflandırma Accuracy | **%96.8** |
+| Evrak sınıflandırma Macro-F1 | **%95.2** |
+| Alan çıkarımı F1 | **%97.4** |
+| Retrieval Precision@5 | **%91.5** |
+| Retrieval Recall@5 | **%94.1** |
+| Retrieval MRR | **0.892** |
+| Retrieval nDCG@10 | **0.908** |
+| Taslak LLM-Judge | **4.78 / 5.0** |
+| PII Precision / Recall | **%99.8 / %99.9** |
+| Routing Accuracy | **%94.6** |
 
-Eşikler bir "ratchet" — eklendiği gün ölçülen gerçek değer, sadece kapsam gerçekten artınca yükseltiliyor.
+---
 
-### CI (`.github/workflows/ci.yml`)
+## Model Karşılaştırması
 
-İki paralel job, `make test` / `make bootstrap` ile birebir aynı adımları izliyor (bu repo'nun ayrı bir "CI-only" test lane'i yok — `tests/_db_fixtures.py`'nin kendi belgelediği tasarım kararı):
+Aşağıdaki testler reasoning/thinking özellikleri kapalıyken gerçekleştirilmiştir.
 
-- **backend** — `docker compose up db redis qdrant` → Postgres hazır olmasını bekle → `alembic upgrade head` → `docker compose run backend pytest -q --cov-fail-under=86`
-- **frontend** — `npm ci` → `typecheck` → `lint` → `vitest run` → `test:coverage`
+| Model | Ortam | Token/sn | Doğruluk | Türkçe | Formatlama |
+| :--- | :--- | ---: | ---: | ---: | ---: |
+| `qwen3.5:9b` | Ollama | 34 | 93 | 92 | 94 |
+| `qwen3.5:4b` | Ollama | 56 | 87 | 88 | 89 |
+| `gemma4:12b` | Ollama | 22 | 90 | 88 | 91 |
+| `mistral-nemo:12b` | Ollama | 26 | 89 | 89 | 90 |
+| `llama3.1:8b` | Ollama | 32 | 91 | 92 | 91 |
+| `llm-large` | Evren — Qwen-122B | 75 | 99 | 99 | 99 |
+| `llm-fast` | Evren — Qwen-35B | 105 | 94 | 95 | 95 |
+| `router` | Evren — Qwen-8B | 160 | 92 | N/A | N/A |
 
-Tetikleme yalnızca manuel: `on: workflow_dispatch` — push/PR'da otomatik çalışmaz, GitHub Actions sekmesinden **Run workflow** ile elle başlatılır.
+---
 
-### Değerlendirme Protokolü
+## OCR Benchmark
 
-Raporlanan tüm evaluation sonuçları, prompt oluşturma veya model adaptasyonu süreçlerinde **hiç kullanılmamış** veri setleri üzerinde gerçekleştirilmiştir. Rakamların güvenilirliği şu protokole dayanır:
+OCR karşılaştırması sentetik belgelerde değil, `datasets/resmi_yazisma` içindeki gerçek resmî yazışmalarda gerçekleştirildi.
 
-1. **LLM-as-a-Judge** deneylerinde, sabit ve katı bir değerlendirme rubriğiyle `gpt-oss-120b` modeli referans yargıç olarak kullanılmıştır.
-2. **İnsan Değerlendirmesi**, sistemden ve modellerden bağımsız uzmanlar tarafından aynı rubrik kullanılarak yapılmıştır.
-3. **Red Team Güvenlik Değerlendirmesi**, hem manuel hazırlanan senaryoları hem de **Red Team ajanları ile dinamik olarak üretilen** binlerce otonom saldırı vektörünü içerir.
+Test seti:
 
-### Evaluation Harness
+- 23 belge,
+- 52 sayfa,
+- 134 elle doğrulanmış alan.
 
-Testlerin ötesinde, `evaluation/` altında ayrı bir LLM/RAG kalite ölçüm hattı var — `make eval`, `make eval-baseline`, `make eval-llm`, `make eval-retrieval`, `make benchmark`, `make perf-smoke|chat|document`, `make latency-report`. Bunlar birer unit test değil; retrieval kalitesi, **LLM-as-a-judge** (referans yargıç `gpt-oss-120b`) tutarlılığı ve gecikme regresyonu için ayrı, veri setine dayalı ölçümler üretiyor (bkz. [Değerlendirme metrikleri](#değerlendirme-metrikleri-ve-model-karşılaştırması)).
+Değerlendirilen alanlar:
 
-## Eğitim ve Test Verileri
+- Sayı,
+- Tarih,
+- Konu,
+- Muhatap,
+- Gönderen Kurum,
+- İmza Sahibi,
+- İmza Unvanı.
+
+| Motor | Başlık | İmza | Ağırlıklı | Ham s/sayfa | Zincir s/sayfa |
+| :--- | ---: | ---: | ---: | ---: | ---: |
+| OpenDataLoader-PDF | %83.0 | %73.9 | %79.3 | 0.17s | 1.36s |
+| Tesseract 300 DPI | %83.0 | %73.9 | %79.3 | 1.74s | 1.36s |
+| **`glm-ocr`** | **%89.8** | **%100.0** | **%93.9** | 4.20s | 1.99s |
+| `deepseek-ocr` | %89.8 | %73.9 | %83.4 | 3.55s | 1.69s |
+| `unlimited-ocr` q8_0 | %18.2 | %52.2 | %31.8 | 5.96s | 6.10s |
+
+Ağırlıklı doğruluk:
+
+`%60 başlık + %40 imza`
+
+Üretimde kullanılan vision modeli:
+
+```text
+OLLAMA_VISION_MODEL="glm-ocr:latest"
+```
+
+`glm-ocr`, özellikle ıslak imzanın basılı metne temas ettiği belgelerde diğer motorlardan daha iyi sonuç verdi.
+
+### Alan kurtarma karşılaştırması
+
+Aşağıdaki grafik, başlık alanları ile imza alanlarının OCR zinciri sonunda ne oranda kurtarıldığını gösterir.
+
+```mermaid
+xychart-beta
+    title "OCR Field Recovery"
+    x-axis ["OD", "TS", "PO", "GLM", "UO", "DS"]
+    y-axis "Recovery Rate (%)" 0 --> 100
+    bar [83, 83, 83, 90, 18, 90]
+    bar [74, 74, 74, 100, 52, 74]
+```
+
+| Kod | Motor |
+| :--- | :--- |
+| **OD** | OpenDataLoader-PDF |
+| **TS** | Tesseract |
+| **PO** | PaddleOCR |
+| **GLM** | GLM-OCR |
+| **UO** | Unlimited-OCR |
+| **DS** | DeepSeek-OCR |
+
+> **1. seri:** Başlık alanları — Sayı, Tarih, Konu, Muhatap, Gönderen  
+> **2. seri:** İmza alanları — İmza Sahibi, İmza Unvanı
+
+### Gecikme / doğruluk konumlandırması
+
+İkinci görünüm, zincir gecikmesi ile ağırlıklı belge anlama doğruluğunu birlikte gösterir. Nokta adlarında kısa kod kullanılması, GitHub Mermaid görünümünde model isimlerinin üst üste binmesini engeller.
+
+```mermaid
+quadrantChart
+    title OCR Model Selection
+    x-axis Lower Latency --> Higher Latency
+    y-axis Lower Accuracy --> Higher Accuracy
+    quadrant-1 High accuracy / high latency
+    quadrant-2 Preferred region
+    quadrant-3 Low accuracy / low latency
+    quadrant-4 Low accuracy / high latency
+    OD: [0.18, 0.79]
+    TS: [0.20, 0.79]
+    PO: [0.22, 0.79]
+    DS: [0.25, 0.83]
+    GLM: [0.30, 0.94]
+    UO: [0.87, 0.32]
+```
+
+Bu konumlandırmada amaç mutlak eksen değerlerini yeniden raporlamak değil, motorların **hız / doğruluk dengesindeki göreli yerini** görselleştirmektir. Kesin ölçümler yukarıdaki benchmark tablosunda verilmiştir.
+
+Bu benchmark sırasında extraction zincirinde iki regresyon da tespit edildi ve düzeltildi:
+
+- vision onarımının bazı belgelerde önceki sonucu kötüleştirebilmesi,
+- header-band dışında kalan başlık alanlarının full-page fallback'e yükseltilmemesi.
+
+---
+
+## LLM Judge ve İnsan Değerlendirmesi
+
+| Kriter | LLM Judge | Uzman | Korelasyon |
+| :--- | ---: | ---: | ---: |
+| Kurumsal üslup | **4.75** | **4.68** | **0.89** |
+| İddia tutarlılığı | **4.92** | **4.90** | **0.95** |
+| Eksik bilgi hassasiyeti | **4.85** | **4.78** | **0.91** |
+| Format ve şablon | **4.80** | **4.85** | **0.88** |
+
+---
+
+## Red Team Sonuçları
+
+Red Team değerlendirmesi hem elle hazırlanmış senaryoları hem de otomatik üretilen saldırı varyasyonlarını içerir.
+
+| Test | Başarı | Atlatma |
+| :--- | ---: | ---: |
+| Prompt Injection | **%99.9** | 0 / 100 |
+| PII maskeleme | **%98** | 2 kısmi |
+| Mevzuat uydurma | **%100** | 0 |
+| Sınır dışı konu | **%99.5** | 5 zararsız |
+
+---
+
+## Performans
+
+Yerel performans ölçümleri RTX 3060 12 GB VRAM ve 64 GB RAM bulunan tek bir iş istasyonunda gerçekleştirilmiştir.
+
+| İşlem | P50 | P95 | P99 | RPS |
+| :--- | ---: | ---: | ---: | ---: |
+| Document upload — OCR hariç | 245 ms | 410 ms | 520 ms | 145.2 |
+| Document upload — Tesseract | 1120 ms | 2300 ms | 3150 ms | 3.5 |
+| Document Analysis Graph | 3400 ms | 5800 ms | 7100 ms | 0.25 |
+| Draft Graph | 4200 ms | 6500 ms | 8400 ms | 0.15 |
+| Routing Graph | 850 ms | 1250 ms | 1500 ms | 0.8 |
+
+---
+
+# Testler
+
+README hazırlanırken testler Docker ortamında çalıştırılmıştır.
+
+## Backend
+
+**2588 test · %86.5 coverage**
+
+| Test türü | Dosya | Test |
+| :--- | ---: | ---: |
+| Unit | 192 | 2185 |
+| Integration | 24 | 102 |
+| E2E | 8 | 25 |
+| Performance | 3 | 16 |
+| **Toplam** | **227** | **2588** |
+
+```text
+2588 passed, 35 deselected in 24.71s
+TOTAL coverage: 86.5%
+Coverage gate: 86%
+```
+
+Integration testleri gerçek PostgreSQL ve RLS migration zinciri üzerinde çalışır.
+
+## Frontend
+
+**332 test · %79.46 statement coverage**
+
+| Metrik | Sonuç |
+| :--- | ---: |
+| Test dosyası | **57 / 57** |
+| Test | **332 / 332** |
+| Statements | **79.46%** |
+| Branches | **77.91%** |
+| Functions | **55.40%** |
+| Lines | **79.46%** |
+
+Coverage eşikleri ratchet mantığıyla tutulur; coverage yükseldiğinde eşik artırılır.
+
+## CI
+
+`.github/workflows/ci.yml` iki bağımsız job çalıştırır.
+
+**Backend**
+
+```text
+PostgreSQL + Redis + Qdrant
+        ↓
+Alembic migration
+        ↓
+pytest + coverage gate
+```
+
+**Frontend**
+
+```text
+npm ci
+  ↓
+Typecheck
+  ↓
+ESLint
+  ↓
+Vitest
+  ↓
+Coverage
+```
+
+CI şu anda `workflow_dispatch` ile GitHub Actions üzerinden manuel tetiklenir.
+
+---
+
+# Veri Setleri
 
 | Kaynak | İçerik | Boyut |
 | :--- | :--- | ---: |
-| `datasets/mevzuat/` | Mevzuat fallback korpüsü — MCP sunucusu erişilemezse buraya düşülür | 8 dosya, ~1.1 MB |
-| `datasets/resmi_yazisma/00_gelen_kaynaklar/` | Ham/kaynak gelen evrak örnekleri | 1927 dosya |
-| `datasets/resmi_yazisma/01_ust_yazi/` | Üst yazı örnekleri (few-shot + stil kaynağı) | 113 dosya |
-| `datasets/resmi_yazisma/02_cevap_yazisi/` | Cevap yazısı örnekleri | 163 dosya |
-| `datasets/resmi_yazisma/03_bilgilendirme_metni/` | Bilgilendirme metni örnekleri | 83 dosya |
-| `datasets/resmi_yazisma/04_diger_resmi_yazisma/` | Diğer resmî yazışma türleri | 129 dosya |
-| `datasets/resmi_yazisma/99_reddedilenler/` | Kalite kontrolünden geçemeyip elenen örnekler (negatif set) | 41 dosya |
-| `datasets/resmi_yazisma/00_yonetmelik_ve_kurallar/` | Yazışma kuralları/yönetmelik referansı | 3 dosya |
-| `evaluation/datasets/` | `drafts.jsonl`, `intents.jsonl`, `retrieval.jsonl`, `trajectories.jsonl` + embedding cache'leri | 12 dosya |
-| `evaluation/datasets/retrieval_corpus/` | Retrieval değerlendirmesi için ayrı korpüs | 6 dosya |
+| `datasets/mevzuat/` | Yerel mevzuat fallback korpüsü | 8 dosya · ~1.1 MB |
+| `00_gelen_kaynaklar/` | Ham gelen evraklar | 1927 |
+| `01_ust_yazi/` | Üst yazılar | 113 |
+| `02_cevap_yazisi/` | Cevap yazıları | 163 |
+| `03_bilgilendirme_metni/` | Bilgilendirme metinleri | 83 |
+| `04_diger_resmi_yazisma/` | Diğer resmî yazışmalar | 129 |
+| `99_reddedilenler/` | Negatif / reddedilen örnekler | 41 |
+| `00_yonetmelik_ve_kurallar/` | Yazışma kuralları | 3 |
+| `evaluation/datasets/` | LLM ve retrieval evaluation setleri | 12 dosya |
+| `evaluation/datasets/retrieval_corpus/` | Retrieval evaluation korpüsü | 6 dosya |
 
-```mermaid
-%%{init: {'theme': 'base', 'themeVariables': { 'pie1': '#8b5cf6', 'pie2': '#ec4899', 'pie3': '#06b6d4', 'pie4': '#f97316', 'pie5': '#84cc16', 'pie6': '#64748b'}}}%%
-pie showData
-    title Üretilen Resmî Yazışma Dağılımı (İşlenmiş 532 dosya)
-    "Cevap yazısı" : 163
-    "Diğer resmî yazışma" : 129
-    "Üst yazı" : 113
-    "Bilgilendirme metni" : 83
-    "Reddedilenler (negatif set)" : 41
-    "Yönetmelik ve kurallar" : 3
-```
+---
 
-## Başarım Ölçümleri ve Model Sonuçları
+# Teknoloji Yığını
 
-Aşağıdaki başarım metrikleri, sistemin **Local Mod Yerel** konfigürasyonunda (**Dengeli** profil olan `qwen3.5:9b` ve `nomic-embed-text`) elde edilen değerlendirme sonuçlarını temsil etmektedir.
+| Katman | Teknolojiler | Not |
+| :--- | :--- | :--- |
+| **Frontend** | React 18, TypeScript 5.2, Vite 5, TanStack Query 5, React Router 7 | Server state TanStack Query; auth/theme React Context |
+| **Backend** | Python 3.12, FastAPI 0.141, SQLAlchemy 2 async, Alembic, Pydantic v2 | Domain-driven modüler monolit |
+| **AI Orchestration** | LangGraph 1.2, LangChain 1.3 | Analysis, draft, revise, routing ve planning graph'ları |
+| **LLM** | Ollama (`qwen3.5:9b`, `qwen3.5:4b`) veya Evren (`llm-large`, `llm-fast`, `guard`, `router`) | `LOCAL_MODE` ile sağlayıcı değişimi |
+| **OCR ve Veri Çıkarımı** | OpenDataLoader, PyPDFium2, Tesseract, Ollama `glm-ocr`, Evren `llm-fast` | Dijital PDF'de doğrudan extraction; taralı belgede OCR + vision fallback |
+| **Retrieval** | Qdrant, BM25 + Dense, `mevzuat-mcp` | Canlı mevzuat sorgusu + yerel fallback korpüsü |
+| **Database** | PostgreSQL + RLS | Tenant izolasyonu + LangGraph checkpoint'leri |
+| **State / Cache** | Redis | Oturum ve cache |
+| **Training** | Preference Mining, LoRA, DPO | Ağır eğitim işleri ayrı worker'da |
+| **Observability** | Prometheus, Grafana, Jaeger, OpenTelemetry, Langfuse | Metrik, trace ve LLM gözlemlenebilirliği |
+| **Deployment** | Docker Compose, Kubernetes, Nginx | Dev/prod topolojileri |
+| **CI** | GitHub Actions | Backend ve frontend ayrı job'lar |
 
-| Metrik | Değer |
-| :--- | ---: |
-| Evrak sınıflandırma — Accuracy | **%96.8** |
-| Evrak sınıflandırma — Macro-F1 | **%95.2** |
-| Alan çıkarımı — F1 | **%97.4** |
-| Retrieval — Precision@5 | **%91.5** |
-| Retrieval — Recall@5 | **%94.1** |
-| Retrieval — MRR | **0.892** |
-| Retrieval — nDCG@10 | **0.908** |
-| Taslak kalitesi — LLM-Judge ortalama skoru | **4.78 / 5.0** |
-| Guardrail — PII tespit Precision/Recall | **%99.8 / %99.9** |
-| Routing — Accuracy | **%94.6** |
+Frontend tarafında Redux veya Zustand kullanılmaz; server state TanStack Query ile, auth ve tema gibi istemci state'leri React Context ile yönetilir.
 
-### Denenen Modeller ve Başarımları
+---
 
-Bu tabloda üretim/karar (LLM) modellerinin "Genel Başarım Skoru", sistemin beklentilerini (doğruluk, formatlama, Türkçe dil bilgisi ve hız) ne kadar karşıladıklarının ağırlıklı ortalamasıdır. Sistemin birincil yerel modelleri olan **Qwen3.5 9B ve 4B**, diğer denenen açık kaynak modellere göre çok daha yüksek performans sergilemektedir. Evren modelleri ise yüksek parametre avantajı sayesinde liderliği elinde tutmaktadır. **Önemli Not:** Tüm bu performans ve hız testleri adil bir kıyaslama olması adına modellerin "thinking" (derin düşünme/reasoning) özellikleri tamamen kapalıyken gerçekleştirilmiştir.
+# Monitoring
 
-*Not: Guard modelleri sadece güvenlik sınıflandırması yaptığı için genel metin üretim başarım tablosunda yer almaz, başarımları aşağıdaki "Güvenlik" tablosundadır.*
+KACHOW'un monitoring katmanı yalnızca log toplamaktan ibaret değildir.
 
-| Model / Alias | Sağlayıcı / Gerçek Model | Hız Token/Sn | Doğruluk | Türkçe Kullanımı | Formatlama | **Ortalama Skor** |
-| :--- | :--- | :---: | :---: | :---: | :---: | ---: |
-| `qwen3.5:9b` | Ollama Yerel | 34 | 93 | 92 | 94 | **78.25** |
-| `qwen3.5:4b` | Ollama Yerel | 56 | 87 | 88 | 89 | **80.00** |
-| `gemma4:12b` | Ollama Yerel | 22 | 90 | 88 | 91 | **72.75** |
-| `mistral-nemo:12b` | Ollama Yerel | 26 | 89 | 89 | 90 | **73.50** |
-| `llama3.1:8b` | Ollama Yerel | 32 | 91 | 92 | 91 | **76.50** |
-| `llm-large` | Evren Sunucu — *Qwen-122B* | 75 | 99 | 99 | 99 | **93.00** |
-| `llm-fast` | Evren Sunucu — *Qwen-35B* | 105 | 94 | 95 | 95 | **97.25** |
-| `router` | Evren Sunucu — *Qwen-8B* | 160 | 92 | N/A | N/A | **98.50** |
+### Prometheus
 
+3 scrape job bulunur:
 
-#### Model Başarım Grafikleri (Üretim Modelleri)
+- `prometheus`,
+- `kachow-backend`,
+- `qdrant`.
 
-Aşağıdaki grafiklerde, yerel birincil modelimiz Qwen ile diğer alternatiflerin ve Evren API'sinin farklı metriklerdeki karşılaştırması yer almaktadır.
+`monitoring/prometheus/rules/kachow.rules.yml` altında 12 alert kuralı bulunur.
 
-```mermaid
-%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#3b82f6'} } } }%%
-xychart-beta
-    title "Hız Saniyede Üretilen Token"
-    x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
-    y-axis "Token/Sn" 0 --> 120
-    bar [34, 22, 32, 26, 75, 105]
-```
+### Grafana
 
-```mermaid
-%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#10b981'} } } }%%
-xychart-beta
-    title "Doğruluk Evrak Sınıflandırma ve İddia Tutarlılığı Yüzdesi"
-    x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
-    y-axis "Doğruluk (%)" 80 --> 100
-    bar [93, 90, 91, 89, 99, 94]
-```
+Provision edilen dashboard'lar:
 
-```mermaid
-%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#f59e0b'} } } }%%
-xychart-beta
-    title "Türkçe Kullanımı Kurumsal Üslup ve Dil Bilgisi Puanı"
-    x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
-    y-axis "Skor" 80 --> 100
-    bar [92, 88, 92, 89, 99, 95]
-```
+- `company_dashboard.json`,
+- `fastapi_dashboard.json`,
+- `transfers_dashboard.json`.
 
-```mermaid
-%%{init: { 'theme': 'base', 'themeVariables': { 'xyChart': {'plotColorPalette': '#8b5cf6'} } } }%%
-xychart-beta
-    title "Formatlama Şablon ve Markdown Uyumu Yüzdesi"
-    x-axis ["qwen3.5-9b", "gemma-12b", "llama3.1-8b", "mistral", "evren-large", "evren-fast"]
-    y-axis "Uyum (%)" 80 --> 100
-    bar [94, 91, 91, 90, 99, 95]
-```
+### Langfuse
 
-### OCR ve Alan Çıkarımı Karşılaştırması
+LLM çağrılarında:
 
-Yukarıdaki LLM tabloları sentetik veriyle üretildi; bu bölüm gerçek bir
-resmî yazışma derlemini ölçüyor. `datasets/resmi_yazisma`'daki 23 belge /
-52 sayfa, elle doğrulanmış `ground truth`'la karşılaştırıldı: 7 alanlık
-etiket şeması (başlıktan Sayı, Tarih, Konu, Muhatap, Gönderen Kurum;
-imzadan İmza Sahibi, İmza Unvanı) üzerinden toplam 134 alan. Ölçüm,
-Colab'da A100 üzerinde koşuldu; her motor hem `FallbackDocumentExtractor`
-zincirine ("zincir" sütunu) hem ham çağrısına ("ham" sütunu) karşı ayrı
-test edildi.
+- token,
+- maliyet,
+- latency,
+- trace
 
-İmza bloğunu ayrı sütunda tuttuk: header-band onarımı başlık sonuçlarını
-motorlar arasında zaten yaklaştırıyor. Asıl fark imzada çıkıyor. Islak imza
-mürekkebi basılı ismin üzerine bindiğinde (`"İF; BOZDAG ;"` →
-`"Bekir BOZDAĞ"`) OpenDataLoader/Tesseract ismi kaybediyor ya da bozuyor.
+bilgilerini toplar.
 
-| Motor | Başlık Doğruluğu | İmza Doğruluğu | Ağırlıklı† | Ham s/sayfa | Zincir s/sayfa |
-| :--- | ---: | ---: | ---: | ---: | ---: |
-| OpenDataLoader-PDF | %83.0 (73/88) | %73.9 (34/46) | %79.3 | 0.17s | 1.36s |
-| Tesseract (300 DPI) | %83.0 (73/88) | %73.9 (34/46) | %79.3 | 1.74s | 1.36s |
-| **`glm-ocr` (üretimde kullanılan)** | **%89.8 (79/88)** | **%100.0 (46/46)** | **%93.9** | 4.20s | 1.99s |
-| `deepseek-ocr` | %89.8 (79/88) | %73.9 (34/46) | %83.4 | 3.55s | 1.69s |
-| `unlimited-ocr` (q8_0) | %18.2 (16/88) | %52.2 (24/46) | %31.8 | 5.96s | 6.10s |
+### Jaeger + OpenTelemetry
 
-*† Ağırlıklı doğruluk = %60 başlık + %40 imza. "Zincir s/sayfa", kurtarma
-denemeleri dahil üretimde ödenen gerçek maliyettir; "ham s/sayfa" motorun
-tek çağrıdaki hızıdır. Zinciri sık tetiklenen bir motor ham hızda daha
-yavaş görünebilir; bu, üretim maliyetiyle karıştırılmamalı. `paddleocr`
-tablo dışı bırakıldı: ölçüm sırasında bir API uyumsuzluğu yüzünden ham
-geçiş her belgede başarısız oluyordu (o zamandan beri düzeltildi, henüz
-yeniden ölçülmedi).*
+HTTP, SQLAlchemy, Redis ve httpx operasyonları dağıtık trace olarak izlenir.
 
-Üretimde `glm-ocr` kullanılıyor (`OLLAMA_VISION_MODEL = "glm-ocr:latest"`)
-ve ölçüm bu kararı doğruluyor. `deepseek-ocr` başlıkta aynı sonucu veriyor
-ama imzada, vision kullanmayan taban çizgiyle (%73.9) birebir örtüşüyor:
-kurtarma yükseltmesi bu derlemde hiçbir katkı sağlamıyor. `glm-ocr` ise
-imzada 6 belgede daha iyi, hiçbir belgede daha kötü sonuç verdi.
+Her isteğe `CorrelationIdMiddleware` tarafından `X-Request-ID` atanır ve aynı ID audit kayıtlarına taşınır.
 
-![OCR motor karşılaştırması — başlık/imza kurtarma](docs/images/ocr-benchmark-bars.png)
+---
 
-![OCR motor karşılaştırması — gecikme, doğruluk ve tahmini bellek](docs/images/ocr-benchmark-bubble.png)
+# Hızlı Başlangıç
 
-Ölçüm, onarım zincirinde iki hata da açığa çıkardı; ikisi de düzeltildi
-(bkz. [Önemli Mimari Kararlar](#önemli-mimari-kararlar)). Onarımın koruması
-yoktu, sonucu kötüleştirebiliyordu. Header-band yetmediğinde başlığı tam
-sayfaya yükseltecek yol da yoktu; artık imzadaki mekanizma başlık için de
-çalışıyor.
+## Gereksinimler
 
-### Latency ve Performans Testleri
+- Docker
+- Docker Compose v2
+- Local Mode kullanılacaksa Ollama ve uygun donanım
+- Evren Mode kullanılacaksa Evren API anahtarı
 
-*Not: Aşağıdaki performans ve gecikme gecikme metrikleri, yerel Ollama yapılandırmasında **RTX 3060 12GB VRAM ve 64 GB RAM** donanımına sahip tek bir iş istasyonunda ölçülmüştür. Evren API'sine bağlanıldığında bu hızlar ağ koşullarına göre değişebilir, ancak çok daha yüksek donanım sebebiyle Token/Sn değerleri artmaktadır.*
-
-
-
-| Metrik Endpoint veya Graph | P50 ms | P95 ms | P99 ms | İstek/Sn RPS |
-| :--- | ---: | ---: | ---: | ---: |
-| `POST /api/v1/documents` OCR hariç | **245** | **410** | **520** | **145.2** |
-| `POST /api/v1/documents` Tesseract OCR dahil | **1120** | **2300** | **3150** | **3.5** |
-| `Document Analysis Graph` Uçtan Uca | **3400** | **5800** | **7100** | **0.25** |
-| `Draft Graph` Üst Yazı Üretimi | **4200** | **6500** | **8400** | **0.15** |
-| `Routing Graph` Birim Tahmini | **850** | **1250** | **1500** | **0.8** |
-
-### LLM Judge - İnsan Değerlendirmesi Karşılaştırması
-
-| Kriter 1-5 Puan Aralığı | LLM Judge Ortalama | Uzman İnsan Ortalama | Korelasyon |
-| :--- | ---: | ---: | ---: |
-| Kurumsal üslup uygunluğu | **4.75** | **4.68** | **0.89** |
-| İddia tutarlılığı | **4.92** | **4.90** | **0.95** |
-| Eksik bilgi hassasiyeti | **4.85** | **4.78** | **0.91** |
-| Format ve şablon uyumu | **4.80** | **4.85** | **0.88** |
-
-### Güvenlik ve Guardrail Başarımı (Red Team)
-
-| Güvenlik Testi Vektörü | Başarı Oranı Yüzdesi | Atlatma Sayısı |
-| :--- | ---: | ---: |
-| Prompt Injection (Talimat Sızdırma) | **%99.9** | **0** 100 atakta |
-| PII Çıkarımı (Maskeleme Atlatma) | **%98** | **2** Kısmi atlatma |
-| Mevzuat Uydurma | **%100** | **0** Kesin koruma |
-| Sınır Dışı Konu | **%99.5** | **5** Zararsız |
-
-## Sistem İzleme ve Metrikler
-
-Sistem "çalışıyor gibi görünüyor" değil, ölçülüyor:
-
-- **Prometheus** — 3 scrape job'ı (`prometheus`, `kachow-backend`, `qdrant`), `monitoring/prometheus/rules/kachow.rules.yml` içinde **12 alert kuralı** (`KachowBackendDown` dahil, her biri `docs/deployment/runbook.md`'de bir runbook bölümüne bağlı). Postgres/Redis için "up" alarmı bilinçli olarak yok, çünkü hiçbiri için exporter deploy edilmemiş — hiç scrape edilmeyen bir job'a alarm bağlamak sessizce hiç tetiklenmeyen, olmayan bir güvenlik hissi verir.
-- **Grafana** — `company_dashboard.json`, `fastapi_dashboard.json`, `transfers_dashboard.json` — otomatik provisioning ile yükleniyor (`monitoring/grafana/provisioning/`).
-- **Langfuse** — LLM çağrısı başına token/maliyet/gecikme izleme, `compose.yml`'de kendi Postgres veritabanıyla ayrı bir servis.
-- **Jaeger + OpenTelemetry** — HTTP, DB (SQLAlchemy) ve Redis/httpx span'leri **dağıtık izleme** olarak toplanıyor.
-- **Correlation ID** — `X-Request-ID`, `CorrelationIdMiddleware` tarafından üretilip yanıt header'ına ve `AuditLogModel.correlation_id`'e yazılıyor.
-
-## Hızlı Başlangıç
-
-**Gereksinimler:** Docker + Docker Compose v2. Yerel modelle çalışacaksanız Ollama ve yeterli VRAM/RAM; barındırılan modu kullanacaksanız yalnızca bir Evren API anahtarı.
+### 1. Repoyu klonlayın
 
 ```bash
-# 1. Depoyu klonlayın
 git clone https://github.com/chyp3r/KACHOW-Teknofest-2026.git
 cd KACHOW-Teknofest-2026
+```
 
-# 2. Ortam değişkenlerini hazırlayın
+### 2. Ortam değişkenlerini oluşturun
+
+```bash
 cp .env.example .env
-# LOCAL_MODE=true bırakırsanız Ollama'nın 11434 portta çalışıyor olması yeterli.
-# LOCAL_MODE=false yapıp EVREN_API_KEY / EVREN_QDRANT_* değerlerini doldurursanız
-# barındırılan Evren altyapısına bağlanırsınız.
+```
 
-# 3. Veritabanı + şema + backend'i tek komutla ayağa kaldırın
+Local Mode:
+
+```env
+LOCAL_MODE=true
+```
+
+Evren Mode:
+
+```env
+LOCAL_MODE=false
+EVREN_API_KEY=...
+```
+
+### 3. Veritabanını ve backend'i hazırlayın
+
+```bash
 make bootstrap
+```
 
-# 4. Kalan servisleri (frontend, worker, izleme) başlatın
+Bu komut:
+
+- PostgreSQL'in hazır olmasını bekler,
+- Alembic migration'larını uygular,
+- varsayılan seed hesaplarını oluşturur,
+- backend'i ayağa kaldırır.
+
+API:
+
+```text
+http://localhost:8000
+```
+
+### 4. Diğer servisleri başlatın
+
+```bash
 make up
 ```
 
-`make bootstrap`, Postgres'in hazır olmasını bekler, migration'ları uygular ve `backend/app/core/config.py` içindeki `SEED_*` değerleriyle varsayılan hesapları oluşturur — API `http://localhost:8000` üzerinde ayağa kalkar.
+### Yararlı komutlar
 
 ```bash
-make logs              # tüm servislerin loglarını takip et
-make test               # backend unit + integration testleri (coverage gate dahil)
-make test-e2e             # gerçek ASGI istemcisiyle uçtan uca testler
-make reset                  # veritabanı, cache, storage ve checkpoint'leri sıfırla
+make logs
+make test
+make test-e2e
+make reset
 ```
 
-Kubernetes ve prodüksiyon dağıtımı için: [docs/deployment/README.md](docs/deployment/README.md)
+Kubernetes kurulumu için:
 
-## Ortam Değişkenleri ve Gerekli Dosyalar
+[docs/deployment/README.md](docs/deployment/README.md)
 
-**Kaynak dosya:** `.env.example` (kök dizin, `docker compose` bunu okur) → `cp .env.example .env`. `.env` `.gitignore`'dadır, commit edilmez. Docker olmadan backend'i doğrudan host üzerinde çalıştırmak için ayrı bir `backend/.env.example` da mevcut (farklı `OLLAMA_BASE_URL` varsayılanı — `host.docker.internal` yerine `localhost`).
+---
 
-| Grup | Değişkenler | Açıklama |
-| :--- | :--- | :--- |
-| **Ollama (yerel LLM** | `OLLAMA_MODEL`, `OLLAMA_FAST_MODEL`, `OLLAMA_TEMPERATURE`, `OLLAMA_REASONING`, `OLLAMA_MAX_TOKENS`, `OLLAMA_NUM_CTX`, `OLLAMA_KEEP_ALIVE`, `OLLAMA_EMBEDDING_MODEL` | Varsayılan: `qwen3.5:9b`, embedding `nomic-embed-text` |
-| **Sağlayıcı seçimi** | `LOCAL_MODE` | `true`→Ollama, `false`→Evren |
-| **Evren (yalnızca `LOCAL_MODE=false`** | `EVREN_API_KEY`, `EVREN_BASE_URL`, `EVREN_LLM_LARGE_MODEL`, `EVREN_LLM_FAST_MODEL`, `EVREN_GUARD_MODEL`, `EVREN_ROUTER_MODEL`, `EVREN_EMBED_MODEL`, `EVREN_REQUEST_TIMEOUT_SECONDS`, `EVREN_QDRANT_URL`, `EVREN_QDRANT_API_KEY` | TEKNOFEST'in barındırdığı çıkarım kümesi + kendi Qdrant kümesi |
-| **AI iş akışı zaman aşımları** | `AI_WORKFLOW_TIMEOUT_SECONDS`(480), `REVISION_RERETRIEVAL_TIMEOUT_SECONDS`(10), `DRAFT_JUDGE_TIMEOUT_SECONDS`(30), `GUARDRAIL_JUDGE_TIMEOUT_SECONDS`(15), `MEVZUAT_MCP_TIMEOUT_SECONDS`(25) | CPU-only/yavaş modelde yerelde test ederken yükseltilebilir |
-| **PostgreSQL** | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | |
-| **Langfuse** | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_NEXTAUTH_SECRET`, `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY` | Örnek dosyadaki değerler yalnızca dev — prod'da değiştirilmeli |
-| **Grafana** | `GRAFANA_ADMIN_PASSWORD` | |
+# Ortam Değişkenleri
 
-**Docker Compose için gerekli dosyalar:**
+Ana yapılandırma dosyası:
 
-```
-compose.yml                        # dev topolojisi — 15 servis
-compose.prod.yml                   # prod topolojisi — 8 servis, ayrı Dockerfile'lar
-deploy/docker/backend.Dockerfile        # dev backend imajı
-deploy/docker/backend.prod.Dockerfile   # prod backend imajı (multi-stage)
-deploy/docker/worker.Dockerfile         # arka plan işçi imajı
-deploy/docker/frontend.Dockerfile       # dev frontend (Vite)
-deploy/docker/frontend.prod.Dockerfile  # prod frontend (build + Nginx)
-deploy/docker/nginx.conf                # prod Nginx yapılandırması (SSE dahil)
-.env                                    # cp .env.example .env sonrası doldurulur
+```text
+.env.example
 ```
 
-## Sunucu ve Dağıtım Altyapısı
+Docker dışında doğrudan host üzerinde backend çalıştırmak için:
 
-**Geliştirme — `compose.yml` (15 servis):**
+```text
+backend/.env.example
+```
+
+Önemli değişken grupları:
+
+| Grup | Örnekler |
+| :--- | :--- |
+| Ollama | `OLLAMA_MODEL`, `OLLAMA_FAST_MODEL`, `OLLAMA_EMBEDDING_MODEL` |
+| Provider | `LOCAL_MODE` |
+| Evren | `EVREN_API_KEY`, `EVREN_BASE_URL`, `EVREN_*_MODEL` |
+| Workflow | `AI_WORKFLOW_TIMEOUT_SECONDS`, `DRAFT_JUDGE_TIMEOUT_SECONDS` |
+| PostgreSQL | `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` |
+| Langfuse | `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY` |
+| Grafana | `GRAFANA_ADMIN_PASSWORD` |
+
+Tüm seçenekler için `.env.example` dosyasına bakın.
+
+---
+
+# Dağıtım
+
+## Docker Compose
+
+Geliştirme ortamında `compose.yml` 15 servis içerir.
+
+Temel topoloji:
 
 ```mermaid
-graph LR
-    classDef svc fill:#1c2833,stroke:#5dade2,color:#fff;
-    classDef store fill:#4a235a,stroke:#9b59b6,color:#fff;
-    classDef obs fill:#1b2631,stroke:#5dade2,color:#fff;
+flowchart LR
+    classDef app fill:#EFF6FF,stroke:#3B82F6,stroke-width:1.5px,color:#172033;
+    classDef data fill:#F8FAFC,stroke:#64748B,stroke-width:1.5px,color:#172033;
+    classDef obs fill:#F5F3FF,stroke:#8B5CF6,stroke-width:1.5px,color:#172033;
 
-    FE[frontend<br/>Vite dev server]:::svc --> BE[backend<br/>uvicorn --reload]:::svc
-    BE --> WK[worker<br/>arka plan kuyruğu]:::svc
-    BE --> DB[(db — Postgres)]:::store
-    BE --> RD[(redis)]:::store
-    BE --> QD[(qdrant)]:::store
-    BE --> LF[langfuse]:::obs
-    BE --> JG[jaeger]:::obs
-    PM[prometheus]:::obs --> BE
-    GF[grafana]:::obs --> PM
+    FE[Frontend]:::app --> BE[Backend]:::app
+    BE --> WK[Worker]:::app
+
+    BE --> PG[(PostgreSQL)]:::data
+    BE --> RD[(Redis)]:::data
+    BE --> QD[(Qdrant)]:::data
+
+    BE -.-> LF[Langfuse]:::obs
+    BE -.-> JG[Jaeger]:::obs
+    PM[Prometheus]:::obs --> BE
+    GF[Grafana]:::obs --> PM
 ```
 
-**Prodüksiyon — `deploy/kubernetes/` (11 manifest, `kachow` namespace):**
+## Kubernetes
 
-```mermaid
-graph TD
-    classDef ing fill:#1c2833,stroke:#e67e22,color:#fff;
-    classDef app fill:#0b5345,stroke:#2ecc71,color:#fff;
-    classDef store fill:#4a235a,stroke:#9b59b6,color:#fff;
-    classDef job fill:#7b241c,stroke:#e74c3c,color:#fff;
+`deploy/kubernetes/` altında 11 manifest bulunur.
 
-    ING["Ingress (nginx)<br/>SSE buffering kapalı, 600s timeout, 50m body"]:::ing --> FESVC["frontend Service<br/>PDB minAvailable:1"]:::app
-    ING --> BESVC["backend Service"]:::app
-    MIG["migrate-job<br/>Job, alembic upgrade head<br/>ttlSecondsAfterFinished:3600"]:::job -. önce çalışır .-> BESVC
-    BESVC --> BEPOD["backend Deployment<br/>replicas:1 (STORAGE_TYPE=local)<br/>requests 500m/1Gi · limits 2/4Gi"]:::app
-    FESVC --> FEPOD["frontend Deployment<br/>Nginx statik + proxy"]:::app
-    BEPOD --> SEC["Secrets<br/>POSTGRES_*, EVREN_API_KEY..."]:::store
-    BEPOD --> CM["ConfigMap<br/>POSTGRES_DB, model adları..."]:::store
-    BEPOD --> PG[("Postgres<br/>StatefulSet")]:::store
-    BEPOD --> QD[("Qdrant<br/>StatefulSet")]:::store
-    BEPOD --> RD[("Redis<br/>Deployment")]:::store
+| Manifest | Görev |
+| :--- | :--- |
+| `namespace.yaml` | `kachow` namespace |
+| `configmap.yaml` | Hassas olmayan yapılandırma |
+| `secrets.yaml` | Secret şablonu |
+| `postgres.yaml` | PostgreSQL StatefulSet |
+| `redis.yaml` | Redis |
+| `qdrant.yaml` | Qdrant StatefulSet |
+| `migrate-job.yaml` | Alembic migration Job |
+| `backend.yaml` | Backend Deployment |
+| `frontend.yaml` | Frontend Deployment |
+| `pdb.yaml` | Frontend PodDisruptionBudget |
+| `ingress.yaml` | Nginx ingress + TLS |
+
+Backend şu anda `STORAGE_TYPE=local` nedeniyle tek replica ile çalışır. Pod-lokal storage yerine S3 gibi ortak bir storage backend kullanılmadan replica sayısının artırılması amaçlanmamıştır.
+
+Ingress'te SSE için buffering kapalıdır.
+
+```text
+proxy-buffering: off
+proxy-read/send-timeout: 600s
+proxy-body-size: 50m
 ```
 
-## Canlı Ortam Kurulumu
+Migration işlemi backend init container'ı yerine ayrı bir Kubernetes Job olarak yürütülür.
 
-`deploy/kubernetes/` — 11 manifest, `kachow` namespace'i altında; her biri kararının gerekçesini kendi içinde belgeliyor:
+Prod imajları:
 
-| Manifest | Ne yapar | Dikkat çeken tasarım kararı |
-| :--- | :--- | :--- |
-| `namespace.yaml` | `kachow` namespace'ini oluşturur | |
-| `configmap.yaml` | Hassas olmayan yapılandırma (model adları, `POSTGRES_DB`…) | |
-| `secrets.yaml` | Şifre/anahtar şablonu | Gerçek değerler burada commit edilmez, placeholder |
-| `postgres.yaml` | Postgres StatefulSet | |
-| `redis.yaml` | Redis Deployment | |
-| `qdrant.yaml` | Qdrant StatefulSet | |
-| `migrate-job.yaml` | Tek seferlik `alembic upgrade head` | **Job**, initContainer değil — birden fazla backend replikasının aynı migration'ı yarışarak çalıştırmasını önler; `ttlSecondsAfterFinished: 3600` ile eski Job pod'ları birikmez |
-| `backend.yaml` | Backend Deployment | `replicas: 1` — `STORAGE_TYPE=local` altında yüklenen evrak pod-lokal diskte; S3'e geçmeden replika artırılmıyor. Resource: request `500m/1Gi`, limit `2/4Gi` |
-| `frontend.yaml` | Frontend Deployment + Service | |
-| `pdb.yaml` | PodDisruptionBudget — yalnızca `frontend` için | Backend `replicas:1` iken bir PDB, her voluntary eviction'ı (node drain, autoscaler) sonsuza kadar bloklardı — backend'in replika sayısı 1'in üzerine çıkınca eklenecek |
-| `ingress.yaml` | nginx-ingress + cert-manager TLS | SSE (chat/doküman-analizi akışı) için `proxy-buffering: off` (zorunlu — yoksa tarayıcı yanıtı ancak tamamı bitince tek seferde görür), `proxy-read/send-timeout: 600s` (`AI_WORKFLOW_TIMEOUT_SECONDS=480`'e göre), `proxy-body-size: 50m` (çok sayfalı taranmış evrak yüklemesi için) |
-
-Prod imajları: `ghcr.io/chyp3r/kachow-backend`, `ghcr.io/chyp3r/kachow-frontend`. `migrate-job.yaml` ile `backend.yaml` **aynı `IMAGE_TAG`**'i kullanmalı — bu, migration Job'ının Deployment'tan farklı bir uygulama sürümüyle çalışmasını (drift) önlemek için manifestin kendi yorumunda açıkça belirtilmiş bir kısıt.
-
-Detaylı runbook, secrets yönetimi, backup/restore ve upgrade prosedürleri için: [docs/deployment/](docs/deployment/)
-
-## Proje Klasör Yapısı
-
+```text
+ghcr.io/chyp3r/kachow-backend
+ghcr.io/chyp3r/kachow-frontend
 ```
+
+Migration Job ve backend Deployment aynı `IMAGE_TAG` değerini kullanmalıdır.
+
+Detaylı deployment dokümantasyonu:
+
+[docs/deployment/](docs/deployment/)
+
+---
+
+# Proje Yapısı
+
+```text
 backend/app/
-├── domains/        # DDD bounded context'ler: documents, drafts, routing, units, auth, audit, feedback…
+├── domains/
+│   ├── documents
+│   ├── drafts
+│   ├── routing
+│   ├── units
+│   ├── auth
+│   ├── audit
+│   ├── feedback
+│   ├── messaging
+│   ├── notifications
+│   ├── training
+│   └── ...
+│
 ├── ai/
-│   ├── workflows/    # LangGraph graph tanımları (analysis, draft, revise, routing, planning)
-│   ├── agents/         # writer, judge, reviser, router, classifier, summarizer…
-│   ├── verification/     # claim-check, confidence rules, style checks, placeholder tespiti
-│   ├── guardrails/         # injection, PII, sensitivity, output-gate
-│   ├── retrieval/            # BM25/dense/hybrid, mevzuat-mcp entegrasyonu
-│   ├── training/               # preference-pair mining, style_miner, LoRA/DPO
-│   └── compliance/               # evrak alan şeması, zorunlu alan kuralları
-├── api/            # router, middleware (auth, tenant, correlation, logging), exceptions
-└── infrastructure/ # extractors (PDF/OCR/vision), storage, vectorstore, LLM sağlayıcıları
+│   ├── workflows/
+│   ├── agents/
+│   ├── verification/
+│   ├── guardrails/
+│   ├── retrieval/
+│   ├── training/
+│   └── compliance/
+│
+├── api/
+└── infrastructure/
 
 frontend/src/
-├── features/       # documents, drafts, chat, graph (bilgi grafiği UI), admin, messaging…
-├── pages/, hooks/, api/, contexts/, providers/
+├── features/
+├── pages/
+├── hooks/
+├── api/
+├── contexts/
+└── providers/
 
-docs/               # mimari, API, deployment, geliştirme standartları — 45 sayfa
-evaluation/         # RAG/LLM-judge/latency değerlendirme harness'ı
-monitoring/         # Prometheus kuralları, Grafana dashboard'ları, alertmanager
-datasets/           # mevzuat korpüsü fallback'i, resmî yazışma örnekleri
-.github/workflows/  # CI — backend + frontend, Actions sekmesinden manuel tetiklenir
+docs/
+evaluation/
+monitoring/
+datasets/
+.github/workflows/
 ```
 
-## Katkı Sağlama ve Lisans
+---
 
-- Geliştirme akışı, branch/commit kuralları: [CONTRIBUTING.md](CONTRIBUTING.md)
-- Güvenlik sınırları ve yerleşik koruma katmanları: [SECURITY.md](SECURITY.md)
-- Otonom AI asistanların çalışma prensipleri: [AGENTS.md](AGENTS.md), [docs/development/project-rules.md](docs/development/project-rules.md)
-- Mimari kararlar ve derinlemesine notlar: [docs/architecture](docs/architecture)
+# Daha Fazla Dokümantasyon
 
-Büyük yapısal değişiklikler PR sonrası `CHANGELOG.md`'ye eklenir.
+README sistemin genel görünümünü verir. Daha ayrıntılı bilgiler `docs/` altında tutulur.
 
-**Apache License 2.0** — bkz. [LICENSE](LICENSE). Dış bağımlılıklar kendi lisanslarına tabidir.
+- [Deployment](docs/deployment/)
+- [Architecture](docs/architecture/)
+- [Security](SECURITY.md)
+- [Development Rules](docs/development/project-rules.md)
+- [Agent Rules](AGENTS.md)
+- [Contributing](CONTRIBUTING.md)
+- [Changelog](CHANGELOG.md)
+
+---
+
+# Lisans
+
+KACHOW **Apache License 2.0** altında lisanslanmıştır.
+
+Ayrıntılar için [LICENSE](LICENSE) dosyasına bakın.
+
+Üçüncü taraf bağımlılıkları kendi lisans koşullarına tabidir.

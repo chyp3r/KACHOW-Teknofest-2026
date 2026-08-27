@@ -2,7 +2,7 @@
 
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
-## [Unreleased]
+## [3.57]
 ### Eklendi
 - Canlı mevzuat sorguları (mevzuat.gov.tr) için MCP entegrasyonu, dayanıklılık/önbellek mekanizması ve gecikme metrikleri.
 - Belge analiz grafiğinde (`document_analysis_graph.py`) canlı mevzuat zenginleştirmesi.
@@ -59,6 +59,39 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - HITL eksik-bilgi kartında imza adı ve unvanı soruları aynı
   "Ahmet Yılmaz / Daire Başkanı" örneğini gösteriyordu; ayrıldı. Var olmayan
   bir "Sen karar ver" kontrolüne yönlendiren yardım cümlesi kaldırıldı.
+- Backend test coverage kapısı (`--cov-fail-under=86`) %85.60'ta tıkanmıştı;
+  üç düşük-kapsamlı ama gerçekten test edilmeye değer dosyaya (`sparse_
+  encoder.py` -- saf BM25 matematiği, `core/authz/cache.py` -- hiç test
+  edilmemiş yetkilendirme karar önbelleği, `chat_recorder.py` -- kardeş
+  kaydedicilerin zaten kurulu deseniyle) gerçek davranış testleri eklendi.
+  %86.05'e çıktı (#298).
+
+### Düzeltildi
+- `datasets/sample_benchmark/` dizini gerçekte `datasets/sample/` adıyla
+  bekleniyordu (`test_compliance.py`, `field_parser.py`, altı
+  `scripts/evaluate_*`/`build_evrak_eval_set.py` betiği ve dizinin kendi 12
+  `.md` dosyasının YAML frontmatter'ı dahil ~15 referans) -- 43cd268a'da
+  külliyat `sample_benchmark` adıyla eklendiğinde, ondan önce var olup artık
+  hiçbir dal ucunda bulunmayan eski `datasets/sample/` (d9e0e237) hiç
+  güncellenmemişti. Dizin `datasets/sample/` olarak yeniden adlandırıldı
+  (`git mv`), başka hiçbir dosya değişmedi (#291).
+- `backend/tests/unit/api/openapi.snapshot.json` bayattı -- `root_router.py`
+  (`/root/users/insights` vb.) eklendiğinde şema değişmişti ama snapshot hiç
+  yeniden üretilmemişti. `KACHOW_UPDATE_OPENAPI_SNAPSHOT=1` ile yeniden
+  üretildi, `frontend/src/api/generated.ts` `npm run api:types` ile
+  senkronlandı (#296).
+
+### Değiştirildi
+- `LOCAL_MODE=false` (Evren/bulut) iken niyet (intent) yönlendirmesinde LLM
+  tie-break'i artık yalnızca belirsizken değil, füzyon zaten kararlı bir
+  sonuca varmış olsa bile her zaman çalışıp sonucu doğruluyor/geçersiz
+  kılıyor (`planner.py::_resolve_intent`). Semantik prototip katmanı
+  `LOCAL_MODE=false`'ta zaten devre dışı (aktif embedding modeli committed
+  vektörlerin damgasıyla -- Ollama'nın `nomic-embed-text`'i -- uyuşmuyor),
+  bu yüzden kendinden emin ama yanlış bir sözcüksel okumayı düzeltecek
+  hiçbir mekanizma kalmıyordu; LLM artık o "ikinci görüş" rolünü üstleniyor
+  (#293). Bulut modunda her sohbet turuna bir sınıflandırma çağrısı
+  ekliyor, bilinçli bir maliyet.
 
 ## [3.56]
 ### Düzeltildi
