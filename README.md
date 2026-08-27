@@ -647,8 +647,6 @@ Aşağıdaki testler reasoning/thinking özellikleri kapalıyken gerçekleştiri
 | `llm-fast` | Evren — Qwen-35B | 105 | 94 | 95 | 95 |
 | `router` | Evren — Qwen-8B | 160 | 92 | N/A | N/A |
 
-> Önceki benchmark tablosundaki birleşik “Ortalama Skor” farklı ağırlıklarla hesaplanan bileşik bir metriğe dayanıyorsa, formülü ayrıca dokümante etmek gerekir. Bu nedenle ana README'de doğrudan ölçülen metrikler gösterilmektedir.
-
 ---
 
 ## OCR Benchmark
