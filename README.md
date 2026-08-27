@@ -25,6 +25,78 @@ TEKNOFEST 2026 · LangGraph tabanlı çok-ajan mimarisi · İnsan onaylı karar 
 
 ---
 
+<details>
+<summary><strong>İçindekiler</strong></summary>
+
+- [KACHOW nedir?](#kachow-nedir)
+- [Demo ve Arayüz](#demo-ve-arayüz)
+  - [Platform görünümü](#platform-görünümü)
+- [Temel Yetenekler](#temel-yetenekler)
+  - [Evrak analizi](#evrak-analizi)
+  - [Mevzuat arama](#mevzuat-arama)
+  - [Taslak üretimi](#taslak-üretimi)
+  - [Kaynak doğrulama](#kaynak-doğrulama)
+  - [Birim yönlendirme](#birim-yönlendirme)
+  - [İnsan onayı](#insan-onayı)
+- [Sistem Mimarisi](#sistem-mimarisi)
+  - [Mimari yaklaşım](#mimari-yaklaşım)
+- [AI İş Akışları](#ai-iş-akışları)
+  - [Router niyetleri](#router-niyetleri)
+- [Baştan Sona İşlem Akışı](#baştan-sona-işlem-akışı)
+- [Human-in-the-Loop](#human-in-the-loop)
+- [Güvenlik ve Yetkilendirme](#güvenlik-ve-yetkilendirme)
+  - [Multi-tenant yapı](#multi-tenant-yapı)
+  - [Roller](#roller)
+  - [PostgreSQL Row-Level Security](#postgresql-row-level-security)
+  - [Guardrail katmanları](#guardrail-katmanları)
+- [Taslak Doğrulama](#taslak-doğrulama)
+- [Mevzuat Bilgi Grafiği](#mevzuat-bilgi-grafiği)
+- [Kuruma Özel Öğrenme](#kuruma-özel-öğrenme)
+  - [1. Preference-pair oluşturma](#1-preference-pair-oluşturma)
+  - [2. Stil profili çıkarımı](#2-stil-profili-çıkarımı)
+  - [3. Opsiyonel LoRA / DPO](#3-opsiyonel-lora-dpo)
+- [İkili Çalışma Modu: Yerel ve Sunucu](#ikili-çalışma-modu-yerel-ve-sunucu)
+  - [Üç reasoning profili](#üç-reasoning-profili)
+- [Neden Bu Tasarım?](#neden-bu-tasarım)
+- [Değerlendirme](#değerlendirme)
+- [Öne Çıkan Sonuçlar](#öne-çıkan-sonuçlar)
+- [Model Karşılaştırması](#model-karşılaştırması)
+- [OCR Benchmark](#ocr-benchmark)
+  - [Alan kurtarma karşılaştırması](#alan-kurtarma-karşılaştırması)
+  - [Gecikme / doğruluk konumlandırması](#gecikme-doğruluk-konumlandırması)
+- [LLM Judge ve İnsan Değerlendirmesi](#llm-judge-ve-insan-değerlendirmesi)
+- [Red Team Sonuçları](#red-team-sonuçları)
+- [Performans](#performans)
+- [Testler](#testler)
+- [Backend](#backend)
+- [Frontend](#frontend)
+- [CI](#ci)
+- [Veri Setleri](#veri-setleri)
+- [Teknoloji Yığını](#teknoloji-yığını)
+- [Monitoring](#monitoring)
+  - [Prometheus](#prometheus)
+  - [Grafana](#grafana)
+  - [Langfuse](#langfuse)
+  - [Jaeger + OpenTelemetry](#jaeger-opentelemetry)
+- [Hızlı Başlangıç](#hızlı-başlangıç)
+- [Gereksinimler](#gereksinimler)
+  - [1. Repoyu klonlayın](#1-repoyu-klonlayın)
+  - [2. Ortam değişkenlerini oluşturun](#2-ortam-değişkenlerini-oluşturun)
+  - [3. Veritabanını ve backend'i hazırlayın](#3-veritabanını-ve-backendi-hazırlayın)
+  - [4. Diğer servisleri başlatın](#4-diğer-servisleri-başlatın)
+  - [Yararlı komutlar](#yararlı-komutlar)
+- [Ortam Değişkenleri](#ortam-değişkenleri)
+- [Dağıtım](#dağıtım)
+  - [Docker Compose](#docker-compose)
+  - [Kubernetes](#kubernetes)
+- [Proje Yapısı](#proje-yapısı)
+- [Daha Fazla Dokümantasyon](#daha-fazla-dokümantasyon)
+- [Lisans](#lisans)
+
+</details>
+
+---
+
 ## KACHOW nedir?
 
 Kamu kurumlarında bir evrakın işlenmesi yalnızca metni okumaktan ibaret değildir. Evrakın türünün belirlenmesi, gerekli bilgilerin kontrol edilmesi, ilgili mevzuatın bulunması, resmî cevap hazırlanması, uygun birime yönlendirilmesi ve imza öncesinde doğrulanması gerekir.
@@ -858,6 +930,7 @@ CI şu anda `workflow_dispatch` ile GitHub Actions üzerinden manuel tetiklenir.
 `datasets/resmi_yazisma/` — Türkçe resmî yazışma korpusu, 1.763 belge. [HuggingFace'te yayında](https://huggingface.co/datasets/Ygthn/Teknofest_2026_KACHOW).
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"pie1": "#3B82F6", "pie2": "#8B5CF6", "pie3": "#10B981", "pie4": "#D97706", "pie5": "#EF4444", "pieOuterStrokeWidth": "2px", "pieStrokeColor": "#6B7280", "pieOpacity": 1, "pieSectionTextColor": "#FFFFFF", "pieSectionTextSize": "15px", "pieTitleTextColor": "#8B98A5", "pieLegendTextColor": "#8B98A5"}}}%%
 pie showData
     title Kategori Dağılımı
     "Diğer resmî yazışma" : 531
