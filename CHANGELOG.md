@@ -3,6 +3,19 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Değiştirildi
+- **Belge analizinde LOCAL_MODE=false için hızlı-katman-önce cascade.**
+  `analyze_node` artık Evren/cloud modunda (LOCAL_MODE=false) önce `llm-fast`
+  katmanını deniyor, sonucu kendi belge türü için zorunlu bir alanı eksik
+  bırakırsa `llm-large`'a yükseliyor (`_extract_with_gap_fill_cascade`) --
+  bugüne kadarki, yalnızca *exception*'da yükselen ve hep kalite katmanıyla
+  başlayan merdivenin yerine. 12 belgelik örnek korpus üzerinde ölçüldü
+  (`scripts/evaluate_analysis_cascade.py`, iki bağımsız koşu): doğrulukta
+  hiçbir kayıp yok (recall aynı, document_type doğruluğu 11/12 → 12/12),
+  hızda ölçülebilir bir bedel yok (%67 belgede yükseltme gerekti, kalan
+  %33'te tek başına yeterliydi). Ollama (LOCAL_MODE=true) davranışı
+  değişmedi.
+
 ### Düzeltildi
 - **Belge grafiğinde `KeyError` çökmesi.** `knowledge_graph.py`'deki
   `ensure_entity`/`ensure_konu`, `resolve_entities()`'in bilinçli olarak
