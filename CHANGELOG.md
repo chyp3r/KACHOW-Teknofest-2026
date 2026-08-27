@@ -9,6 +9,34 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Mevzuat MCP gecikme ve alma değerlendirme betikleri (`measure_mevzuat_mcp_latency.py`, `evaluate_mevzuat_retrieval.py`).
 - Mevzuat MCP dağıtımı için Kubernetes yapılandırmaları ve üretim ortamı Docker tanımları.
 
+## [3.56]
+### Düzeltildi
+- **DB bağlantı havuzu tükenmesi kaynaklı çökme (#288).** Belirli bir yükten
+  sonra uygulama tamamen yanıt veremez hale geliyordu: frontend'de sayfalar
+  sonsuz dönüyor, belge listesi boş görünüyordu. Kök neden veri kaybı değil,
+  saf kaynak tükenmesiydi:
+  - `create_async_engine` havuz ayarları olmadan çağrılıyordu → SQLAlchemy
+    varsayılanı yalnızca 5 + 10 = 15 bağlantı. Artık ayarlanabilir
+    (`settings.DB_POOL_SIZE`/`DB_MAX_OVERFLOW`/`DB_POOL_TIMEOUT`/
+    `DB_POOL_RECYCLE_SECONDS`; varsayılan 20 + 20).
+  - `get_db` bir `yield`-bağımlılığı olduğu için tuttuğu bağlantı yalnızca
+    HTTP yanıtı tümüyle gönderildikten sonra iade ediliyordu. `POST
+    /chat/stream`, `POST /chat/message` ve auth (`get_current_user`), tüm
+    LangGraph çalışması (dakikalarca, çok sayıda LLM çağrısı) boyunca bir
+    bağlantıyı `idle in transaction` tutuyordu. `get_current_user` artık
+    `Depends(get_db)` yerine kısa ömürlü `request_tenant_session()`
+    kullanıyor; sohbet uçları preflight DB işini (evrak erişimi + revizyon
+    taslağı çözümü) akış/uzun-iş başlamadan biten bir oturumda yapıyor.
+  - Postgres tarafı emniyet ağı: uygulamanın çalışma zamanı bağlantısına
+    `idle_in_transaction_session_timeout` (varsayılan 60 sn) uygulanıyor --
+    bir bağlantı sızıntısı 30 dakika yerine ~1 dakikada kendini toparlıyor.
+
+### Eklendi
+- DB bağlantı havuzunun doygunluğu artık gözlemlenebilir: `settings.
+  DB_POOL_MONITOR_INTERVAL_SECONDS` (varsayılan 30 sn) aralığıyla periyodik
+  loglanıyor (kullanılan oran %80'i geçince WARNING), ve `GET
+  /health?deep=true` yanıtına `db_pool` alanı eklendi.
+
 ## [3.55]
 ### Eklendi
 - `docs/diagrams/` altında sistemin tamamını (backend + frontend) kapsayan 8
