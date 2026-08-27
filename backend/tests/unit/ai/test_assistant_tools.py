@@ -756,7 +756,7 @@ async def test_an_answer_with_zero_searches_is_not_accepted_and_the_model_is_nud
     assert handler.await_count == 1
     last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
     assert any(
-        msg.get("role") == "system" and msg.get("content") == _NO_RETRIEVAL_NUDGE
+        msg.get("role") == "user" and msg.get("content") == _NO_RETRIEVAL_NUDGE
         for msg in last_messages
     )
     # The rejected text must not survive in context -- keeping it let the
@@ -804,7 +804,7 @@ async def test_a_search_plan_never_reaches_the_user_as_the_final_answer(fake_llm
     assert "kontrol edelim" not in answer
     last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
     assert any(
-        msg.get("role") == "system" and msg.get("content") == _NARRATION_NUDGE
+        msg.get("role") == "user" and msg.get("content") == _NARRATION_NUDGE
         for msg in last_messages
     )
 
@@ -847,7 +847,7 @@ async def test_a_giveup_reply_with_a_document_is_not_accepted_and_the_model_is_n
     # The corrective nudge reached the model as a user message.
     last_messages = fake_llm.generate_with_tools_calls[-1]["messages"]
     assert any(
-        msg.get("role") == "system" and msg.get("content") == _GIVEUP_RETRY_NUDGE
+        msg.get("role") == "user" and msg.get("content") == _GIVEUP_RETRY_NUDGE
         for msg in last_messages
     )
 
@@ -874,6 +874,51 @@ async def test_a_giveup_reply_without_a_document_is_accepted_immediately(fake_ll
 
     assert "".join(chunks) == "Bu konuda bilgi bulamadım."
     assert len(fake_llm.generate_with_tools_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_no_nudge_ever_sends_a_system_turn_mid_conversation(fake_llm):
+    """Regression: the nudges were first injected with role="system", which
+    Evren's vLLM rejects outright --
+
+        400 ... "System message must be at the beginning"
+
+    -- failing the whole turn with "Yanıt üretilemedi". It also violated
+    BaseAgent._prepare_messages' own contract (exactly one system turn, at
+    index 0, owned by the agent). Every provider call this loop makes must
+    carry a system message only as its first message."""
+    handler = AsyncMock(return_value="sonuç")
+    tool = ToolSpec(
+        name="search_document", description="test", args_schema=_NoArgs, handler=handler
+    )
+    # Drive every nudge branch in one run: a bare answer with no search, then
+    # a search plan, then a premature give-up.
+    fake_llm.generate_with_tools_side_effect = [
+        ToolCallResponse(content="Evrak bir izin talebidir.", tool_calls=[]),
+        ToolCallResponse(
+            content="",
+            tool_calls=[{"id": "c1", "name": "search_document", "args": {}}],
+        ),
+        ToolCallResponse(content="Şimdi de diğer sayfalara bakalım:", tool_calls=[]),
+        ToolCallResponse(content="Bu bilgiye ulaşamadım.", tool_calls=[]),
+        ToolCallResponse(content="Belgede 15 gün yazıyor [s. 2].", tool_calls=[]),
+    ]
+    fake_llm.stream_chunks = ["yedek"]
+    agent = AssistantAgent(fake_llm)
+
+    _ = [
+        chunk
+        async for chunk in agent.run_stream(
+            query="soru", history=[], tools=[tool], require_retrieval=True
+        )
+    ]
+
+    sent = fake_llm.generate_with_tools_calls + fake_llm.stream_calls
+    assert len(sent) > 1, "expected the nudge branches to actually run"
+    for call in sent:
+        roles = [msg.get("role") for msg in call["messages"]]
+        assert roles[0] == "system"
+        assert "system" not in roles[1:], f"mid-conversation system turn: {roles}"
 
 
 @pytest.mark.asyncio

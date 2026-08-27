@@ -43,13 +43,28 @@ def _max_tool_turns() -> int:
     return MAX_TOOL_TURNS_LOCAL if settings.LOCAL_MODE else MAX_TOOL_TURNS_EVREN
 
 
-#: Düzeltme mesajlarının rolü. **user değil.** İlk sürümde bunlar bir
-#: ``user`` turu olarak enjekte ediliyordu ve model onları kullanıcının
-#: gerçek isteği sanıp konuşma diliyle cevaplıyordu -- "Şimdi de 'Hacettepe'
-#: kelimesiyle birlikte ... geçişleri kontrol edelim:" gibi bir arama planı
-#: yazıyor, o plan da nihai yanıt olarak kullanıcıya gidiyordu. Bir sistem
-#: turu, cevaplanacak bir mesaj değil uyulacak bir yönerge olarak okunur.
-_NUDGE_ROLE = "system"
+#: Düzeltme mesajlarının rolü. ``system`` OLAMAZ, iki bağımsız sebeple:
+#:
+#: 1. Evren'in vLLM sunucusu konuşmanın ortasındaki bir sistem turunu 400 ile
+#:    reddeder ("System message must be at the beginning") -- turun tamamı
+#:    "Yanıt üretilemedi" ile düşer.
+#: 2. ``BaseAgent._prepare_messages`` zaten tam olarak bir sistem mesajı
+#:    garanti eder ve çağıranın gönderdiği sistem turlarını atar: o slot
+#:    ajanın kendisine aittir.
+#:
+#: Dolayısıyla bir ``user`` turu, ama içeriği :data:`_NUDGE_PREFIX` ile
+#: kullanıcıdan gelmediğini söyleyerek başlar -- bu işaret olmadan model
+#: düzeltmeyi kullanıcının gerçek isteği sanıp konuşma diliyle cevaplıyor,
+#: yani "Şimdi de ... kontrol edelim:" gibi bir arama planı yazıyordu. Plan
+#: metninin kullanıcıya ulaşmasına karşı asıl koruma yine de rol değil,
+#: aşağıdaki :data:`_NARRATION_PATTERN`'dir.
+_NUDGE_ROLE = "user"
+
+#: Her düzeltme mesajının başına konan, mesajın kaynağını açıklayan işaret.
+_NUDGE_PREFIX = (
+    "[SİSTEM UYARISI -- bu mesaj kullanıcıdan gelmedi ve kullanıcıya "
+    "gösterilmeyecek] "
+)
 
 #: Hiç araç çağırmadan cevap yazmaya çalışan modele verilen düzeltme.
 #:
@@ -63,7 +78,8 @@ _NUDGE_ROLE = "system"
 #: sistemde neler yapabilirim", "az önce ne sordum") da bu düzeltmeyi görür ve
 #: bu izin olmadan model onları da evrakta aramaya çalışırdı.
 _NO_RETRIEVAL_NUDGE = (
-    "[SİSTEM] Yazmak üzere olduğun yanıt iptal edildi ve kullanıcıya "
+    _NUDGE_PREFIX
+    + "Yazmak üzere olduğun yanıt iptal edildi ve kullanıcıya "
     "gösterilmedi: yüklü evrakta hiç arama yapmadan yazılmıştı. Sistem "
     "yönergesindeki özet bir cevap kaynağı değildir. Soruya en uygun arama "
     "aracını şimdi çağır ve cevabı evraktan getir. Araç çağrısının yanına "
@@ -80,7 +96,8 @@ _NO_RETRIEVAL_NUDGE = (
 #: adımını anlatan bir metin döndürüyor, hiç araç çağrısı olmadığı için döngü
 #: bunu nihai yanıt sanıp kullanıcıya gönderiyordu.
 _NARRATION_NUDGE = (
-    "[SİSTEM] Bu metin kullanıcıya gösterilmedi. Sıradaki adımını anlatan "
+    _NUDGE_PREFIX
+    + "Bu metin kullanıcıya gösterilmedi. Sıradaki adımını anlatan "
     "cümleler ('şimdi şunu kontrol edelim', 'şu terimleri arayalım', 'bir de "
     "buna bakalım') kullanıcıya gitmez. İki seçeneğin var: aramayı yapacaksan "
     "ilgili aracı yanına hiçbir açıklama yazmadan doğrudan çağır; arama "
@@ -109,7 +126,8 @@ def _looks_like_narration(text: Optional[str]) -> bool:
 #: Düzeltme verilmiş bir turda, nihai yanıtı üreten son ``stream()`` çağrısına
 #: eklenen kapanış yönergesi (bkz. ``run_stream``).
 _FINAL_ANSWER_INSTRUCTION = (
-    "[SİSTEM] Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: "
+    _NUDGE_PREFIX
+    + "Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: "
     "bulduğun cevabı (varsa sayfa atfıyla) ya da tek cümlelik 'yüklü evrakta "
     "bu bilgiye ulaşılamadı' ifadesini. Hangi aramaları yaptığını, hangi "
     "terimleri denediğini veya sırada ne yapacağını ANLATMA; kullanıcı arama "
@@ -154,7 +172,8 @@ _GIVEUP_PATTERN = re.compile(
 #: "Bulamadım"la turu erken kapatan modele, denemediği yolları hatırlatan ve
 #: en az bir arama aracı daha çağırmasını isteyen düzeltme mesajı.
 _GIVEUP_RETRY_NUDGE = (
-    "[SİSTEM] Yazmak üzere olduğun 'bulunamadı' yanıtı iptal edildi ve "
+    _NUDGE_PREFIX
+    + "Yazmak üzere olduğun 'bulunamadı' yanıtı iptal edildi ve "
     "kullanıcıya gösterilmedi: erişim bütçen dolmadan pes ettin. Henüz "
     "denemediğin bir arama yolunu şimdi dene -- farklı ifadelerle anlamsal "
     "arama, farklı metin kalıpları, üst veri/özet, sayfa dökümü veya ilgili "
