@@ -1,12 +1,12 @@
+import { Loader2, Minimize2 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { ContextUsage } from "../../types/chat";
 
-// Claude'un bağlam göstergesi gibi: modelin bağlam penceresinin ne kadarının
-// ne için dolu olduğunu gösteren küçük bir halka. Veri backend'den gelir
-// (final_result.details.context_usage -> planning_graph._run_assist); yalnızca
-// assist turları üretir, o yüzden `usage` null iken bileşen hiç render olmaz.
-// Değer her tur değiştiğinde halka ve yüzde animasyonlu şekilde yükselir/iner:
-// yaylar CSS geçişiyle, ortadaki yüzde bir rAF tween'iyle.
+// Claude'un çalışma modu altındaki bağlam göstergesi gibi: sadece küçük bir
+// halka. Tıklanınca kırılımı + "Bağlamı sıkıştır" düğmesini taşıyan dar bir
+// popup açılır. Veri backend'den gelir (details.context_usage ->
+// planning_graph._run_assist / ChatService.compact_session). Değer değişince
+// halka ve yüzde animasyonlu yükselir/iner.
 
 const SEGMENT_COLORS: Record<string, string> = {
   system: "var(--accent-blue)",
@@ -58,18 +58,43 @@ function useTweenedNumber(target: number): number {
   return value;
 }
 
-export function ContextUsageRing({ usage }: { usage: ContextUsage | null | undefined }) {
+export function ContextUsageRing({
+  usage,
+  onCompact,
+  compacting = false,
+}: {
+  usage: ContextUsage | null | undefined;
+  onCompact?: () => void | Promise<void>;
+  compacting?: boolean;
+}) {
   const titleId = useId();
   const total = usage && usage.total > 0 ? usage.total : 1;
   const targetPercent = usage ? Math.min(100, (usage.used / total) * 100) : 0;
   const animatedPercent = useTweenedNumber(targetPercent);
 
-  // İlk görünüşte yaylar boştan gerçek uzunluğa doğru çizilsin.
   const [drawn, setDrawn] = useState(false);
   useEffect(() => {
     const id = requestAnimationFrame(() => setDrawn(true));
     return () => cancelAnimationFrame(id);
   }, []);
+
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
 
   if (!usage || usage.total <= 0) return null;
 
@@ -98,71 +123,99 @@ export function ContextUsageRing({ usage }: { usage: ContextUsage | null | undef
     return arc;
   });
 
+  const ring = (
+    <svg
+      className="context-usage-ring"
+      width="30"
+      height="30"
+      viewBox="0 0 36 36"
+      role="img"
+      aria-labelledby={titleId}
+    >
+      <title id={titleId}>Bağlam penceresi %{shownPercent} dolu</title>
+      <circle
+        cx="18"
+        cy="18"
+        r={RADIUS}
+        fill="none"
+        stroke="var(--border-default)"
+        strokeWidth={STROKE}
+      />
+      <g transform="rotate(-90 18 18)">{arcs}</g>
+      <text x="18" y="18" className="context-usage-percent" fontSize="10" fontWeight="600">
+        {shownPercent}
+      </text>
+    </svg>
+  );
+
   return (
-    <details className="context-usage">
-      <summary aria-label={`Bağlam penceresi: %${shownPercent} dolu`}>
-        <svg
-          className="context-usage-ring"
-          width="36"
-          height="36"
-          viewBox="0 0 36 36"
-          role="img"
-          aria-labelledby={titleId}
-        >
-          <title id={titleId}>Bağlam penceresi %{shownPercent} dolu</title>
-          <circle
-            cx="18"
-            cy="18"
-            r={RADIUS}
-            fill="none"
-            stroke="var(--border-default)"
-            strokeWidth={STROKE}
-          />
-          <g transform="rotate(-90 18 18)">{arcs}</g>
-          <text
-            x="18"
-            y="18"
-            className="context-usage-percent"
-            fontSize="9"
-            fontWeight="600"
-          >
-            %{shownPercent}
-          </text>
-        </svg>
-        <span className="context-usage-caption">
-          Bağlam · {usage.used.toLocaleString("tr-TR")} / {usage.total.toLocaleString("tr-TR")} token
-        </span>
-      </summary>
-      <div className="context-usage-breakdown">
-        <ul>
-          {visible.map((segment) => (
-            <li key={segment.key}>
+    <div className="context-usage" ref={rootRef}>
+      <button
+        type="button"
+        className="context-usage-trigger"
+        aria-label={`Bağlam penceresi: %${shownPercent} dolu`}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => setOpen((value) => !value)}
+      >
+        {ring}
+      </button>
+
+      {open && (
+        <div className="context-usage-popover" role="dialog" aria-label="Bağlam penceresi kullanımı">
+          <header>
+            <strong>Bağlam penceresi</strong>
+            <span>
+              %{shownPercent} · {usage.used.toLocaleString("tr-TR")} /{" "}
+              {usage.total.toLocaleString("tr-TR")} token
+            </span>
+          </header>
+          <ul>
+            {visible.map((segment) => (
+              <li key={segment.key}>
+                <span
+                  className="context-usage-swatch"
+                  style={{ background: SEGMENT_COLORS[segment.key] ?? "var(--accent-blue)" }}
+                  aria-hidden="true"
+                />
+                <span className="context-usage-label">{segment.label}</span>
+                <span className="context-usage-value">
+                  %{Math.round((segment.tokens / usage.total) * 100)}
+                </span>
+              </li>
+            ))}
+            <li>
               <span
                 className="context-usage-swatch"
-                style={{ background: SEGMENT_COLORS[segment.key] ?? "var(--accent-blue)" }}
+                style={{ background: "var(--border-default)" }}
                 aria-hidden="true"
               />
-              <span className="context-usage-label">{segment.label}</span>
+              <span className="context-usage-label">Boş</span>
               <span className="context-usage-value">
-                {segment.tokens.toLocaleString("tr-TR")} token ·{" "}
-                %{Math.round((segment.tokens / usage.total) * 100)}
+                %{Math.round((usage.free / usage.total) * 100)}
               </span>
             </li>
-          ))}
-          <li>
-            <span
-              className="context-usage-swatch"
-              style={{ background: "var(--border-default)" }}
-              aria-hidden="true"
-            />
-            <span className="context-usage-label">Boş</span>
-            <span className="context-usage-value">
-              {usage.free.toLocaleString("tr-TR")} token ·{" "}
-              %{Math.round((usage.free / usage.total) * 100)}
-            </span>
-          </li>
-        </ul>
-      </div>
-    </details>
+          </ul>
+          {onCompact && (
+            <button
+              type="button"
+              className="context-usage-compact"
+              disabled={compacting}
+              onClick={() => {
+                void onCompact();
+                setOpen(false);
+              }}
+            >
+              {compacting ? (
+                <Loader2 size={13} className="context-usage-spinner" />
+              ) : (
+                <Minimize2 size={13} />
+              )}
+              {compacting ? "Sıkıştırılıyor…" : "Bağlamı sıkıştır"}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

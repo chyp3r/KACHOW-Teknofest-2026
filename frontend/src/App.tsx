@@ -144,6 +144,9 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       messages={chat.messages}
       streamingText={chat.streamingText}
       loading={chat.loading}
+      compacting={chat.compacting}
+      contextUsage={chat.contextUsage}
+      onCompact={chat.compact}
       guardrailEvents={chat.guardrailEvents}
       interrupt={chat.pendingInterrupt}
       workflowOpen={workflowOpen}

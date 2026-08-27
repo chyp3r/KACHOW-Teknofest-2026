@@ -417,12 +417,11 @@
 }
 .chat-composer:focus-within > small { max-height: 24px; margin-top: var(--space-2); opacity: 1; }
 
-/* Bağlam penceresi doluluk göstergesi (ContextUsageRing) -- composer'ın
-   hemen üstünde, Claude'un context göstergesiyle aynı yerde. */
-.composer-context-usage { width: min(100%, 860px); margin: 0 auto var(--space-2); padding: 0 var(--space-3); }
-.context-usage { color: var(--text-secondary); }
-.context-usage > summary { display: inline-flex; align-items: center; gap: var(--space-2); list-style: none; cursor: pointer; }
-.context-usage > summary::-webkit-details-marker { display: none; }
+/* Bağlam penceresi göstergesi (ContextUsageRing) -- çalışma modunun altında,
+   Claude'daki gibi. Sadece bir halka; tıklanınca dar bir popup açılır. */
+.composer-mode-stack { display: grid; justify-items: end; gap: var(--space-1); margin-left: auto; }
+.context-usage { position: relative; display: inline-flex; }
+.context-usage-trigger { display: inline-flex; padding: 0; border: 0; background: none; cursor: pointer; color: var(--text-secondary); }
 .context-usage-ring { flex: 0 0 auto; animation: context-usage-in .28s ease both; }
 /* Yaylar veri her tur değişince yükselip/inerken yumuşak geçsin. */
 .context-usage-arc { transition: stroke-dasharray .6s cubic-bezier(.4, 0, .2, 1), stroke-dashoffset .6s cubic-bezier(.4, 0, .2, 1); }
@@ -432,13 +431,42 @@
   .context-usage-arc { transition: none; }
 }
 .context-usage-percent { text-anchor: middle; dominant-baseline: central; fill: var(--text-secondary); }
-.context-usage-caption { white-space: nowrap; }
-.context-usage-breakdown { margin-top: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-secondary); }
-.context-usage-breakdown ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
-.context-usage-breakdown li { display: flex; align-items: center; gap: var(--space-2); }
+.context-usage-popover {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + var(--space-2));
+  z-index: 30;
+  width: max-content;
+  max-width: min(15rem, 78vw);
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md, 0 8px 24px rgb(0 0 0 / 18%));
+}
+.context-usage-popover header { display: grid; gap: 2px; margin-bottom: var(--space-2); }
+.context-usage-popover header span { color: var(--text-muted); }
+.context-usage-popover ul { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.context-usage-popover li { display: flex; align-items: center; gap: var(--space-2); }
 .context-usage-swatch { width: 10px; height: 10px; border-radius: var(--radius-sm); flex: 0 0 auto; }
-.context-usage-label { flex: 1 1 auto; }
+.context-usage-label { flex: 1 1 auto; color: var(--text-secondary); }
 .context-usage-value { color: var(--text-muted); white-space: nowrap; }
+.context-usage-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  margin-top: var(--space-3);
+  padding: var(--space-2);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: transparent;
+  cursor: pointer;
+}
+.context-usage-compact:hover:not(:disabled) { border-color: var(--border-glass-focus); background: var(--surface-hover); }
+.context-usage-compact:disabled { opacity: .6; cursor: default; }
+.context-usage-spinner { animation: thinking-bubble-spin .9s linear infinite; }
 .attach-document-button {
   display: inline-flex;
   align-items: center;

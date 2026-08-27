@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { ContextUsageRing } from "./ContextUsageRing";
 import type { ContextUsage } from "../../types/chat";
 
@@ -21,21 +21,32 @@ describe("ContextUsageRing", () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("shows the used percentage and the token caption", async () => {
+  it("exposes the used percentage on the trigger and stays collapsed by default", async () => {
     render(<ContextUsageRing usage={usage} />);
-    // Yüzde 0'dan hedefe doğru animasyonla sayar; nihai değeri bekle.
-    expect(await screen.findByText("%50")).toBeInTheDocument();
-    expect(
-      screen.getByText(/4\.096 \/ 8\.192 token/),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /%50 dolu/ })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("lists only non-zero segments plus the free remainder in the breakdown", () => {
-    render(<ContextUsageRing usage={usage} />);
+  it("opens a popup with the breakdown and a compact button on click", () => {
+    const onCompact = vi.fn();
+    render(<ContextUsageRing usage={usage} onCompact={onCompact} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Bağlam penceresi/ }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
     expect(screen.getByText("Sistem yönergesi")).toBeInTheDocument();
-    expect(screen.getByText("Sohbet geçmişi")).toBeInTheDocument();
     expect(screen.getByText("Boş")).toBeInTheDocument();
-    // "Güncel mesaj" has 0 tokens -> hidden
-    expect(screen.queryByText("Güncel mesaj")).not.toBeInTheDocument();
+    expect(screen.queryByText("Güncel mesaj")).not.toBeInTheDocument(); // 0 token -> gizli
+    expect(screen.getByText(/4\.096 \/ 8\.192 token/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Bağlamı sıkıştır" }));
+    expect(onCompact).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a locked label while compacting", () => {
+    render(<ContextUsageRing usage={usage} onCompact={vi.fn()} compacting />);
+    fireEvent.click(screen.getByRole("button", { name: /Bağlam penceresi/ }));
+    expect(screen.getByRole("button", { name: /Sıkıştırılıyor/ })).toBeDisabled();
   });
 });
