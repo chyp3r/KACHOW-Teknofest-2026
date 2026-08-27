@@ -12,6 +12,15 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   alanları yakalamıyor (yalnızca PER/ORG/LOC) -- bu yüzden gecikme/maliyet
   düşürmek için değil, yalnızca şema sadeleştirmek isteniyorsa değerli olabilir.
 
+### Düzeltildi
+- **`scripts/evaluate_extraction.py`'nin bozuk import'u.** Silinmiş
+  `app.ai.agents.metadata.MetadataAgent`'ı import ettiği için
+  `ModuleNotFoundError` ile çöküyordu (commit `11823e8b` sonrası
+  güncellenmemiş kalmıştı). `ClassifierAgent` + `DocumentAnalysisOutput`'a
+  taşındı -- `analyze_node`'un bugün kullandığı aynı birleşik
+  sınıflandırma+alan-çıkarımı çağrısı. Doğrulandı: script artık uçtan uca
+  çalışıyor (`datasets/sample` üzerinde %88.1 toplam doğruluk).
+
 ### Değiştirildi
 - **Belge analizinde LOCAL_MODE=false için hızlı-katman-önce cascade.**
   `analyze_node` artık Evren/cloud modunda (LOCAL_MODE=false) önce `llm-fast`
