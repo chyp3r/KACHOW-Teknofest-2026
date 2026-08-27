@@ -7281,6 +7281,53 @@
         ]
       }
     },
+    "/api/v1/documents/{storage_path}/detailed-analysis": {
+      "post": {
+        "description": "Vision OCR ile yeniden çıkarır ve tüm analizi (tür, özet, tüm\nalanlar, uyum, mevzuat atıfları) baştan yeniden çalıştırır.\n\nTalep üzerine: vision OCR artık varsayılan yükleme yolunun bir\nparçası değil (bkz. ``get_document_extractor``'ın kendi docstring'i --\notomatik onarım tetiklendiğinde tek bir yükleme ~14sn'den ~34sn'ye\nçıkıyordu). ``/re-extract``'in aksine (yalnızca metni deterministik\nolarak yeniden türetir, model çağrısı yok) bu, ``/analyze``'ın\nürettiği her şeyi yeniden üretir -- bu yüzden hem daha pahalı hem de\naynı sıkılıkta hız sınırlı (2/60sn).\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Üretmeden önce kontrol edilen sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``GET /documents/{storage_path}`` ile aynı biçimde, baştan\n    yeniden üretilmiş tam analiz.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.\n    AIException: Vision OCR cascade'i veya analiz iş akışı zaman\n        aşımına uğrarsa ya da başarısız olursa 502 (bkz.\n        ``DocumentService.generate_detailed_analysis``'in kendi\n        docstring'i).",
+        "operationId": "generate_detailed_analysis_api_v1_documents__storage_path__detailed_analysis_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "storage_path",
+            "required": true,
+            "schema": {
+              "title": "Storage Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Generate Detailed Analysis",
+        "tags": [
+          "documents",
+          "documents"
+        ]
+      }
+    },
     "/api/v1/documents/{storage_path}/detailed-summary": {
       "post": {
         "description": "Bir evrakın ayrıntılı özetini oluşturur (veya zaten oluşturulmuşsa döndürür).\n\nTalep üzerine: `POST /documents/analyze`'ın zaten döndürdüğü kısa\n``summary`` çoğu evrak için yeterlidir, ve ayrıntılı olanı oluşturmak\nmaliyetlidir -- doğrudan ölçülmüştür, gerçek evraklarda 184-288sn,\nbirkaç ardışık LLM çağrısı (bkz. ``app.ai.summarization``'ın modül\ndocstring'i). Bu yüzden istekli analizin bir parçası yerine kendi başına\nbir uç noktadır: bir kullanıcı bu maliyeti yalnızca sonucu gerçekten\nistediğinde öder, her yüklemede değil.\n\nİdempotent: ayrıntılı özeti zaten önbelleğe alınmış bir evrak, model\nçağrısı olmadan onu hemen döndürür. Tam olarak modele ulaşan her\nçağrının bu kadar pahalı olması nedeniyle\n``POST /documents/analyze``'den (5/60sn ve 10/60sn) daha sıkı hız\nsınırlıdır.\n\nArgs:\n    storage_path: Evrakın depo anahtarı.\n    service: Enjekte edilmiş evrak analiz servisi.\n    document_repository: Üretmeden önce kontrol edilen sahiplik kaydı.\n    current_user: Kimliği doğrulanmış çağıran.\n\nReturns:\n    ``detailed_summary`` doldurulmuş tam analiz, ``GET\n    /documents/{storage_path}`` ile aynı biçimde.\n\nRaises:\n    HTTPException: storage_path bozuksa 400, onun için önbelleğe\n        alınmış bir analiz yoksa 404.\n    AuthorizationException: Evrak farklı bir şirkete veya kullanıcıya\n        aitse, veya isteği yapanın yetkisi evrakın gizlilik seviyesini\n        karşılamıyorsa 403.\n    AIException: Özeti oluşturmak zaman aşımına uğrarsa veya alttaki\n        sağlayıcı çağrısı başarısız olursa 502 (bunun neden sessizce\n        bozulmak yerine hata fırlattığı için bkz.\n        ``DocumentService.generate_detailed_summary``'nin kendi\n        docstring'i).",

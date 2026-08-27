@@ -178,6 +178,20 @@ class Settings(BaseSettings):
     #: kesilmez.
     DETAILED_SUMMARY_TIMEOUT_SECONDS: float = 400.0
 
+    #: DocumentService.generate_detailed_analysis'in talep üzerine vision
+    #: OCR cascade'i (llm-fast, kalite yetersizse llm-large'a bir kez
+    #: yükselir) üzerindeki tavan -- yalnızca bu çıkarma adımını kapsar,
+    #: ardından çalışan tam analiz grafiğinin kendi AI_WORKFLOW_TIMEOUT_SECONDS
+    #: tavanı zaten var (bkz. _run_analysis). Vision OCR artık varsayılan
+    #: yükleme yolunda değil (bkz. get_document_extractor), bu yüzden bu
+    #: endpoint EXTRACTION_TIMEOUT_SECONDS'ın orijinal olarak sınırladığı
+    #: aynı türde bir maliyeti (tam sayfa vision transkripsiyonu) talep
+    #: üzerine geri getiriyor -- aynı 300s tavanı, kademe iki katman
+    #: içerse bile korunuyor: llm-fast her zaman önce denenir ve genelde
+    #: tek başına yeterlidir, llm-large yalnızca sayfa kalite eşiğini
+    #: geçemediğinde çalışır.
+    DETAILED_ANALYSIS_TIMEOUT_SECONDS: float = 300.0
+
     #: Çoklu-kiracılık çalışmasından itibaren zorunlu: her router'a giden
     #: her istek bir JWT bearer token gerektirir, ve sistemdeki her satır
     #: artık bir `company_id` taşır -- bir isteğin düşebileceği bir

@@ -1,13 +1,11 @@
 {
   "id": "evrak_10",
-  "note": "Tutanak; imza sahibi eksik.",
+  "note": "Tutanak; imza artık zorunlu bir alan değil, bu yüzden tam (kontrol örneği).",
   "document_type": "minutes",
   "scanned": false,
   "expected_fields": {
     "tarih": "22.04.2026",
     "konu": "Depo Sayım Tespiti"
   },
-  "expected_missing_fields": [
-    "imza_sahibi"
-  ]
+  "expected_missing_fields": []
 }

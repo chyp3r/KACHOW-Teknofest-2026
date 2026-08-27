@@ -1,12 +1,10 @@
 from typing import Optional
 
-from app.ai.compliance import count_header_fields, has_signature
-from app.core.config import settings
+from app.ai.compliance import count_header_fields
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
     ExtractedDocument,
-    is_scanned_text_layer,
 )
 from app.infrastructure.extractors.fallback import FallbackDocumentExtractor
 from app.infrastructure.extractors.open_data_loader import OpenDataLoaderExtractor
@@ -19,47 +17,36 @@ _document_extractor: Optional[BaseDocumentExtractor] = None
 
 
 def get_document_extractor() -> BaseDocumentExtractor:
-    """Return the shared extraction chain, building it on first use.
+    """Return the shared, OCR-only (no network vision call) extraction chain,
+    building it on first use.
 
     Order matters: already-textual uploads are decoded directly, born-digital PDFs
     go to the layout-aware OpenDataLoader parser, PDFium covers the case where no
-    Java runtime is available, and OCR is the last resort for scanned pages.
+    Java runtime is available, and Tesseract (a local binary, no network call) is
+    the last resort for scanned pages.
+
+    Deliberately excludes any vision-model repair/escalation (`header_repair`,
+    `scan_text_layer_probe`, `signature_probe` are all `None`) -- those were
+    measured to push a single upload from ~14s to ~34s by unconditionally
+    triggering a full-page vision transcription call
+    (`FallbackDocumentExtractor._maybe_repair_page_one`) whenever a document
+    looked like a scan-with-junk-text-layer or had no detectable signature.
+    Vision OCR is now opt-in only, via `DocumentService.generate_detailed_analysis`
+    (see that method and its `/detailed-analysis` endpoint), which builds its
+    own on-demand vision client rather than going through this chain.
 
     Returns:
         The process-wide `FallbackDocumentExtractor`.
     """
     global _document_extractor
     if _document_extractor is None:
-        # Shared with `header_repair` below -- the same model/config repairs a
-        # scan's header band regardless of whether it was ever tried as a
-        # full-page extractor in its own right in this chain. Evren's `vlm`
-        # is video-only, so the online mode routes OCR through EvrenVisionExtractor
-        # (llm-fast, multimodal chat) instead -- see that class's docstring.
-        vision_extractor = (
-            OllamaVisionExtractor() if settings.LOCAL_MODE else EvrenVisionExtractor()
-        )
-        # Online mode swaps only the OCR step: TesseractExtractor (a local
-        # binary) is replaced by the vision model (EvrenVisionExtractor,
-        # llm-fast) as the chain's OCR fallback -- PlainText/OpenDataLoader/
-        # Pdfium stay in the chain unchanged either way, since born-digital
-        # text extraction has nothing to do with which OCR provider is
-        # configured.
-        ocr_step = vision_extractor if not settings.LOCAL_MODE else TesseractExtractor()
-        extractors = [
-            PlainTextExtractor(),
-            OpenDataLoaderExtractor(),
-            PdfiumExtractor(),
-            ocr_step,
-        ]
-        if settings.LOCAL_MODE:
-            # Last resort: far slower than Tesseract but the only thing that
-            # survives a degraded photocopy or phone photo. Online mode has
-            # no separate escalation step here -- the vision model already
-            # ran as ocr_step above.
-            extractors.append(vision_extractor)
         _document_extractor = FallbackDocumentExtractor(
-            extractors=extractors,
-            header_repair=vision_extractor,
+            extractors=[
+                PlainTextExtractor(),
+                OpenDataLoaderExtractor(),
+                PdfiumExtractor(),
+                TesseractExtractor(),
+            ],
             # `app.ai.compliance.count_header_fields` -- the only place this
             # infrastructure-layer chain reaches into `app.ai`, and done by
             # injection rather than import inside fallback.py itself so that
@@ -69,20 +56,6 @@ def get_document_extractor() -> BaseDocumentExtractor:
             # but whose header block (sayi/tarih/konu/muhatap/gonderen_kurum)
             # didn't actually parse -- quality_ratio alone cannot see that.
             header_field_probe=count_header_fields,
-            # `is_scanned_text_layer` -- widens header-band repair to also
-            # cover a scanner's own junk OCR text layer sitting over a
-            # full-page scan image (Class A), which OpenDataLoader/Pdfium
-            # otherwise read exactly like a genuine born-digital text layer.
-            scan_text_layer_probe=is_scanned_text_layer,
-            # `app.ai.compliance.has_signature` -- escalates to a full-page
-            # vision transcription instead of the header-band-only crop
-            # when the signer's name doesn't parse at all, the one failure
-            # mode header-band repair structurally cannot reach (wet
-            # signature ink over the printed name, well below the header
-            # band). Measured on the real scanned corpus: 4 documents where
-            # OpenDataLoader/Tesseract lost or garbled the name entirely,
-            # full-page transcription recovered it on all 4.
-            signature_probe=has_signature,
         )
     return _document_extractor
 

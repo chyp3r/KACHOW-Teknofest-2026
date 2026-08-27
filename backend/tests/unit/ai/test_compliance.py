@@ -99,7 +99,7 @@ def test_official_letter_citations_use_verified_article_numbers():
     assert rules["konu"].endswith("m.13")
     assert rules["muhatap"].endswith("m.14")
     assert rules["gonderen_kurum"].endswith("m.10")
-    assert rules["imza_sahibi"].endswith("m.17")
+    assert rules["imza_unvani"].endswith("m.17")
 
 
 # ==========================================
@@ -149,23 +149,9 @@ def test_complete_official_letter_is_compliant():
 
 
 # ==========================================
-# is_signed -- the gap a typed imza_sahibi name alone cannot catch
+# is_signed -- accepted but no longer a compliance signal (signature is not
+# a required field; see field_rule.py's history)
 # ==========================================
-def test_a_typed_name_with_no_detected_signature_is_flagged_advisory():
-    """The imza_sahibi rule alone is satisfied by a typed name -- this is
-    specifically the gap that rule cannot see: a name is present, but no
-    signature-shaped ink mark was ever detected on the page."""
-    report = check_required_fields(
-        DocumentType.OFFICIAL_LETTER, COMPLETE_OFFICIAL_LETTER, is_signed=False
-    )
-
-    assert report.status is ComplianceStatus.PARTIALLY_COMPLIANT
-    detected = {item.key: item for item in report.missing_fields}
-    assert detected.keys() == {"imza_gorseli"}
-    assert detected["imza_gorseli"].severity == SEVERITY_ADVISORY
-    assert detected["imza_gorseli"].mevzuat.endswith("m.17")
-
-
 def test_is_signed_true_reports_no_extra_finding():
     report = check_required_fields(
         DocumentType.OFFICIAL_LETTER, COMPLETE_OFFICIAL_LETTER, is_signed=True
@@ -185,15 +171,14 @@ def test_is_signed_none_is_treated_as_unknown_not_unsigned():
     assert report.missing_fields == []
 
 
-def test_is_signed_false_does_not_duplicate_an_already_blank_imza_sahibi():
-    """When imza_sahibi is blank, the existing rule already reports it --
-    the additive check must not also fire and double-report the same gap."""
+def test_is_signed_false_has_no_effect_on_compliance_status():
+    """is_signed=False must not, by itself, report any missing field --
+    signature is not a required/advisory rule any more."""
     fields = COMPLETE_OFFICIAL_LETTER.model_copy(update={"imza_sahibi": None})
     report = check_required_fields(DocumentType.OFFICIAL_LETTER, fields, is_signed=False)
 
-    keys = [item.key for item in report.missing_fields]
-    assert keys == ["imza_sahibi"]
-    assert "imza_gorseli" not in keys
+    assert report.missing_fields == []
+    assert report.status is ComplianceStatus.COMPLIANT
 
 
 def test_default_is_signed_preserves_prior_behaviour():
@@ -238,7 +223,6 @@ def test_petition_uses_law_3071_rules():
     report = check_required_fields(DocumentType.PETITION, fields)
 
     detected = {item.key: item.mevzuat for item in report.missing_fields}
-    assert "imza_sahibi" in detected
     assert "adres" in detected
     assert "3071" in detected["adres"]
 

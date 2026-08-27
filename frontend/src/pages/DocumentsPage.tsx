@@ -29,13 +29,14 @@ export function DocumentsPage({
   onGenerateDetailedSummary,
   generatingDetailedSummary,
   generatingDetailedSummaryPath,
+  onGenerateDetailedAnalysis,
+  generatingDetailedAnalysis,
+  generatingDetailedAnalysisPath,
   documentGraph,
   loadingDocumentGraph,
   documentText,
   onSaveText,
   savingText,
-  onReextract,
-  reextracting,
   canPush = false,
   showUploader = false,
 }: {
@@ -57,13 +58,14 @@ export function DocumentsPage({
   onGenerateDetailedSummary?: (storagePath: string) => Promise<void>;
   generatingDetailedSummary?: boolean;
   generatingDetailedSummaryPath?: string | null;
+  onGenerateDetailedAnalysis?: (storagePath: string) => Promise<void>;
+  generatingDetailedAnalysis?: boolean;
+  generatingDetailedAnalysisPath?: string | null;
   documentGraph?: KnowledgeGraph | null;
   loadingDocumentGraph?: boolean;
   documentText?: DocumentText | null;
   onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
   savingText?: boolean;
-  onReextract?: (storagePath: string) => Promise<void>;
-  reextracting?: boolean;
   canPush?: boolean;
   showUploader?: boolean;
 }) {
@@ -127,13 +129,14 @@ export function DocumentsPage({
         onGenerateDetailedSummary={onGenerateDetailedSummary}
         generatingDetailedSummary={generatingDetailedSummary}
         generatingDetailedSummaryPath={generatingDetailedSummaryPath}
+        onGenerateDetailedAnalysis={onGenerateDetailedAnalysis}
+        generatingDetailedAnalysis={generatingDetailedAnalysis}
+        generatingDetailedAnalysisPath={generatingDetailedAnalysisPath}
         documentGraph={documentGraph}
         loadingDocumentGraph={loadingDocumentGraph}
         documentText={documentText}
         onSaveText={onSaveText}
         savingText={savingText}
-        onReextract={onReextract}
-        reextracting={reextracting}
         showUploader={showUploader}
       /> : <IncomingDocumentsPanel />}
       {canPush && selected && <PoolPushDialog open={pushOpen} documentId={selected.storage_path} onClose={() => setPushOpen(false)} />}

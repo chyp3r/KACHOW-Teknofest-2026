@@ -132,12 +132,6 @@ _OFFICIAL_HEADER_RULES: tuple[FieldRule, ...] = (
         "Başlık, belgeyi gönderen idarenin adının belirtildiği bölümdür.",
     ),
     _rule(
-        "imza_sahibi",
-        "İmza sahibi",
-        f"{RYUEHY} m.17",
-        "Belge, yetkili amir tarafından ad ve soyad belirtilerek imzalanmalıdır.",
-    ),
-    _rule(
         "imza_unvani",
         "İmza sahibinin unvanı",
         f"{RYUEHY} m.17",
@@ -152,12 +146,6 @@ _PETITION_RULES: tuple[FieldRule, ...] = (
         "Başvuranın adı ve soyadı",
         f"{LAW_3071} m.4",
         "Dilekçede dilekçe sahibinin adı ve soyadı bulunması gerekir.",
-    ),
-    _rule(
-        "imza_sahibi",
-        "İmza",
-        f"{LAW_3071} m.4",
-        "Dilekçede dilekçe sahibinin imzası bulunması gerekir.",
     ),
     _rule(
         "adres",
@@ -186,12 +174,6 @@ _INFORMATION_REQUEST_RULES: tuple[FieldRule, ...] = (
         "Başvuranın adı ve soyadı",
         f"{LAW_4982} m.6",
         "Bilgi edinme başvurusunda başvuru sahibinin adı ve soyadı bulunmalıdır.",
-    ),
-    _rule(
-        "imza_sahibi",
-        "İmza",
-        f"{LAW_4982} m.6",
-        "Bilgi edinme başvurusunda başvuru sahibinin imzası bulunmalıdır.",
     ),
     _rule(
         "adres",
@@ -241,12 +223,6 @@ REQUIRED_FIELD_RULES: dict[DocumentType, tuple[FieldRule, ...]] = {
             f"{RYUEHY} m.12",
             "İzin talebinin tarihi, izin süresinin hesaplanması için gereklidir.",
         ),
-        _rule(
-            "imza_sahibi",
-            "İmza",
-            f"{LAW_3071} m.4",
-            "Talep, talep sahibi tarafından imzalanmalıdır.",
-        ),
     ),
     DocumentType.MINUTES: (
         _rule(
@@ -261,12 +237,6 @@ REQUIRED_FIELD_RULES: dict[DocumentType, tuple[FieldRule, ...]] = {
             f"{RYUEHY} m.13",
             "Tutanağın konusu açıkça belirtilmelidir.",
         ),
-        _rule(
-            "imza_sahibi",
-            "İmza sahibi",
-            f"{RYUEHY} m.17",
-            "Tutanak, düzenleyen görevliler tarafından imzalanmalıdır.",
-        ),
     ),
     DocumentType.REPORT: (
         _rule(
@@ -280,12 +250,6 @@ REQUIRED_FIELD_RULES: dict[DocumentType, tuple[FieldRule, ...]] = {
             "Tarih",
             f"{RYUEHY} m.12",
             "Raporun tarihi bulunmalıdır.",
-        ),
-        _rule(
-            "imza_sahibi",
-            "İmza sahibi",
-            f"{RYUEHY} m.17",
-            "Rapor, düzenleyen tarafından imzalanmalıdır.",
         ),
     ),
     # Tanınmayan bir belge için bile en az kimlik belirleyici alanlar kontrol

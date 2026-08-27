@@ -38,6 +38,8 @@ from app.core.constants import (
     ALLOWED_DOCUMENT_EXTENSIONS,
     ALLOWED_FILE_TYPES,
     MAX_FILE_SIZE_BYTES,
+    MIN_EXTRACTED_CHAR_COUNT,
+    MIN_TEXT_QUALITY_RATIO,
 )
 from app.core.enums.compliance_status import ComplianceStatus
 from app.core.enums.document_type import DocumentType
@@ -57,9 +59,11 @@ from app.events.event_bus import event_bus
 from app.infrastructure.extractors.base import (
     BaseDocumentExtractor,
     DocumentExtractionError,
+    ExtractedDocument,
 )
 from app.infrastructure.cache.redis import RedisCache
-from app.infrastructure.extractors.vision import VisionExtractorBase
+from app.infrastructure.extractors.marks import DetectedMark
+from app.infrastructure.extractors.vision import EvrenVisionExtractor, VisionExtractorBase
 from app.infrastructure.storage.base import BaseStorage
 from app.ai.embeddings.service import EmbeddingService
 from app.ai.embeddings.chunking.recursive import RecursiveChunker
@@ -721,29 +725,43 @@ class DocumentService:
                 MissingField(**item) for item in state.get("missing_fields") or []
             ],
             compliance_status=compliance_status,
-            signature=SignatureAssessmentSchema(
-                # Built directly from `extracted`, not `state` -- detection
-                # already ran once during extraction (see
-                # app.infrastructure.extractors.marks.detect_marks); the
-                # graph only reads it (check_compliance_node), it never
-                # recomputes it. Same reasoning as `extraction=` above.
-                is_signed=any(mark.kind == "signature" for mark in extracted.detected_marks),
-                has_stamp=any(mark.kind == "stamp" for mark in extracted.detected_marks),
-                marks=[
-                    DetectedMarkSchema(
-                        kind=mark.kind,
-                        page=mark.page,
-                        bbox=mark.bbox,
-                        confidence=mark.confidence,
-                    )
-                    for mark in extracted.detected_marks
-                ],
-            ),
+            signature=DocumentService._build_signature_assessment(extracted.detected_marks),
             mevzuat_references=[
                 MevzuatReferenceSchema(**item)
                 for item in state.get("mevzuat_suggestions") or []
             ],
             guardrail=guardrail,
+        )
+
+    @staticmethod
+    def _build_signature_assessment(
+        marks: Optional[list[DetectedMark]],
+    ) -> SignatureAssessmentSchema:
+        """Build the signature/stamp assessment from a raw `detect_marks`
+        result -- shared by `_assemble` and `generate_detailed_analysis`.
+
+        `marks is None` means detection never ran at all (see
+        `ExtractedDocument.detected_marks`'s own docstring) -- `is_signed`/
+        `has_stamp` must stay `None` (unknown), not `False` (checked, found
+        nothing), same tri-state `check_compliance_node` already applies to
+        `state["detected_marks"]`.
+
+        Args:
+            marks: `ExtractedDocument.detected_marks` -- `None` if detection
+                never ran, otherwise the (possibly empty) list it found.
+
+        Returns:
+            The schema, ready to attach to a `DocumentAnalysisResponseSchema`.
+        """
+        return SignatureAssessmentSchema(
+            is_signed=None if marks is None else any(mark.kind == "signature" for mark in marks),
+            has_stamp=None if marks is None else any(mark.kind == "stamp" for mark in marks),
+            marks=[
+                DetectedMarkSchema(
+                    kind=mark.kind, page=mark.page, bbox=mark.bbox, confidence=mark.confidence
+                )
+                for mark in (marks or [])
+            ],
         )
 
     @staticmethod
@@ -1561,6 +1579,132 @@ class DocumentService:
             analysis,
         )
 
+        return analysis
+
+    async def _extract_with_vision_cascade(self, content: bytes) -> ExtractedDocument:
+        """Vision OCR, llm-fast first, escalating to llm-large once if the
+        fast tier's result doesn't clear the same acceptance bar
+        `FallbackDocumentExtractor._is_acceptable` uses.
+
+        Ollama has no equivalent fast/large split (a single
+        `OLLAMA_VISION_MODEL`), so `LOCAL_MODE=true` always uses
+        `self.vision_extractor` directly, same single-tier call
+        `reextract_document_text` already makes.
+
+        Args:
+            content: Raw document bytes.
+
+        Returns:
+            The extraction result -- from the fast tier if it was good
+            enough, otherwise from the large-tier escalation.
+        """
+        if settings.LOCAL_MODE or not isinstance(self.vision_extractor, EvrenVisionExtractor):
+            return await self.vision_extractor.extract(content)
+
+        fast_result = await self.vision_extractor.extract(content)
+        if (
+            fast_result.char_count >= MIN_EXTRACTED_CHAR_COUNT
+            and fast_result.quality_ratio >= MIN_TEXT_QUALITY_RATIO
+        ):
+            return fast_result
+
+        logger.info(
+            "Detailed analysis: llm-fast vision result below the quality bar "
+            "(char_count=%d, quality_ratio=%.2f); escalating to llm-large.",
+            fast_result.char_count,
+            fast_result.quality_ratio,
+        )
+        return await EvrenVisionExtractor(model=settings.EVREN_LLM_LARGE_MODEL).extract(content)
+
+    async def generate_detailed_analysis(
+        self, storage_path: str, company_id: str
+    ) -> Optional[DocumentAnalysisResponseSchema]:
+        """Re-run extraction via vision OCR (see `_extract_with_vision_cascade`)
+        and the full analysis graph -- unlike `reextract_document_text`
+        (deterministic field re-derivation only, no model call) and
+        `generate_detailed_summary` (only the long summary), this replaces
+        `document_type`/`summary`/every field/`compliance_status`/mevzuat
+        references: the complete result a fresh upload would have produced
+        had OCR actually run.
+
+        On-demand only: vision OCR is no longer part of the default upload
+        path (see `get_document_extractor`'s own docstring for why -- a
+        single upload was measured to go from ~14s to ~34s whenever the old
+        chain's automatic repair triggered). This is the escape hatch for a
+        user who wants the thorough, accurate-but-slow result on demand.
+
+        Args:
+            storage_path: The document's storage key.
+            company_id: The caller's company -- passed through to
+                `_run_analysis` (Langfuse trace metadata) and
+                `_save_rederived_analysis` (registry row + Q&A reindex),
+                same as `reextract_document_text`.
+
+        Returns:
+            The freshly re-analysed result, or None if no cache exists for
+            `storage_path` (or it fails to parse) -- the router maps this
+            to a 404, same as `generate_detailed_summary`.
+
+        Raises:
+            AIException: If the vision cascade or the analysis workflow
+                times out or fails. Raised, not swallowed -- a user who
+                explicitly asked for this needs to know it did not arrive.
+                The cache file is untouched until a full new analysis is
+                ready to replace it.
+        """
+        cache_data = await self._read_analysis_cache(storage_path)
+        if not cache_data or not cache_data.get("analysis"):
+            return None
+
+        try:
+            previous_analysis = DocumentAnalysisResponseSchema(**cache_data["analysis"])
+        except Exception:
+            logger.exception("Cached analysis for %s failed to validate", storage_path)
+            return None
+
+        content = await self.storage.get_file(storage_path)
+
+        try:
+            extracted = await asyncio.wait_for(
+                self._extract_with_vision_cascade(content),
+                timeout=settings.DETAILED_ANALYSIS_TIMEOUT_SECONDS,
+            )
+        except asyncio.TimeoutError as exc:
+            raise AIException(
+                message="Detaylı analiz zaman aşımına uğradı.",
+                details={"timeout_seconds": settings.DETAILED_ANALYSIS_TIMEOUT_SECONDS},
+            ) from exc
+        except DocumentExtractionError as exc:
+            raise AIException(
+                message="Detaylı analiz sırasında belge işlenemedi.",
+                details={"reason": str(exc)},
+            ) from exc
+
+        # Same reasoning as analyze_document: attacker-controlled input,
+        # scrubbed per page before anything downstream reads it.
+        scrubbed_pages: list[str] = []
+        scrubbed_markers: list[str] = []
+        for page_text in extracted.pages or [extracted.text]:
+            cleaned, markers = scrub_extracted_text(page_text)
+            scrubbed_pages.append(cleaned)
+            scrubbed_markers.extend(markers)
+        extracted.pages = scrubbed_pages
+        extracted.text = "\n\n".join(scrubbed_pages)
+
+        state = await self._run_analysis(
+            extracted.text, extracted.used_ocr, extracted.detected_marks, company_id=company_id
+        )
+        analysis = self._assemble(
+            previous_analysis.file_name, storage_path, extracted, state, scrubbed_markers
+        )
+        # detailed_summary is owned by generate_detailed_summary, not
+        # recomputed here -- carry over whatever was already built, same
+        # as a fresh analyze_document response never setting it either.
+        analysis.detailed_summary = previous_analysis.detailed_summary
+
+        await self._save_rederived_analysis(
+            storage_path, extracted.text, extracted.pages, analysis, company_id
+        )
         return analysis
 
     async def delete_document(self, storage_path: str, company_id: str) -> None:
