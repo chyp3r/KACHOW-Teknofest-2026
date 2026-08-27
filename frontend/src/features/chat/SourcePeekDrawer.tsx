@@ -3,23 +3,37 @@ import { FileText } from "lucide-react";
 import { Drawer } from "../../components/Overlay";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
-import { findSourceExcerpt } from "./sourceExcerpt";
+import { findSourceExcerpt, type SourceExcerpt } from "./sourceExcerpt";
+import type { CitationTarget } from "./MarkdownMessage";
 
-/** What a citation badge hands over when the reader clicks it. */
-export interface CitationTarget {
-  /** 1-based page number from the `[s. N]` anchor. */
-  page: number;
-  /** The assistant's own sentence around the citation, used to locate the claim. */
-  claim: string;
+export type { CitationTarget };
+
+/**
+ * Locate the cited quote inside the page.
+ *
+ * Exact first: the model quotes the document verbatim, so a plain substring
+ * search normally lands it -- and unlike the fuzzy pass it cannot land on the
+ * wrong sentence. The fuzzy matcher stays as a fallback for a quote the model
+ * lightly reflowed (collapsed whitespace, trimmed a clause).
+ */
+function locate(pageText: string, quote: string): SourceExcerpt | null {
+  if (!pageText || !quote) return null;
+
+  const exact = pageText.indexOf(quote);
+  if (exact !== -1) {
+    return {
+      before: pageText.slice(0, exact),
+      match: pageText.slice(exact, exact + quote.length),
+      after: pageText.slice(exact + quote.length),
+    };
+  }
+  return findSourceExcerpt(pageText, quote);
 }
 
 /**
- * The page a citation points at, with the cited passage highlighted.
- *
- * Shows the *whole* page rather than the matched sentence alone: a reader
- * checking a claim wants to see what surrounds it -- whether the sentence was
- * a heading, a caveat, part of a table. The match is highlighted and scrolled
- * to, so the surrounding context is there without having to be hunted for.
+ * The source behind a citation: the quoted sentence, and -- when the page is
+ * known and the quote can be placed in it -- the whole page with that sentence
+ * highlighted, so a reader checking the claim sees what surrounds it.
  */
 export function SourcePeekDrawer({
   target,
@@ -37,8 +51,9 @@ export function SourcePeekDrawer({
   returnFocusRef?: React.RefObject<HTMLElement | null>;
 }) {
   const markRef = useRef<HTMLElement>(null);
-  const pageText = target && pages ? (pages[target.page - 1] ?? "") : "";
-  const excerpt = target && pageText ? findSourceExcerpt(pageText, target.claim) : null;
+  const pageText =
+    target?.page && pages ? (pages[target.page - 1] ?? "") : "";
+  const excerpt = target ? locate(pageText, target.quote) : null;
 
   useEffect(() => {
     // Center the highlight rather than leaving it wherever the page happens to
@@ -48,12 +63,18 @@ export function SourcePeekDrawer({
     markRef.current?.scrollIntoView?.({ block: "center" });
   }, [target, excerpt]);
 
+  const heading = target
+    ? target.index
+      ? `Kaynak ${target.index}${target.page ? ` — Sayfa ${target.page}` : ""}`
+      : `Kaynak${target.page ? ` — Sayfa ${target.page}` : ""}`
+    : "Kaynak";
+
   return (
     <Drawer
       open={target !== null}
       id="source-peek-drawer"
       className="source-peek-drawer"
-      title={target ? `Kaynak — Sayfa ${target.page}` : "Kaynak"}
+      title={heading}
       onClose={onClose}
       returnFocusRef={returnFocusRef}
       closeLabel="Kaynak görünümünü kapat"
@@ -65,23 +86,30 @@ export function SourcePeekDrawer({
         </p>
       )}
 
+      {/* The model's own quote, shown first: it is the answer to "where did
+          this come from", and it is present even when the page text is not. */}
+      {target?.quote && (
+        <blockquote className="source-peek-quote">{target.quote}</blockquote>
+      )}
+
       {loading ? (
         <div className="processing-line">
           <Spinner label="Belge metni yükleniyor" />
           Belge metni yükleniyor…
         </div>
       ) : !pageText ? (
-        <EmptyState
-          icon={FileText}
-          title="Sayfa metni bulunamadı"
-          description="Bu evrakın çıkarılmış metnine şu anda ulaşılamıyor."
-        />
+        !target?.quote && (
+          <EmptyState
+            icon={FileText}
+            title="Kaynak metni bulunamadı"
+            description="Bu atıf için evrakta bir kaynak metni bulunamadı."
+          />
+        )
       ) : (
         <>
           {!excerpt && (
             <p className="source-peek-note">
-              Atfın işaret ettiği tam cümle bu sayfada eşleştirilemedi; sayfanın
-              tamamı aşağıda.
+              Alıntı sayfada birebir bulunamadı; sayfanın tamamı aşağıda.
             </p>
           )}
           <div className="source-peek-page">

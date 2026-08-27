@@ -22,6 +22,7 @@ from app.ai.agents.assistant import (
     _NO_RETRIEVAL_NUDGE,
     _final_answer_nudge,
     _looks_like_giveup,
+    _without_sources_block,
     _looks_like_narration,
     _max_tool_turns,
 )
@@ -659,6 +660,50 @@ def test_an_announced_next_step_is_rejected_even_after_searching():
             max_tool_turns=5,
         )
         == _NARRATION_NUDGE
+    )
+
+
+def test_a_quoted_source_line_does_not_read_as_the_model_giving_up():
+    """The KAYNAKLAR block quotes the document verbatim. A source sentence
+    that happens to say "...bahsedilmemektedir" is the document's wording, not
+    the model conceding -- checking it would fire a pointless retry turn."""
+    reply = (
+        "Belgede iki yıllık deneyim belirtiliyor [1].\n\n"
+        "KAYNAKLAR:\n"
+        "[1] (s. 2) Adayın sertifikasyonundan bu raporda bahsedilmemektedir."
+    )
+
+    assert _looks_like_giveup(_without_sources_block(reply)) is False
+    assert (
+        _final_answer_nudge(
+            content=reply,
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=1,
+            max_tool_turns=5,
+        )
+        is None
+    )
+
+
+def test_without_sources_block_keeps_a_reply_that_has_none():
+    assert _without_sources_block("Düz bir cevap.") == "Düz bir cevap."
+
+
+def test_the_model_still_gets_nudged_when_its_own_prose_gives_up():
+    """The strip must not blunt the guard itself -- a give-up written in the
+    model's own words, above the block, is still caught."""
+    reply = "Bu bilgiye ulaşamadım.\n\nKAYNAKLAR:\n[1] (s. 1) Alakasız bir cümle."
+
+    assert (
+        _final_answer_nudge(
+            content=reply,
+            require_retrieval=True,
+            has_tools=True,
+            tool_calls_made=1,
+            max_tool_turns=5,
+        )
+        == _GIVEUP_RETRY_NUDGE
     )
 
 

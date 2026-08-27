@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { MarkdownMessage } from "./MarkdownMessage";
-import type { CitationTarget } from "./SourcePeekDrawer";
+import type { CitationTarget } from "./MarkdownMessage";
 
 const FRAME_INTERVAL_MS = 24;
 const MAX_ANIMATION_STEPS = 220;

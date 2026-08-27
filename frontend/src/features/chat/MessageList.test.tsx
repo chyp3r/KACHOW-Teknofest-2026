@@ -244,17 +244,17 @@ describe("MessageList page citations", () => {
     {
       id: "m1",
       sender: "assistant",
-      text: "Not ortalaması 3.83'tür. [s. 1]",
+      text: "Not ortalaması 3.83'tür [1].\n\nKAYNAKLAR:\n[1] (s. 1) Genel not ortalaması 3.83.",
     } as ChatMessage,
   ];
 
-  it("renders a citation in a finished message as a badge, not raw [s. N]", () => {
+  it("renders a citation in a finished message as a badge, hiding the block", () => {
     const { container } = renderWithQueryClient(
       <MessageList {...baseProps} messages={citedMessage} />,
     );
 
-    expect(container.querySelector(".page-citation")?.textContent).toBe("Sayfa 1");
-    expect(container.textContent).not.toContain("[s. 1]");
+    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
+    expect(container.textContent).not.toContain("KAYNAKLAR");
   });
 
   it("makes the badge clickable once a citation handler is wired through", () => {
@@ -267,18 +267,22 @@ describe("MessageList page citations", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Sayfa 1/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Kaynak 1/ }));
 
     expect(onCitationClick).toHaveBeenCalledWith(
-      expect.objectContaining({ page: 1 }),
+      expect.objectContaining({ page: 1, quote: "Genel not ortalaması 3.83." }),
     );
   });
 
   it("badges a citation in the streaming preview too", () => {
     const { container } = renderWithQueryClient(
-      <MessageList {...baseProps} loading streamingText="Sonuç şudur. [s. 2]" />,
+      <MessageList
+        {...baseProps}
+        loading
+        streamingText={"Sonuç şudur [1].\n\nKAYNAKLAR:\n[1] (s. 2) Kaynak cümlesi."}
+      />,
     );
 
-    expect(container.querySelector(".page-citation")?.textContent).toBe("Sayfa 2");
+    expect(container.querySelector(".page-citation")?.textContent).toBe("1");
   });
 });

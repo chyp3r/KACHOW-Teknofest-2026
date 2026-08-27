@@ -404,6 +404,14 @@
   color: var(--text-secondary);
 }
 .source-peek-note { margin: 0; color: var(--text-muted); }
+.source-peek-quote {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--accent-blue);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-blue) 8%, transparent);
+  color: var(--text-primary);
+}
 .source-peek-page {
   flex: 1;
   min-height: 0;

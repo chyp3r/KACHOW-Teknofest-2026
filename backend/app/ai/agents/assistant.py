@@ -123,16 +123,34 @@ def _looks_like_narration(text: Optional[str]) -> bool:
     return bool(text) and _NARRATION_PATTERN.search(text) is not None
 
 
+#: Yanıtın sonundaki KAYNAKLAR bloğu (bkz. ``assistant.md``). Bu bloktaki
+#: satırlar evraktan BİREBİR alıntılardır, modelin kendi ifadesi değildir --
+#: aşağıdaki kalıp kontrollerinden önce çıkarılır, yoksa "...bahsedilmemektedir"
+#: diyen bir kaynak cümlesi modelin pes ettiği sanılıp gereksiz bir düzeltme
+#: turu tetiklerdi.
+_SOURCES_BLOCK_PATTERN = re.compile(
+    r"^[ \t]*(?:#{1,6}[ \t]*)?(?:\*\*)?[ \t]*KAYNAKLAR[ \t]*(?:\*\*)?[ \t]*:?[ \t]*$.*",
+    re.IGNORECASE | re.MULTILINE | re.DOTALL,
+)
+
+
+def _without_sources_block(text: Optional[str]) -> str:
+    """Modelin kendi yazdığı kısım -- alıntıladığı kaynak satırları hariç."""
+    return _SOURCES_BLOCK_PATTERN.sub("", text or "")
+
+
 #: Düzeltme verilmiş bir turda, nihai yanıtı üreten son ``stream()`` çağrısına
 #: eklenen kapanış yönergesi (bkz. ``run_stream``).
 _FINAL_ANSWER_INSTRUCTION = (
     _NUDGE_PREFIX
     + "Şimdi kullanıcıya nihai yanıtı yaz. Yalnızca sonucu ver: bulduğun "
     "cevabı ya da tek cümlelik 'yüklü evrakta bu bilgiye ulaşılamadı' "
-    "ifadesini. Araç sonuçlarındaki `[s. N]` sayfa atıflarını, ilgili "
-    "bilgiyi yazdığın cümlenin sonuna aynen taşı. Hangi aramaları "
-    "yaptığını, hangi terimleri denediğini veya sırada ne yapacağını "
-    "ANLATMA; kullanıcı arama sürecini görmemeli."
+    "ifadesini. Evraktan gelen her bilgiyi `[1]`, `[2]` gibi numaralı atıfla "
+    "işaretle ve yanıtın sonuna KAYNAKLAR bloğunu ekle; her satırda o "
+    "bilginin evraktaki BİREBİR cümlesi ve varsa `(s. N)` sayfası olsun "
+    "(sistem yönergesindeki biçim). Hangi aramaları yaptığını, hangi "
+    "terimleri denediğini veya sırada ne yapacağını ANLATMA; kullanıcı arama "
+    "sürecini görmemeli."
 )
 
 #: Bir belge ekliyken, model araç çağırmayı bırakıp bu kalıplardan birini
@@ -230,11 +248,14 @@ def _final_answer_nudge(
     """
     if not require_retrieval or not has_tools:
         return None
-    if _looks_like_narration(content):
+    # Yalnızca modelin kendi yazdığı kısma bakılır; KAYNAKLAR bloğu evraktan
+    # birebir alıntıdır ve modelin ne yaptığı hakkında hiçbir şey söylemez.
+    prose = _without_sources_block(content)
+    if _looks_like_narration(prose):
         return _NARRATION_NUDGE
     if tool_calls_made == 0:
         return _NO_RETRIEVAL_NUDGE
-    if tool_calls_made < max_tool_turns and _looks_like_giveup(content):
+    if tool_calls_made < max_tool_turns and _looks_like_giveup(prose):
         return _GIVEUP_RETRY_NUDGE
     return None
 

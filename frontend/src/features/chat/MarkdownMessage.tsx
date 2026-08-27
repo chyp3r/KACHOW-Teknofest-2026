@@ -1,101 +1,104 @@
 import { Children, isValidElement, useMemo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import type { Components } from "react-markdown";
-import type { CitationTarget } from "./SourcePeekDrawer";
+import { parseReplyCitations, type Citation } from "./citations";
 
 /**
- * The backend's page-citation anchor, produced by `format_anchor`
- * (app/ai/documents/anchors.py) whenever an assistant answer traces a fact
- * back to a page of the attached document. It reaches the client inside the
- * reply's markdown as the literal `[s. 3]`, which reads as noise -- this
- * module turns it into a labelled badge instead.
+ * A numbered citation marker in the prose: `[1]`, `[2]`.
  *
- * Only the rendering changes: the backend keeps emitting `[s. N]`, and
- * `SessionFocus.last_referenced_anchor` / `ToolResult.citations` keep storing
- * that exact string (nothing anywhere parses it, so the two are free to
- * differ).
+ * Only badged when the reply's sources block actually defines that number --
+ * without which "Madde [5]" or a stray bracketed figure would be dressed up as
+ * a source the reader could click into and find nothing behind.
  */
-const CITATION_PATTERN = /\[s\.\s*(\d+)\]/g;
-
-/** Sentence terminators, used to recover the claim a citation is attached to. */
-const SENTENCE_END = /[.!?\n]/;
+const MARKER_PATTERN = /\[(\d+)\]/g;
 
 /**
- * The assistant's own sentence ending at `end` -- the claim this citation
- * backs. `SourcePeekDrawer` matches it against the page to find where on that
- * page the claim came from, so it has to be the prose around the anchor and
- * not the anchor itself.
+ * The legacy page-only anchor (`[s. 3]`, app/ai/documents/anchors.py). Still
+ * rendered so an older reply in the history, or a model turn that reaches for
+ * the old form, degrades to a readable label rather than raw punctuation.
  */
-function claimEndingAt(text: string, end: number): string {
-  let cursor = end;
-  // Step over the gap between the sentence and its anchor, then over the
-  // sentence's own terminator -- otherwise the scan below stops on that
-  // terminator immediately and returns an empty claim.
-  while (cursor > 0 && /\s/.test(text[cursor - 1])) cursor -= 1;
-  if (cursor > 0 && SENTENCE_END.test(text[cursor - 1])) cursor -= 1;
+const PAGE_ANCHOR_PATTERN = /\[s\.\s*(\d+)\]/g;
 
-  let start = 0;
-  for (let index = cursor - 1; index >= 0; index -= 1) {
-    const character = text[index];
-    if (!SENTENCE_END.test(character)) continue;
-    // A decimal point is not a sentence boundary: without this, "3.83" cuts
-    // the claim in half and the half that survives is the one without the
-    // number -- the very token the source lookup needs most.
-    const isDecimalPoint =
-      character === "." &&
-      /\d/.test(text[index - 1] ?? "") &&
-      /\d/.test(text[index + 1] ?? "");
-    if (isDecimalPoint) continue;
-    start = index + 1;
-    break;
-  }
-
-  // Drop any other anchors caught in the span; they are markup, not evidence.
-  return text.slice(start, end).replace(CITATION_PATTERN, " ").trim();
+/** What a citation badge hands over when the reader clicks it. */
+export interface CitationTarget {
+  /** Page the quote came from, when the model reported one. */
+  page?: number;
+  /** The source sentence, quoted from the document by the model. */
+  quote: string;
+  /** The marker number, for the drawer's own heading. */
+  index?: number;
 }
 
-/** Replace every `[s. N]` inside a plain-text node with a citation badge. */
+/** Replace citation markers in a plain-text node with badges. */
 function withCitationBadges(
   text: string,
   keyPrefix: string,
+  citations: Map<number, Citation>,
   onCitationClick?: (target: CitationTarget) => void,
 ): ReactNode[] {
   const parts: ReactNode[] = [];
   let cursor = 0;
-  let index = 0;
+  let matched = 0;
 
-  // `matchAll` needs the /g flag, which makes the regex stateful; a fresh
-  // iterator per call keeps concurrent renders from sharing lastIndex.
-  for (const match of text.matchAll(CITATION_PATTERN)) {
-    const start = match.index ?? 0;
-    if (start > cursor) parts.push(text.slice(cursor, start));
+  // Page anchors are matched first and consume their span, so the `[s. 3]` in
+  // a legacy reply is never also read as the number-marker `[3]`.
+  const spans = [
+    ...[...text.matchAll(PAGE_ANCHOR_PATTERN)].map((match) => ({
+      start: match.index ?? 0,
+      length: match[0].length,
+      label: `Sayfa ${match[1]}`,
+      target: { page: Number(match[1]), quote: "" } satisfies CitationTarget,
+    })),
+    ...[...text.matchAll(MARKER_PATTERN)].flatMap((match) => {
+      const citation = citations.get(Number(match[1]));
+      if (!citation) return [];
+      return [
+        {
+          start: match.index ?? 0,
+          length: match[0].length,
+          label: String(citation.index),
+          target: {
+            page: citation.page,
+            quote: citation.quote,
+            index: citation.index,
+          } satisfies CitationTarget,
+        },
+      ];
+    }),
+  ]
+    .sort((left, right) => left.start - right.start)
+    .filter((span, index, all) => index === 0 || span.start >= all[index - 1].start + all[index - 1].length);
 
-    const page = Number(match[1]);
-    const key = `${keyPrefix}-${index}`;
-    const label = `Sayfa ${page}`;
+  for (const span of spans) {
+    if (span.start > cursor) parts.push(text.slice(cursor, span.start));
+
+    const key = `${keyPrefix}-${matched}`;
+    const title = span.target.quote
+      ? `Kaynağı göster: ${span.target.quote}`
+      : `${span.label} — kaynağı göster`;
     parts.push(
       onCitationClick ? (
         <button
           type="button"
           className="page-citation page-citation-button"
           key={key}
-          onClick={() => onCitationClick({ page, claim: claimEndingAt(text, start) })}
-          title={`${label} — kaynağı göster`}
-          aria-label={`${label}. Bu bilginin evraktaki kaynağını göster.`}
+          onClick={() => onCitationClick(span.target)}
+          title={title}
+          aria-label={`Kaynak ${span.label}. Bu bilginin evraktaki kaynağını göster.`}
         >
-          {label}
+          {span.label}
         </button>
       ) : (
         <span className="page-citation" key={key}>
-          {label}
+          {span.label}
         </span>
       ),
     );
-    cursor = start + match[0].length;
-    index += 1;
+    cursor = span.start + span.length;
+    matched += 1;
   }
 
-  if (index === 0) return [text];
+  if (matched === 0) return [text];
   if (cursor < text.length) parts.push(text.slice(cursor));
   return parts;
 }
@@ -103,12 +106,13 @@ function withCitationBadges(
 /** Walk a node tree, badging citations in every string leaf. */
 function badgeCitations(
   children: ReactNode,
+  citations: Map<number, Citation>,
   onCitationClick?: (target: CitationTarget) => void,
   keyPrefix = "cite",
 ): ReactNode {
   return Children.map(children, (child, childIndex) => {
     if (typeof child === "string") {
-      return withCitationBadges(child, `${keyPrefix}-${childIndex}`, onCitationClick);
+      return withCitationBadges(child, `${keyPrefix}-${childIndex}`, citations, onCitationClick);
     }
     // Recurse through inline formatting (**bold**, *italic*, links) so a
     // citation inside one is still caught. Elements whose children live
@@ -120,6 +124,7 @@ function badgeCitations(
           ...child.props,
           children: badgeCitations(
             child.props.children,
+            citations,
             onCitationClick,
             `${keyPrefix}-${childIndex}`,
           ),
@@ -130,15 +135,12 @@ function badgeCitations(
   });
 }
 
-/**
- * Element types that can carry prose, and therefore a citation. Built per
- * render of a given handler rather than once at module scope, because the
- * handler has to reach `withCitationBadges` through them.
- */
+/** Element types that can carry prose, and therefore a citation. */
 function buildComponents(
+  citations: Map<number, Citation>,
   onCitationClick?: (target: CitationTarget) => void,
 ): Components {
-  const badge = (children: ReactNode) => badgeCitations(children, onCitationClick);
+  const badge = (children: ReactNode) => badgeCitations(children, citations, onCitationClick);
   return {
     p: ({ children }) => <p>{badge(children)}</p>,
     li: ({ children }) => <li>{badge(children)}</li>,
@@ -148,11 +150,12 @@ function buildComponents(
 }
 
 /**
- * The assistant's markdown, with page citations rendered as badges.
+ * The assistant's markdown, with its sources block parsed out and its citation
+ * markers rendered as badges.
  *
  * A drop-in replacement for a bare `<ReactMarkdown>` in the chat surfaces --
  * see `AnimatedMessageText` and `MessageList`'s streaming preview. Passing
- * `onCitationClick` turns each badge into a button that opens the cited page;
+ * `onCitationClick` turns each badge into a button that opens the source;
  * without it they stay as plain, non-interactive labels.
  */
 export function MarkdownMessage({
@@ -162,6 +165,10 @@ export function MarkdownMessage({
   text: string;
   onCitationClick?: (target: CitationTarget) => void;
 }) {
-  const components = useMemo(() => buildComponents(onCitationClick), [onCitationClick]);
-  return <ReactMarkdown components={components}>{text}</ReactMarkdown>;
+  const { body, citations } = useMemo(() => parseReplyCitations(text), [text]);
+  const components = useMemo(
+    () => buildComponents(citations, onCitationClick),
+    [citations, onCitationClick],
+  );
+  return <ReactMarkdown components={components}>{body}</ReactMarkdown>;
 }

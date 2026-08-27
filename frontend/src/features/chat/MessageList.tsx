@@ -10,7 +10,7 @@ import type {
 import { Button } from "../../components/Button";
 import { Accordion } from "../../components/Accordion";
 import { MarkdownMessage } from "./MarkdownMessage";
-import type { CitationTarget } from "./SourcePeekDrawer";
+import type { CitationTarget } from "./MarkdownMessage";
 import { EmptyState } from "../../components/EmptyState";
 import { Spinner } from "../../components/Surface";
 import { PromptQuestionCard } from "./PromptQuestionCard";
