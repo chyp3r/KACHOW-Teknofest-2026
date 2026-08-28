@@ -211,6 +211,11 @@ strong, b { color: var(--text); font-weight: 600; }
 .pnode.is-active i { color: var(--blue); }
 .pnode--human.is-active { border-color: var(--amber); background: rgba(245,158,11,0.14); box-shadow: 0 16px 36px -16px rgba(245,158,11,0.7); }
 .pnode--done.is-active { border-color: var(--emerald); background: rgba(16,185,129,0.14); box-shadow: 0 16px 36px -16px rgba(16,185,129,0.7); }
+.pipeline__packet {
+  position: absolute; top: 0; left: 0; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--blue); box-shadow: 0 0 18px 4px rgba(59,130,246,0.8);
+  opacity: 0; pointer-events: none;
+}
 .pipeline__hint { margin-top: 22px; font-size: 0.88rem; color: var(--text-dim); text-align: center; }
 
 /* ============ TASKS ============ */

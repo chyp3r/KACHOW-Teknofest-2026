@@ -30,6 +30,11 @@
       { threshold: 0.16, rootMargin: "0px 0px -8% 0px" }
     );
     reveals.forEach((el) => io.observe(el));
+    // Safety net: never leave content permanently invisible if the observer
+    // is starved (e.g. page loaded in a background tab, exotic browsers).
+    window.addEventListener("load", () => {
+      setTimeout(() => reveals.forEach((el) => el.classList.add("is-in")), 4000);
+    });
   }
 
   /* ---------- Count-up numbers ---------- */
@@ -85,6 +90,7 @@
   const pipeline = document.getElementById("pipeline");
   if (pipeline) {
     const nodes = Array.from(pipeline.querySelectorAll(".pnode"));
+    const packet = pipeline.querySelector(".pipeline__packet");
     let timer = null;
     let idx = 0;
 
@@ -96,6 +102,12 @@
       const track = node.parentElement;
       const targetLeft = node.offsetLeft - track.clientWidth / 2 + node.clientWidth / 2;
       track.scrollTo({ left: Math.max(0, targetLeft), behavior: reduceMotion ? "auto" : "smooth" });
+      if (packet && !reduceMotion) {
+        packet.style.transition = idx === 0 ? "none" : "transform .9s var(--ease), opacity .3s";
+        packet.style.transform =
+          "translate(" + (node.offsetLeft + node.clientWidth / 2 - 5) + "px, 26px)";
+        packet.style.opacity = "1";
+      }
       idx = (idx + 1) % nodes.length;
       // pause a beat on the human-gate node
       const delay = node.classList.contains("pnode--human") ? 2200 : 1100;
