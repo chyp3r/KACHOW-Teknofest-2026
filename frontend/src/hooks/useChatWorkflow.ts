@@ -347,6 +347,14 @@ export function useChatWorkflow(
     pendingQuestions.current = null;
   }, []);
 
+  // A guardrail alert previously had no dismiss control at all -- it only
+  // ever cleared via resetFlow (a new send/session switch), so a user who
+  // just wanted it out of the way had no way to close it. Removes a single
+  // alert by index without touching the others in the stack.
+  const dismissGuardrailEvent = useCallback((index: number) => {
+    setGuardrailEvents((previous) => previous.filter((_, i) => i !== index));
+  }, []);
+
   const sessionsQuery = useQuery({
     queryKey: queryKeys.chatSessions(),
     queryFn: () => chatService.sessions(),
@@ -884,6 +892,7 @@ export function useChatWorkflow(
     logs,
     toolCalls,
     guardrailEvents,
+    dismissGuardrailEvent,
     send,
     resume,
     newChat,
