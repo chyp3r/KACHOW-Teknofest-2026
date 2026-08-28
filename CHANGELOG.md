@@ -21,6 +21,17 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   gerilemeyecek.
 
 ### Eklendi
+- **Tanıtım / sunum sitesi (`branding/`).** "Çok yakında" yer tutucusu,
+  satın alma ve jüri sunumlarında kullanılmak üzere tek sayfalık, teknik
+  detayı az / anlatı yönü yüksek bir tanıtım deneyimine dönüştürüldü:
+  animasyonlu istatistik sayaçları içeren hero, sorunun çerçevelenmesi,
+  uçtan uca akışın canlı çalışan bir "pipeline" animasyonu, üç görevli
+  model, insan onay adımını gösteren canlı ajan-ilerleme demosu,
+  farklılaştırıcılar, ölçülmüş sonuçlar (README benchmark rakamları),
+  güven/güvenlik ve kapanış vizyonu. Bağımlılıksız düz HTML/CSS/JS
+  (`branding/` GitHub Pages tarafından statik sunuluyor); scroll ile
+  beliren bölümler, sayaçlar ve pipeline animasyonu `prefers-reduced-motion`
+  tercihine saygı duyar ve gözlemci beslenemezse içerik yine de görünür.
 - **NER PoC script'i (`scripts/ner_poc.py`).** `entities[]` alanı için ayrı bir
   dedicated NER modelinin (Türkçe BERT tabanlı) mevcut LLM çıktısına karşı
   nitel karşılaştırması -- backend'in `requirements.txt`'ine eklenmez, ayrı
