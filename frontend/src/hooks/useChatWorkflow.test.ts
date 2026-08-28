@@ -845,4 +845,23 @@ describe("useChatWorkflow", () => {
       message.text.includes("Bekleyen onay artık geçerli değil"),
     )).toBe(false);
   });
+
+  it("dismisses a single guardrail alert by index without touching the others", async () => {
+    mocks.send.mockImplementationOnce(async (_request, onEvent) => {
+      onEvent({ event: "session", thread_id: "user-1:web:guardrail" });
+      onEvent({ event: "guardrail", stage: "output", kind: "pii", decision: "redacted", reasons: ["TCKN maskelendi."] });
+      onEvent({ event: "guardrail", stage: "output", kind: "sensitivity", decision: "blocked", reasons: ["Gizlilik derecesi yetkiyi aşıyor."] });
+      onEvent({ event: "final_result", reply: "tamam", workflow_status: "COMPLETED" });
+    });
+
+    const { result } = renderHook(() => useChatWorkflow(null, "user-1"), { wrapper });
+    await act(() => result.current.send("merhaba", "balanced", false));
+
+    expect(result.current.guardrailEvents).toHaveLength(2);
+
+    act(() => result.current.dismissGuardrailEvent(0));
+
+    expect(result.current.guardrailEvents).toHaveLength(1);
+    expect(result.current.guardrailEvents[0].kind).toBe("sensitivity");
+  });
 });

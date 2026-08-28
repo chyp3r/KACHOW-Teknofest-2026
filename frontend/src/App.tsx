@@ -148,6 +148,7 @@ function AuthenticatedApp({ userId }: { userId: string }) {
       contextUsage={chat.contextUsage}
       onCompact={chat.compact}
       guardrailEvents={chat.guardrailEvents}
+      onDismissGuardrailEvent={chat.dismissGuardrailEvent}
       interrupt={chat.pendingInterrupt}
       workflowOpen={workflowOpen}
       historyOpen={chatHistoryOpen}

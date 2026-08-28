@@ -34,6 +34,15 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Frontend seçim alanları, tarayıcı varsayılanı yerine erişilebilir ortak `Dropdown` bileşenine taşındı.
 
 ### Düzeltildi
+- **Sohbette güvenlik kontrolü (maskeleme) uyarısı kapatılamıyordu.** Bir
+  yanıt PII/gizlilik nedeniyle maskelendiğinde gösterilen "Maskelendi"
+  uyarı kartının kapatılacak hiçbir kontrolü yoktu -- yalnızca yeni bir
+  mesaj/sohbet/oturum değişiminde temizleniyordu. Bir "maskeyi kaldır"
+  işlemi de değerlendirildi ama bu sohbet çıktı-kapısı maskelemesi için
+  uygulanabilir değil: maskelenen değerin ham hâli hiçbir yerde
+  saklanmıyor (kasıtlı tasarım) -- bunu eklemek ya yeni bir hassas-veri
+  deposu gerektirir ya da guardrail'in az önce engellediği değeri yeniden
+  ifşa eder. Bunun yerine uyarı kartına bir kapatma butonu eklendi.
 - **Revizyonda taslağın tarihi bugünle sessizce değişiyordu.** Bir
   yeniden yazım/onarım geçişi taslağın orijinal "Tarih:" satırını verbatim
   koruyamayıp bir yer tutucuyla ("Tarih: [Tarih]") değiştirdiğinde,
