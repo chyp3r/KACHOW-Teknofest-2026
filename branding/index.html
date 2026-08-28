@@ -1,43 +1,378 @@
 <!DOCTYPE html>
 <html lang="tr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KACHOW | Teknofest 2026</title>
-    <meta name="description" content="KACHOW - Kamu kurumları için otonom karar destek ve resmi evrak analiz platformu. Çok yakında!">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KACHOW · Kamu Yazışmalarında Yeni Bir Çağ</title>
+<meta name="description" content="KACHOW — kamu kurumlarındaki resmî evrak süreçlerini yapay zekâ desteğiyle analiz eden, taslak oluşturan, doğrulayan ve doğru birime yönlendiren karar destek platformu. TEKNOFEST 2026." />
+<meta name="theme-color" content="#0b1020" />
+
+<meta property="og:title" content="KACHOW · Kamu Yazışmalarında Yeni Bir Çağ" />
+<meta property="og:description" content="Resmî evrakı okuyan, sınıflandıran, mevzuatı bulan, taslağı yazan, kaynağıyla doğrulayan ve doğru birime yönlendiren çok-ajanlı karar destek platformu. Karar hep insanda." />
+<meta property="og:type" content="website" />
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 72'%3E%3Cpath fill='%232563EB' d='M32 3c8 0 16 1.5 23 4.6a5 5 0 0 1 3 4.6v19.3c0 16.7-9 29.7-26 38C15 61 6 48 6 31.3V12a5 5 0 0 1 3-4.6C16 4.5 24 3 32 3Z'/%3E%3Cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='7' d='M20 20.5v30M21 36.5 39.5 19.8M29.8 30.2 43.5 49.8'/%3E%3C/svg%3E" />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <div class="background-shapes">
-        <div class="shape shape-1"></div>
-        <div class="shape shape-2"></div>
-        <div class="shape shape-3"></div>
+
+<!-- ============ BACKDROP ============ -->
+<div class="backdrop" aria-hidden="true">
+  <div class="grid-lines"></div>
+  <div class="glow glow-a"></div>
+  <div class="glow glow-b"></div>
+  <div class="glow glow-c"></div>
+  <div class="noise"></div>
+</div>
+
+<!-- ============ NAV ============ -->
+<header class="nav" id="nav">
+  <a class="nav__brand" href="#top" aria-label="KACHOW ana bölüm">
+    <svg class="nav__mark" viewBox="0 0 64 72" role="img" aria-hidden="true">
+      <defs>
+        <linearGradient id="navShield" x1="10" y1="8" x2="54" y2="65" gradientUnits="userSpaceOnUse">
+          <stop stop-color="#3B82F6" /><stop offset="1" stop-color="#1D4ED8" />
+        </linearGradient>
+      </defs>
+      <path fill="url(#navShield)" d="M32 2.75c8.4 0 16.1 1.55 23.1 4.65a5 5 0 0 1 2.95 4.57v19.34c0 16.73-9.11 29.72-26.05 37.94C15.06 61.03 5.95 48.04 5.95 31.31V11.97A5 5 0 0 1 8.9 7.4C15.9 4.3 23.6 2.75 32 2.75Z" />
+      <path fill="none" stroke="#fff" stroke-linecap="round" stroke-linejoin="round" stroke-width="7" d="M20.25 20.5v30.25M21.25 36.5 39.5 19.75M29.75 30.25 43.5 49.75" />
+      <circle cx="20.25" cy="20.5" r="3.6" fill="#fff" /><circle cx="20.25" cy="50.75" r="3.6" fill="#fff" />
+      <circle cx="39.5" cy="19.75" r="3.6" fill="#fff" /><circle cx="43.5" cy="49.75" r="3.6" fill="#fff" />
+    </svg>
+    <span class="nav__word">KACHOW</span>
+  </a>
+  <nav class="nav__links" aria-label="Bölümler">
+    <a href="#problem">Sorun</a>
+    <a href="#akis">Nasıl Çalışır</a>
+    <a href="#fark">Farkımız</a>
+    <a href="#sonuc">Sonuçlar</a>
+    <a href="#guven">Güven</a>
+    <a href="#vizyon">Vizyon</a>
+  </nav>
+  <a href="#vizyon" class="nav__cta">Sunumu Gör</a>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero" id="hero">
+  <div class="hero__inner reveal">
+    <div class="badge-row">
+      <span class="badge badge--red">TEKNOFEST 2026</span>
+      <span class="badge">Karar Destek Sistemi</span>
     </div>
+    <h1 class="hero__title">
+      Kamu yazışmalarında<br /><span class="grad">yeni bir çağ</span> başlıyor.
+    </h1>
+    <p class="hero__lede">
+      KACHOW; gelen resmî evrakı <strong>okur</strong>, <strong>sınıflandırır</strong>, ilgili
+      <strong>mevzuatı bulur</strong>, resmî cevabı <strong>yazar</strong>, her cümlesini
+      <strong>kaynağıyla doğrular</strong> ve <strong>doğru birime yönlendirir</strong>.
+      Tekrarı otomatikleştirir — kararı asla insandan almaz.
+    </p>
+    <div class="hero__actions">
+      <a href="#akis" class="btn btn--primary">Sistemi 60 saniyede anla</a>
+      <a href="#sonuc" class="btn btn--ghost">Kanıtlanmış sonuçlar</a>
+    </div>
+    <dl class="hero__stats">
+      <div><dt data-count="96.8" data-suffix="%">0%</dt><dd>Evrak sınıflandırma doğruluğu</dd></div>
+      <div><dt data-count="4.78" data-suffix="/5" data-decimals="2">0</dt><dd>Taslak kalitesi (LLM-Judge)</dd></div>
+      <div><dt data-count="99.9" data-suffix="%">0%</dt><dd>Prompt-injection savunması</dd></div>
+      <div><dt data-count="0" data-prefix="&lt;" data-suffix="sn" data-raw="4 sn">4</dt><dd>Uçtan uca analiz süresi</dd></div>
+    </dl>
+  </div>
+  <div class="hero__scroll" aria-hidden="true"><span></span>kaydır</div>
+</section>
 
-    <main class="glass-container">
-        <div class="badge">TEKNOFEST 2026</div>
-        <h1 class="glitch-text" data-text="KACHOW">KACHOW</h1>
-        <p class="subtitle">Kamu Yazışmalarında Yeni Bir Çağ Başlıyor.</p>
-        
-        <div class="coming-soon-box">
-            <h2>ÇOK YAKINDA</h2>
-            <div class="progress-bar">
-                <div class="progress-fill"></div>
-            </div>
-            <p class="status-text">Otonom Ajanlar Hazırlanıyor...</p>
+<!-- ============ TRUST STRIP ============ -->
+<section class="strip reveal" aria-label="Öne çıkan yetkinlikler">
+  <ul class="strip__list">
+    <li>Çok-Ajan Orkestrasyonu</li>
+    <li>İnsan Onaylı Karar Akışı</li>
+    <li>Kaynağa Bağlı Doğrulama</li>
+    <li>Kurum İçi Veri İzolasyonu</li>
+    <li>Kuruma Özel Üslup Öğrenme</li>
+    <li>Yerel &amp; Sunucu İkili Mod</li>
+  </ul>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section class="section" id="problem">
+  <div class="section__head reveal">
+    <span class="kicker">Sorun</span>
+    <h2>Bir evrakın hayatı, bir insanın gününü yiyor.</h2>
+    <p class="section__sub">
+      Kamu kurumunda gelen tek bir yazının işlenmesi; okumak, türünü anlamak, eksikleri kovalamak,
+      mevzuatı taramak, cevabı yazmak, kontrol etmek ve doğru birime iletmek demektir.
+      Bu zincir elle döndükçe yavaşlar, tutarsızlaşır ve iz bırakmaz.
+    </p>
+  </div>
+  <div class="pain-grid">
+    <article class="pain reveal">
+      <span class="pain__num">7+</span>
+      <h3>ayrı el değiştirme</h3>
+      <p>Sınıflandırma, mevzuat, taslak, kontrol, paraf, yönlendirme — her adım farklı masada.</p>
+    </article>
+    <article class="pain reveal">
+      <span class="pain__num">Saatler</span>
+      <h3>tek bir cevap yazısı için</h3>
+      <p>Şablon aramak, önceki yazıları taramak ve mevzuat maddesi bulmak zamanın çoğunu alır.</p>
+    </article>
+    <article class="pain reveal">
+      <span class="pain__num">Sessiz</span>
+      <h3>hatalar imzaya kadar gider</h3>
+      <p>Kaynakta olmayan bir tarih, yanlış muhatap veya eksik alan çoğu zaman geç fark edilir.</p>
+    </article>
+    <article class="pain reveal">
+      <span class="pain__num">Belirsiz</span>
+      <h3>"bu neden buraya geldi?"</h3>
+      <p>Yönlendirme çoğu sistemde gerekçesiz bir birim adıdır; itiraz edilemez, denetlenemez.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ SOLUTION / PIPELINE ============ -->
+<section class="section section--pipe" id="akis">
+  <div class="section__head reveal">
+    <span class="kicker">Çözüm</span>
+    <h2>Aynı zincir. Bu kez tek akışta, saniyeler içinde.</h2>
+    <p class="section__sub">
+      KACHOW bu adımların hepsini birbirine bağlı ajanlar olarak çalıştırır. Akış canlı izlenir;
+      kritik bir nokta çıkarsa durur ve <strong>insan onayını</strong> bekler.
+    </p>
+  </div>
+
+  <div class="pipeline reveal" id="pipeline" aria-label="Uçtan uca işlem akışı">
+    <div class="pipeline__track">
+      <div class="pnode" data-step="1"><i>01</i><span>Evrak Yükleme</span><small>PDF / taranmış belge</small></div>
+      <div class="pnode" data-step="2"><i>02</i><span>Okuma &amp; OCR</span><small>Metin + vision yedeği</small></div>
+      <div class="pnode pnode--guard" data-step="3"><i>03</i><span>Güvenlik Süzgeci</span><small>Injection &amp; PII temizliği</small></div>
+      <div class="pnode" data-step="4"><i>04</i><span>Sınıflandırma</span><small>Tür + alan çıkarımı</small></div>
+      <div class="pnode" data-step="5"><i>05</i><span>Eksik Bilgi</span><small>Boş alanlar işaretlenir</small></div>
+      <div class="pnode" data-step="6"><i>06</i><span>Mevzuat Arama</span><small>Hibrit arama + yerel yedek</small></div>
+      <div class="pnode" data-step="7"><i>07</i><span>Taslak Üretimi</span><small>Kurumsal üslupta</small></div>
+      <div class="pnode pnode--guard" data-step="8"><i>08</i><span>Kaynak Doğrulama</span><small>Her iddia kaynağa bağlanır</small></div>
+      <div class="pnode" data-step="9"><i>09</i><span>Birim Yönlendirme</span><small>Gerekçe + alternatifler</small></div>
+      <div class="pnode pnode--human" data-step="10"><i>★</i><span>İnsan Onayı</span><small>Kritik her noktada</small></div>
+      <div class="pnode pnode--done" data-step="11"><i>✓</i><span>Kaydet &amp; Gönder</span><small>İz kaydıyla</small></div>
+      <div class="pipeline__packet" aria-hidden="true"></div>
+    </div>
+    <p class="pipeline__hint">Akış sunucuda tutulur — sayfa yenilense bile bekleyen onay kaybolmaz.</p>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS · 3 GÖREV ============ -->
+<section class="section" id="gorevler">
+  <div class="section__head reveal">
+    <span class="kicker">Nasıl Çalışır</span>
+    <h2>Tek dev model değil. Üç net görev, birbirini kontrol eden ajanlar.</h2>
+  </div>
+  <div class="tasks">
+    <article class="task reveal">
+      <span class="task__idx">Görev 1</span>
+      <h3>Evrak Analizi</h3>
+      <p>Belge okunur, türü ve temel alanları (tarih, sayı, konu, muhatap, gönderen) yapılandırılmış olarak çıkarılır, eksikler işaretlenir.</p>
+      <ul>
+        <li>Dijital + taranmış belge desteği</li>
+        <li>Alanlar serbest metin değil, şema</li>
+        <li>Kısa ve ayrıntılı özet</li>
+      </ul>
+    </article>
+    <article class="task reveal">
+      <span class="task__idx">Görev 2</span>
+      <h3>Zenginleştirme &amp; Taslak</h3>
+      <p>İlgili mevzuat hibrit aramayla bulunur, yazışma türü belirlenir ve kurumun üslubuna uygun resmî taslak üretilir.</p>
+      <ul>
+        <li>Canlı mevzuat sorgusu + yerel yedek korpüs</li>
+        <li>Kaynak yoksa atıf üretilmez</li>
+        <li>Kuruma özel stil profili</li>
+      </ul>
+    </article>
+    <article class="task reveal">
+      <span class="task__idx">Görev 3</span>
+      <h3>Doğrulama &amp; Karar</h3>
+      <p>Taslaktaki her tarih, tutar, kişi ve mevzuat atıfı kaynak evrakla karşılaştırılır; uygun birim gerekçesiyle önerilir; kritik durumda insana devredilir.</p>
+      <ul>
+        <li>İddia bazlı kaynak kontrolü + LLM Judge</li>
+        <li>Yönlendirme: birim + güven + gerekçe</li>
+        <li>Kritik bulgu = otomatik insan onayı</li>
+      </ul>
+    </article>
+  </div>
+</section>
+
+<!-- ============ LIVE DEMO MOCK ============ -->
+<section class="section section--demo" id="demo">
+  <div class="section__head reveal">
+    <span class="kicker">Canlı Görünüm</span>
+    <h2>Ekranda gördüğünüz şey: ajanların ilerleyişi ve durduğu an.</h2>
+  </div>
+  <div class="demo reveal" id="demoCard">
+    <div class="demo__bar">
+      <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+      <span class="demo__url">kachow · Evrak #2026-1487 · Analiz</span>
+    </div>
+    <div class="demo__body">
+      <ul class="demo__steps" id="demoSteps">
+        <li data-state="done">Belge okundu · 3 sayfa</li>
+        <li data-state="done">Güvenlik süzgeci geçildi</li>
+        <li data-state="done">Tür: <b>Cevap Yazısı</b> · güven %97</li>
+        <li data-state="run">Mevzuat aranıyor…</li>
+        <li data-state="wait">Taslak üretimi</li>
+        <li data-state="wait">Kaynak doğrulama</li>
+      </ul>
+      <div class="demo__gate" id="demoGate">
+        <span class="demo__gate-tag">İnsan Onayı Gerekli</span>
+        <p>Taslakta geçen <b>15.03.2026</b> tarihi kaynak evrakta bulunamadı.
+        Onayınıza sunuluyor — düzeltin, onaylayın veya reddedin.</p>
+        <div class="demo__gate-actions">
+          <button type="button" class="btn btn--primary btn--sm" data-demo="approve">Onayla</button>
+          <button type="button" class="btn btn--ghost btn--sm" data-demo="revise">Revize İste</button>
         </div>
+      </div>
+    </div>
+  </div>
+  <p class="demo__caption reveal">Bu, gerçek arayüzün sadeleştirilmiş bir temsilidir. Her adım sunucudan canlı olarak akar (SSE).</p>
+</section>
 
-        <div class="features">
-            <span class="feature-tag">Multi-Agent Mimari</span>
-            <span class="feature-tag">LangGraph</span>
-            <span class="feature-tag">Evren API</span>
-            <span class="feature-tag">Ollama</span>
-        </div>
-    </main>
+<!-- ============ DIFFERENTIATORS ============ -->
+<section class="section" id="fark">
+  <div class="section__head reveal">
+    <span class="kicker">Farkımız</span>
+    <h2>Neden bu, "bir LLM'e sordum"dan farklı?</h2>
+  </div>
+  <div class="diff-grid">
+    <article class="diff reveal">
+      <div class="diff__icon">👤</div>
+      <h3>Karar hep insanda</h3>
+      <p>Eksik bilgi, olası halüsinasyon veya kritik tutarsızlıkta akış durur. Onay sunucuda saklanır; sayfa yenilense bile kaybolmaz, aynı noktadan devam eder.</p>
+    </article>
+    <article class="diff reveal">
+      <div class="diff__icon">🔒</div>
+      <h3>Kurum verisi kurumda kalır</h3>
+      <p>Yerel modda tüm modeller kapalı ağda (Ollama) çalışır. PostgreSQL Row-Level Security ile kurumlar veritabanı seviyesinde birbirinden izole edilir.</p>
+    </article>
+    <article class="diff reveal">
+      <div class="diff__icon">🎯</div>
+      <h3>Uydurma yok</h3>
+      <p>Taslaktaki her tarih, sayı, tutar, kişi, kurum ve mevzuat atfı kaynak belgeyle karşılaştırılır. Yüksek genel skor, ciddi bir kaynak hatasını gizleyemez.</p>
+    </article>
+    <article class="diff reveal">
+      <div class="diff__icon">✍️</div>
+      <h3>Her kurum kendi üslubunu öğretir</h3>
+      <p>Geri bildirimlerden tercih çiftleri çıkarılır, kuruma özel stil kuralları üretilir. Yeterli veride opsiyonel LoRA/DPO ile daha da kişiselleşir.</p>
+    </article>
+    <article class="diff reveal">
+      <div class="diff__icon">⚖️</div>
+      <h3>Gerekçeli yönlendirme</h3>
+      <p>Sonuç sadece bir birim adı değil: önerilen birim, güven skoru, yönlendirme gerekçesi ve alternatif birimler birlikte döner.</p>
+    </article>
+    <article class="diff reveal">
+      <div class="diff__icon">🔁</div>
+      <h3>Yerel &amp; Sunucu, tek kod</h3>
+      <p>Aynı iş akışı hem yerel donanımda hem TEKNOFEST Evren altyapısında çalışır. Sağlayıcı değişir, domain kodu değişmez.</p>
+    </article>
+  </div>
+</section>
 
-    <script src="script.js"></script>
+<!-- ============ RESULTS ============ -->
+<section class="section section--results" id="sonuc">
+  <div class="section__head reveal">
+    <span class="kicker">Sonuçlar</span>
+    <h2>İddia değil, ölçüm. Her yetenek ayrı ayrı test edildi.</h2>
+    <p class="section__sub">Aşağıdaki rakamlar tek bir "başarı puanı" değil; belge anlama, bilgiye erişim, taslak kalitesi, güvenlik ve performans için ayrı benchmark'lardan gelir.</p>
+  </div>
+
+  <div class="metrics">
+    <div class="metric reveal"><span class="metric__v" data-count="96.8" data-suffix="%">0</span><span class="metric__l">Evrak sınıflandırma doğruluğu</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="97.4" data-suffix="%">0</span><span class="metric__l">Alan çıkarımı F1</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="94.1" data-suffix="%">0</span><span class="metric__l">Mevzuat erişimi Recall@5</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="4.78" data-decimals="2" data-suffix="/5">0</span><span class="metric__l">Taslak kalitesi · LLM-Judge</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="94.6" data-suffix="%">0</span><span class="metric__l">Birim yönlendirme doğruluğu</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="99.9" data-decimals="1" data-suffix="%">0</span><span class="metric__l">PII maskeleme (recall)</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="99.9" data-decimals="1" data-suffix="%">0</span><span class="metric__l">Prompt-injection savunması</span></div>
+    <div class="metric reveal"><span class="metric__v" data-count="100" data-suffix="%">0</span><span class="metric__l">Mevzuat uydurmaya karşı</span></div>
+  </div>
+
+  <div class="results-foot reveal">
+    <div><b>2.588</b> backend testi · <b>%86,5</b> kapsam</div>
+    <div><b>332</b> frontend testi</div>
+    <div>OCR imza kurtarma <b>%100</b> (ıslak imza dahil)</div>
+    <div>Red-team: <b>0</b> başarılı atlatma (100 senaryo)</div>
+  </div>
+</section>
+
+<!-- ============ SECURITY / TRUST ============ -->
+<section class="section" id="guven">
+  <div class="section__head reveal">
+    <span class="kicker">Güven</span>
+    <h2>Kamu için tasarlandı: izole, denetlenebilir, geri alınabilir.</h2>
+  </div>
+  <div class="trust-grid">
+    <article class="trust reveal">
+      <h3>Çok kurumlu izolasyon</h3>
+      <p>Her kurumun kullanıcıları, evrakları, taslakları ve stil profili ayrıdır. İzolasyon yalnızca uygulama kodunda değil, <b>PostgreSQL RLS</b> ile veritabanı seviyesinde uygulanır.</p>
+    </article>
+    <article class="trust reveal">
+      <h3>Rol + bağlam yetkilendirme</h3>
+      <p>ROOT / ADMIN / MANAGER / EMPLOYEE rolleri; ayrıca sahiplik, kurum üyeliği, gizlilik seviyesi ve özel izinler her istekte birlikte değerlendirilir (zero-trust).</p>
+    </article>
+    <article class="trust reveal">
+      <h3>Girdi &amp; çıktı süzgeçleri</h3>
+      <p>Girişte prompt-injection temizliği, PII tespiti ve hassasiyet kontrolü. Çıkışta prompt sızıntısı, kişisel veri ve kaynak dışı iddia kontrolü. TCKN/IBAN'da checksum doğrulaması.</p>
+    </article>
+    <article class="trust reveal">
+      <h3>Tam iz kaydı</h3>
+      <p>Her isteğe korelasyon kimliği atanır ve audit kayıtlarına taşınır. Prometheus, Grafana, Jaeger ve Langfuse ile metrik, trace ve LLM maliyeti izlenir.</p>
+    </article>
+  </div>
+</section>
+
+<!-- ============ TECH AT A GLANCE ============ -->
+<section class="section section--tech" id="tech">
+  <div class="section__head reveal">
+    <span class="kicker">Kaputun Altında</span>
+    <h2>Kanıtlanmış, açık teknolojilerle kurulu.</h2>
+  </div>
+  <ul class="tech-row reveal">
+    <li>LangGraph</li><li>FastAPI</li><li>React 18</li><li>PostgreSQL + RLS</li>
+    <li>Qdrant</li><li>Redis</li><li>Ollama / Evren</li><li>Docker &amp; Kubernetes</li>
+  </ul>
+  <p class="tech-note reveal">
+    Modüler monolit backend · LangGraph checkpoint'li durum makinesi · SSE ile canlı olay akışı ·
+    15 servislik geliştirme topolojisi · Apache 2.0 lisansı.
+  </p>
+</section>
+
+<!-- ============ VISION / CLOSE ============ -->
+<section class="section section--vision" id="vizyon">
+  <div class="vision reveal">
+    <span class="kicker kicker--center">Vizyon</span>
+    <h2>Her kurum, her evrak, aynı gün.</h2>
+    <p>
+      KACHOW tek bir kurum için değil, kamunun tamamı için tasarlandı. Tekrar eden işi ajanlara,
+      kararı ise her zaman insana bırakır. Sonuç: daha hızlı yanıt, daha az sessiz hata,
+      tam denetlenebilir bir süreç ve kurum hafızasına dönüşen bir üslup.
+    </p>
+    <div class="vision__cta">
+      <a class="btn btn--primary btn--lg" href="https://github.com/chyp3r/KACHOW-Teknofest-2026" target="_blank" rel="noopener">Projeyi İncele</a>
+      <a class="btn btn--ghost btn--lg" href="#top">Başa Dön</a>
+    </div>
+    <p class="vision__sign">KACHOW · TEKNOFEST 2026 · Karar Destek Sistemi</p>
+  </div>
+</section>
+
+</main>
+
+<footer class="foot">
+  <span>KACHOW — kamu resmî evrak süreçleri için çok-ajanlı karar destek platformu.</span>
+  <span>Apache License 2.0 · TEKNOFEST 2026</span>
+</footer>
+
+<script src="script.js"></script>
 </body>
 </html>
