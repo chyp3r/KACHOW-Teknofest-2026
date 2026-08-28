@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginPage } from "./LoginPage";
 
@@ -14,6 +15,10 @@ vi.mock("../hooks/useSessionNotice", () => ({
   useSessionNotice: () => null,
 }));
 
+function renderLoginPage(onSuccess = vi.fn()) {
+  return render(<LoginPage onSuccess={onSuccess} />, { wrapper: MemoryRouter });
+}
+
 describe("LoginPage", () => {
   beforeEach(() => {
     mocks.login.mockReset().mockResolvedValue(undefined);
@@ -21,7 +26,7 @@ describe("LoginPage", () => {
 
   it("supports password visibility and the real login flow", async () => {
     const onSuccess = vi.fn();
-    render(<LoginPage onSuccess={onSuccess} />);
+    renderLoginPage(onSuccess);
 
     const password = screen.getByLabelText("Parola");
     expect(password).toHaveAttribute("type", "password");
@@ -37,8 +42,13 @@ describe("LoginPage", () => {
   });
 
   it("shows the institutional KACHOW identity", () => {
-    render(<LoginPage onSuccess={vi.fn()} />);
+    renderLoginPage();
     expect(screen.getByText("KACHOW")).toBeInTheDocument();
     expect(screen.getByText("Karar Destek Sistemi")).toBeInTheDocument();
+  });
+
+  it("links to the register page for a user without an account", () => {
+    renderLoginPage();
+    expect(screen.getByRole("link", { name: "Kayıt ol" })).toHaveAttribute("href", "/register");
   });
 });

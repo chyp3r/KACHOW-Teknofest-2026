@@ -9,6 +9,7 @@ import type { DocumentMetadata } from "./types/documents";
 import { OverlayBackdrop, Spinner } from "./components/Surface";
 
 const LoginPage = lazy(() => import("./pages/LoginPage").then((module) => ({ default: module.LoginPage })));
+const RegisterPage = lazy(() => import("./pages/RegisterPage").then((module) => ({ default: module.RegisterPage })));
 const HomePage = lazy(() => import("./pages/HomePage").then((module) => ({ default: module.HomePage })));
 const ChatsPage = lazy(() => import("./pages/ChatsPage").then((module) => ({ default: module.ChatsPage })));
 const DocumentsPage = lazy(() => import("./pages/DocumentsPage").then((module) => ({ default: module.DocumentsPage })));
@@ -247,6 +248,7 @@ export default function App() {
     <Suspense fallback={<PageFallback />}>
       <Routes>
         <Route path="/login" element={user ? <Navigate to={user.role === "root" ? "/platform" : "/home"} replace /> : <LoginPage onSuccess={() => undefined} />} />
+        <Route path="/register" element={user ? <Navigate to={user.role === "root" ? "/platform" : "/home"} replace /> : <RegisterPage />} />
         <Route path="/*" element={user ? (user.role === "root" ? <RootAuthenticatedApp /> : <AuthenticatedApp userId={user.id} />) : <Navigate to="/login" replace state={{ from: location.pathname }} />} />
       </Routes>
     </Suspense>

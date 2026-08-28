@@ -23,6 +23,16 @@ export const userService = {
     );
   },
   get: (id: string) => apiRequest<User>(`/api/v1/users/${encodeURIComponent(id)}`),
+  // Unauthenticated -- the registrant has no token yet (mirrors
+  // authService.login's own POST /api/v1/auth/login call). The backend
+  // ignores any role/company in the body and derives both from the
+  // caller's invite (see UserService.register_user's own docstring), so
+  // this deliberately never accepts a role parameter.
+  register: (username: string, email: string, password: string) =>
+    apiRequest<User>("/api/v1/users", {
+      method: "POST",
+      body: JSON.stringify({ username, email, password }),
+    }, { authenticated: false }),
   invite: (email: string, role: UserRole) =>
     apiRequest("/api/v1/users/invitations", {
       method: "POST",
