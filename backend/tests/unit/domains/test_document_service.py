@@ -1355,6 +1355,50 @@ async def test_vision_cascade_escalates_to_llm_large_when_fast_tier_is_poor_qual
 
 
 @pytest.mark.asyncio
+async def test_vision_cascade_escalates_to_llm_large_when_fast_tier_fails_outright():
+    """Regression: llm-fast throwing (not just returning a poor result --
+    e.g. an upstream outage on that specific model group) must still fall
+    through to the llm-large escalation, exactly like a quality-bar miss.
+    Before this fix an unguarded exception from the fast tier propagated
+    straight out, making the whole feature unusable even with llm-large
+    healthy."""
+    service, _, _, _ = _build_service()
+    fast_extractor = AsyncMock(spec=EvrenVisionExtractor)
+    fast_extractor.extract.side_effect = DocumentExtractionError("Cannot connect to host")
+    service.vision_extractor = fast_extractor
+    good_text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+
+    with patch.object(EvrenVisionExtractor, "extract", autospec=True) as mock_extract:
+        mock_extract.return_value = ExtractedDocument(
+            text=good_text, pages=[good_text], page_count=1,
+            extractor="evren_vision", used_ocr=True,
+        )
+        with patch.object(settings, "LOCAL_MODE", False):
+            result = await service._extract_with_vision_cascade(b"raw bytes")
+
+    assert result.text == good_text
+    escalated_instance = mock_extract.call_args.args[0]
+    assert escalated_instance.model == settings.EVREN_LLM_LARGE_MODEL
+
+
+@pytest.mark.asyncio
+async def test_vision_cascade_raises_when_both_tiers_fail():
+    """Neither tier available -- the escalation's own failure must still
+    propagate (generate_detailed_analysis's DocumentExtractionError catch
+    is the actual safety net, not this method silently swallowing it)."""
+    service, _, _, _ = _build_service()
+    fast_extractor = AsyncMock(spec=EvrenVisionExtractor)
+    fast_extractor.extract.side_effect = DocumentExtractionError("llm-fast unreachable")
+    service.vision_extractor = fast_extractor
+
+    with patch.object(EvrenVisionExtractor, "extract", autospec=True) as mock_extract:
+        mock_extract.side_effect = DocumentExtractionError("llm-large unreachable")
+        with patch.object(settings, "LOCAL_MODE", False):
+            with pytest.raises(DocumentExtractionError, match="llm-large unreachable"):
+                await service._extract_with_vision_cascade(b"raw bytes")
+
+
+@pytest.mark.asyncio
 async def test_vision_cascade_uses_the_single_configured_extractor_under_local_mode():
     """Ollama has no fast/large split (a single OLLAMA_VISION_MODEL) --
     LOCAL_MODE=true must never attempt the Evren-specific escalation."""
