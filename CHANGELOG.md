@@ -4,6 +4,18 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Eklendi
+- **Kayıt Ol ekranı.** `LoginPage`'in görsel formatını (`.login-page`/
+  `.login-card` iskeleti) yeniden kullanan yeni `/register` sayfası --
+  login ekranından "Hesabınız yok mu? Kayıt ol" ile ulaşılıyor. Backend'e
+  hiçbir değişiklik yok: mevcut, davet-tabanlı `POST /api/v1/users` olduğu
+  gibi kullanılıyor (bir admin/manager önce `AdminPage`'den e-postayı
+  davet etmeli; yeni hesabın şirketini ve rolünü kayıt formu değil davet
+  belirliyor -- kiracılar arası kendi kendine yetki atamayı önleyen kasıtlı
+  bir tasarım). Kayıt formu bu yüzden rol/şirket seçimi göstermiyor;
+  davetsiz bir e-postayla denenirse backend'in düz İngilizce hatası
+  ("This email address has not been invited...") Türkçeye çevrilerek
+  gösteriliyor. Başarılı kayıt sonrası otomatik giriş yapılıyor (kayıt
+  token döndürmediği için).
 - **"Detaylı Analiz" butonu.** Belge yüklemede artık hiç ağ vision çağrısı
   yapılmıyor (aşağıya bakın); OCR gereken taranmış/bozuk belgeler için
   kullanıcı "Temel bilgiler" başlığındaki bu butona basınca `llm-fast`
