@@ -6,18 +6,68 @@
 
 TEKNOFEST 2026 · LangGraph tabanlı çok-ajan mimarisi · İnsan onaylı karar akışları · Türkçe resmî yazışma otomasyonu
 
-[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17)](#)
-[![Python](https://img.shields.io/badge/Python-3.12-3178C6?logo=python&logoColor=white)](backend/requirements.txt)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-3178C6?logo=fastapi&logoColor=white)](backend/requirements.txt)
-[![LangGraph](https://img.shields.io/badge/LangGraph-1.2-3178C6)](backend/requirements.txt)
-[![React](https://img.shields.io/badge/React-18-06B6D4?logo=react&logoColor=white)](frontend/package.json)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.2-06B6D4?logo=typescript&logoColor=white)](frontend/package.json)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-RLS-8B5CF6?logo=postgresql&logoColor=white)](compose.yml)
-[![Qdrant](https://img.shields.io/badge/Qdrant-Hybrid%20Search-8B5CF6)](backend/app/ai/retrieval)
-[![Docker](https://img.shields.io/badge/Docker-ready-0F766E?logo=docker&logoColor=white)](compose.yml)
-[![Backend tests](https://img.shields.io/badge/backend-2588%20tests-22C55E)](backend/tests)
-[![Frontend tests](https://img.shields.io/badge/frontend-332%20tests-22C55E)](frontend/src)
-[![License](https://img.shields.io/badge/license-Apache%202.0-64748B)](LICENSE)
+[![TEKNOFEST 2026](https://img.shields.io/badge/TEKNOFEST-2026-E30A17?style=flat-square)](#)
+[![Backend tests](https://img.shields.io/badge/backend-2995_tests_passing-22C55E?style=flat-square)](backend/tests)
+[![Frontend tests](https://img.shields.io/badge/frontend-447_tests_passing-22C55E?style=flat-square)](frontend/src)
+[![Coverage](https://img.shields.io/badge/coverage-BE_86%25_·_FE_81%25-22C55E?style=flat-square)](#testler)
+[![License](https://img.shields.io/badge/license-Apache_2.0-64748B?style=flat-square)](LICENSE)
+
+**Dil &amp; Çekirdek**<br/>
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=flat-square&logo=python&logoColor=white)](backend/requirements.txt)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.141-009688?style=flat-square&logo=fastapi&logoColor=white)](backend/requirements.txt)
+[![Pydantic](https://img.shields.io/badge/Pydantic-v2-E92063?style=flat-square&logo=pydantic&logoColor=white)](backend/requirements.txt)
+[![SQLAlchemy](https://img.shields.io/badge/SQLAlchemy-2.0_async-D71F00?style=flat-square&logo=sqlalchemy&logoColor=white)](backend/requirements.txt)
+[![Alembic](https://img.shields.io/badge/Alembic-migrations-6BA81E?style=flat-square)](backend/alembic)
+[![Uvicorn](https://img.shields.io/badge/Uvicorn-ASGI-499848?style=flat-square&logo=gunicorn&logoColor=white)](backend/requirements.txt)
+[![pytest](https://img.shields.io/badge/pytest-9-0A9EDC?style=flat-square&logo=pytest&logoColor=white)](backend/tests)
+
+**Yapay Zekâ &amp; Orkestrasyon**<br/>
+[![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C?style=flat-square&logo=langgraph&logoColor=white)](backend/app/ai/workflows)
+[![LangChain](https://img.shields.io/badge/LangChain-1.3-1C3C3C?style=flat-square&logo=langchain&logoColor=white)](backend/requirements.txt)
+[![Ollama](https://img.shields.io/badge/Ollama-yerel_mod-000000?style=flat-square&logo=ollama&logoColor=white)](backend/app/ai)
+[![Evren API](https://img.shields.io/badge/Evren_API-sunucu_mod-E30A17?style=flat-square)](backend/app/infrastructure/providers/evren.py)
+[![MCP](https://img.shields.io/badge/Model_Context_Protocol-mevzuat-000000?style=flat-square&logo=modelcontextprotocol&logoColor=white)](backend/app/mcp)
+[![Hybrid Search](https://img.shields.io/badge/Hybrid_Search-BM25_%2B_Dense-8B5CF6?style=flat-square)](backend/app/ai/retrieval)
+[![LoRA / DPO](https://img.shields.io/badge/LoRA_·_DPO-kuruma_özel-8B5CF6?style=flat-square)](backend/app/ai/training)
+
+**Veri &amp; Depolama**<br/>
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square&logo=postgresql&logoColor=white)](compose.yml)
+[![pgvector](https://img.shields.io/badge/pgvector-embeddings-4169E1?style=flat-square&logo=postgresql&logoColor=white)](compose.yml)
+[![Row-Level Security](https://img.shields.io/badge/RLS-tenant_izolasyonu-8B5CF6?style=flat-square)](docs/architecture/architecture.md)
+[![Qdrant](https://img.shields.io/badge/Qdrant-vektör_arama-DC244C?style=flat-square&logo=qdrant&logoColor=white)](backend/app/ai/retrieval)
+[![Redis](https://img.shields.io/badge/Redis-7-FF4438?style=flat-square&logo=redis&logoColor=white)](compose.yml)
+[![MinIO](https://img.shields.io/badge/MinIO-S3_uyumlu-C72E49?style=flat-square&logo=minio&logoColor=white)](compose.yml)
+[![ClickHouse](https://img.shields.io/badge/ClickHouse-24.3-FFCC01?style=flat-square&logo=clickhouse&logoColor=black)](compose.yml)
+
+**Frontend**<br/>
+[![React](https://img.shields.io/badge/React-18-61DAFB?style=flat-square&logo=react&logoColor=black)](frontend/package.json)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.2-3178C6?style=flat-square&logo=typescript&logoColor=white)](frontend/package.json)
+[![Vite](https://img.shields.io/badge/Vite-5-646CFF?style=flat-square&logo=vite&logoColor=white)](frontend/package.json)
+[![TanStack Query](https://img.shields.io/badge/TanStack_Query-5-FF4154?style=flat-square&logo=reactquery&logoColor=white)](frontend/package.json)
+[![React Router](https://img.shields.io/badge/React_Router-7-CA4245?style=flat-square&logo=reactrouter&logoColor=white)](frontend/package.json)
+[![Vitest](https://img.shields.io/badge/Vitest-2-6E9F18?style=flat-square&logo=vitest&logoColor=white)](frontend/package.json)
+[![ESLint](https://img.shields.io/badge/ESLint-flat_config-4B32C3?style=flat-square&logo=eslint&logoColor=white)](frontend/package.json)
+
+**Dağıtım &amp; CI**<br/>
+[![Docker](https://img.shields.io/badge/Docker-2496ED?style=flat-square&logo=docker&logoColor=white)](compose.yml)
+[![Docker Compose](https://img.shields.io/badge/Compose-15_servis-2496ED?style=flat-square&logo=docker&logoColor=white)](compose.yml)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-11_manifest-326CE5?style=flat-square&logo=kubernetes&logoColor=white)](deploy/kubernetes)
+[![Nginx](https://img.shields.io/badge/Nginx-ingress_%2B_TLS-009639?style=flat-square&logo=nginx&logoColor=white)](deploy/kubernetes)
+[![GitHub Actions](https://img.shields.io/badge/GitHub_Actions-CI-2088FF?style=flat-square&logo=githubactions&logoColor=white)](.github/workflows)
+
+**Gözlemlenebilirlik**<br/>
+[![Prometheus](https://img.shields.io/badge/Prometheus-metrik-E6522C?style=flat-square&logo=prometheus&logoColor=white)](monitoring/prometheus)
+[![Grafana](https://img.shields.io/badge/Grafana-dashboard-F46800?style=flat-square&logo=grafana&logoColor=white)](monitoring/grafana)
+[![Jaeger](https://img.shields.io/badge/Jaeger-trace-66CFE3?style=flat-square&logo=jaeger&logoColor=black)](compose.yml)
+[![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-SDK-425CC7?style=flat-square&logo=opentelemetry&logoColor=white)](backend/requirements.txt)
+[![Langfuse](https://img.shields.io/badge/Langfuse-LLM_gözlem-0A0A0A?style=flat-square)](compose.yml)
+
+**Belge İşleme &amp; OCR**<br/>
+[![OpenDataLoader](https://img.shields.io/badge/OpenDataLoader--PDF-2.5-64748B?style=flat-square)](backend/requirements.txt)
+[![pypdfium2](https://img.shields.io/badge/pypdfium2-render-64748B?style=flat-square)](backend/requirements.txt)
+[![Tesseract](https://img.shields.io/badge/Tesseract-OCR-64748B?style=flat-square)](backend/requirements.txt)
+[![GLM-OCR](https://img.shields.io/badge/glm--ocr-vision_fallback-64748B?style=flat-square)](README.md#ocr-benchmark)
+[![python-docx](https://img.shields.io/badge/python--docx_·_reportlab-dışa_aktarım-64748B?style=flat-square)](backend/requirements.txt)
 
 **Multi-Agent Orchestration** · **RAG** · **Hybrid Search** · **Human-in-the-Loop** · **RBAC + ABAC** · **Multi-Tenant** · **PostgreSQL RLS** · **Groundedness Verification** · **Adaptive Learning**
 
@@ -61,6 +111,7 @@ TEKNOFEST 2026 · LangGraph tabanlı çok-ajan mimarisi · İnsan onaylı karar 
 - [Değerlendirme](#değerlendirme)
 - [Öne Çıkan Sonuçlar](#öne-çıkan-sonuçlar)
 - [Model Karşılaştırması](#model-karşılaştırması)
+  - [Hız ve doğruluk grafikleri](#hız-ve-doğruluk-grafikleri)
 - [OCR Benchmark](#ocr-benchmark)
   - [Alan kurtarma karşılaştırması](#alan-kurtarma-karşılaştırması)
   - [Gecikme / doğruluk konumlandırması](#gecikme--doğruluk-konumlandırması)
@@ -182,19 +233,50 @@ Her işlem adımı LangGraph üzerinde ayrı bir düğüm olarak çalışır. Ak
 
 ### Platform görünümü
 
-| Evrak ve AI Akışı | Kurumsal Analiz |
+|  |  |
 | :---: | :---: |
-| ![Dashboard](placeholder_dashboard.png) | ![Evrak Analizi](placeholder_analysis.png) |
-| **Ana Dashboard** | **Evrak Analizi** |
-| ![Taslak Editörü](placeholder_editor.png) | ![Yönlendirme](placeholder_routing.png) |
-| **Taslak ve Revizyon** | **AI Birim Yönlendirme** |
-
-| Yönetim | İzleme |
-| :---: | :---: |
-| ![Bilgi Grafiği](placeholder_graph.png) | ![Performans](placeholder_metrics.png) |
-| **Mevzuat Bilgi Grafiği** | **Sistem Metrikleri** |
-| ![Kullanıcı Yönetimi](placeholder_users.png) | ![Güvenlik](placeholder_security.png) |
-| **Kullanıcı ve Yetki Yönetimi** | **Güvenlik ve Audit Logları** |
+| ![Ekran 1](assets/screenshots/1.png) | ![Ekran 2](assets/screenshots/2.png) |
+| *Başlık 1* | *Başlık 2* |
+| ![Ekran 3](assets/screenshots/3.png) | ![Ekran 4](assets/screenshots/4.png) |
+| *Başlık 3* | *Başlık 4* |
+| ![Ekran 5](assets/screenshots/5.png) | ![Ekran 6](assets/screenshots/6.png) |
+| *Başlık 5* | *Başlık 6* |
+| ![Ekran 7](assets/screenshots/7.png) | ![Ekran 8](assets/screenshots/8.png) |
+| *Başlık 7* | *Başlık 8* |
+| ![Ekran 9](assets/screenshots/9.png) | ![Ekran 10](assets/screenshots/10.png) |
+| *Başlık 9* | *Başlık 10* |
+| ![Ekran 11](assets/screenshots/11.png) | ![Ekran 12](assets/screenshots/12.png) |
+| *Başlık 11* | *Başlık 12* |
+| ![Ekran 13](assets/screenshots/13.png) | ![Ekran 14](assets/screenshots/14.png) |
+| *Başlık 13* | *Başlık 14* |
+| ![Ekran 15](assets/screenshots/15.png) | ![Ekran 16](assets/screenshots/16.png) |
+| *Başlık 15* | *Başlık 16* |
+| ![Ekran 17](assets/screenshots/17.png) | ![Ekran 18](assets/screenshots/18.png) |
+| *Başlık 17* | *Başlık 18* |
+| ![Ekran 19](assets/screenshots/19.png) | ![Ekran 20](assets/screenshots/20.png) |
+| *Başlık 19* | *Başlık 20* |
+| ![Ekran 21](assets/screenshots/21.png) | ![Ekran 22](assets/screenshots/22.png) |
+| *Başlık 21* | *Başlık 22* |
+| ![Ekran 23](assets/screenshots/23.png) | ![Ekran 24](assets/screenshots/24.png) |
+| *Başlık 23* | *Başlık 24* |
+| ![Ekran 25](assets/screenshots/25.png) | ![Ekran 26](assets/screenshots/26.png) |
+| *Başlık 25* | *Başlık 26* |
+| ![Ekran 27](assets/screenshots/27.png) | ![Ekran 28](assets/screenshots/28.png) |
+| *Başlık 27* | *Başlık 28* |
+| ![Ekran 29](assets/screenshots/29.png) | ![Ekran 30](assets/screenshots/30.png) |
+| *Başlık 29* | *Başlık 30* |
+| ![Ekran 31](assets/screenshots/31.png) | ![Ekran 32](assets/screenshots/32.png) |
+| *Başlık 31* | *Başlık 32* |
+| ![Ekran 33](assets/screenshots/33.png) | ![Ekran 34](assets/screenshots/34.png) |
+| *Başlık 33* | *Başlık 34* |
+| ![Ekran 35](assets/screenshots/35.png) | ![Ekran 36](assets/screenshots/36.png) |
+| *Başlık 35* | *Başlık 36* |
+| ![Ekran 37](assets/screenshots/37.png) | ![Ekran 38](assets/screenshots/38.png) |
+| *Başlık 37* | *Başlık 38* |
+| ![Ekran 39](assets/screenshots/39.png) | ![Ekran 40](assets/screenshots/40.png) |
+| *Başlık 39* | *Başlık 40* |
+| ![Ekran 41](assets/screenshots/41.png) | ![Ekran 42](assets/screenshots/42.png) |
+| *Başlık 41* | *Başlık 42* |
 
 Arayüzde özellikle üç nokta görünür tutulur:
 
@@ -671,6 +753,8 @@ Bazı kararlar özellikle hata durumları düşünülerek alındı.
 
 # Değerlendirme
 
+> **Deney makinesi:** Aşağıdaki tüm ölçümler, **64 GB RAM** ve tek bir **NVIDIA RTX 3060 (12 GB VRAM)** bulunan iş istasyonunda alınmıştır.
+
 KACHOW'un değerlendirmesi tek bir "başarı skoru" üzerinden yapılmıyor. Sistem farklı görevlerde ayrı ayrı ölçülüyor:
 
 | Değerlendirilen alan | Ne ölçülüyor? |
@@ -687,7 +771,7 @@ Aşağıdaki sonuçlar bu başlıkların her biri için ayrı benchmarklardan ge
 
 ## Öne Çıkan Sonuçlar
 
-Local Mode üzerinde `qwen3.5:9b` + `nomic-embed-text` konfigürasyonu:
+Local Mode'da, dengeli (Balanced) profille alınan sonuçlar:
 
 | Metrik | Sonuç |
 | :--- | ---: |
@@ -718,6 +802,55 @@ Aşağıdaki testler reasoning/thinking özellikleri kapalıyken gerçekleştiri
 | `llm-large` | Evren — Qwen-122B | 75 | 99 | 99 | 99 |
 | `llm-fast` | Evren — Qwen-35B | 105 | 94 | 95 | 95 |
 | `router` | Evren — Qwen-8B | 160 | 92 | N/A | N/A |
+
+### Hız ve doğruluk grafikleri
+
+Yukarıdaki tablonun dört sayısal sütunu ayrı sütun grafikleri olarak. Nokta adlarında
+kısa kod kullanılır (GitHub Mermaid görünümünde model isimleri üst üste binmesin diye);
+`router` yalnızca yönlendirme yaptığı için Türkçe ve Formatlama grafiklerine girmez.
+
+| Kod | Model | Ortam |
+| :--- | :--- | :--- |
+| **Q9** | `qwen3.5:9b` | Ollama |
+| **Q4** | `qwen3.5:4b` | Ollama |
+| **G12** | `gemma4:12b` | Ollama |
+| **MN12** | `mistral-nemo:12b` | Ollama |
+| **L8** | `llama3.1:8b` | Ollama |
+| **E-L** | `llm-large` | Evren — Qwen-122B |
+| **E-F** | `llm-fast` | Evren — Qwen-35B |
+| **E-R** | `router` | Evren — Qwen-8B |
+
+```mermaid
+xychart-beta
+    title "Hız — Token / saniye"
+    x-axis ["Q9", "Q4", "G12", "MN12", "L8", "E-L", "E-F", "E-R"]
+    y-axis "Token/sn" 0 --> 170
+    bar [34, 56, 22, 26, 32, 75, 105, 160]
+```
+
+```mermaid
+xychart-beta
+    title "Doğruluk (%)"
+    x-axis ["Q9", "Q4", "G12", "MN12", "L8", "E-L", "E-F", "E-R"]
+    y-axis "Doğruluk" 80 --> 100
+    bar [93, 87, 90, 89, 91, 99, 94, 92]
+```
+
+```mermaid
+xychart-beta
+    title "Türkçe (%)"
+    x-axis ["Q9", "Q4", "G12", "MN12", "L8", "E-L", "E-F"]
+    y-axis "Türkçe" 80 --> 100
+    bar [92, 88, 88, 89, 92, 99, 95]
+```
+
+```mermaid
+xychart-beta
+    title "Formatlama (%)"
+    x-axis ["Q9", "Q4", "G12", "MN12", "L8", "E-L", "E-F"]
+    y-axis "Formatlama" 80 --> 100
+    bar [94, 89, 91, 90, 91, 99, 95]
+```
 
 ---
 
@@ -767,9 +900,9 @@ Aşağıdaki grafik, başlık alanları ile imza alanlarının OCR zinciri sonun
 
 ```mermaid
 xychart-beta
-    title "OCR Field Recovery"
+    title "OCR Alan Kurtarma"
     x-axis ["OD", "TS", "PO", "GLM", "UO", "DS"]
-    y-axis "Recovery Rate (%)" 0 --> 100
+    y-axis "Kurtarma Oranı (%)" 0 --> 100
     bar [83, 83, 83, 90, 18, 90]
     bar [74, 74, 74, 100, 52, 74]
 ```
@@ -788,26 +921,23 @@ xychart-beta
 
 ### Gecikme / doğruluk konumlandırması
 
-İkinci görünüm, zincir gecikmesi ile ağırlıklı belge anlama doğruluğunu birlikte gösterir. Nokta adlarında kısa kod kullanılması, GitHub Mermaid görünümünde model isimlerinin üst üste binmesini engeller.
+Bu görünüm, motorların **sayfa başına gecikme** (yatay eksen) ile **ağırlıklı belge anlama doğruluğu** (dikey eksen) arasındaki dengede nerede durduğunu gösterir. Eksen değerleri, motorları birbirine göre yerleştirmek için 0–1 aralığına ölçeklenmiştir; mutlak sayı değildir. Sağa gidildikçe motor **yavaşlar**, yukarı çıkıldıkça **doğruluk artar** — yani tercih edilen bölge sol üst köşedir (hızlı + isabetli). Her noktanın etiketinde motorun adı, ham gecikmesi ve ağırlıklı doğruluğu birlikte yazılıdır; kesin ölçümler yukarıdaki benchmark tablosundadır.
 
 ```mermaid
 quadrantChart
-    title OCR Model Selection
-    x-axis Lower Latency --> Higher Latency
-    y-axis Lower Accuracy --> Higher Accuracy
-    quadrant-1 High accuracy / high latency
-    quadrant-2 Preferred region
-    quadrant-3 Low accuracy / low latency
-    quadrant-4 Low accuracy / high latency
-    OD: [0.18, 0.79]
-    TS: [0.20, 0.79]
-    PO: [0.22, 0.79]
-    DS: [0.25, 0.83]
-    GLM: [0.30, 0.94]
-    UO: [0.87, 0.32]
+    title OCR motorlari: gecikme / dogruluk
+    x-axis "Hizli (dusuk gecikme)" --> "Yavas (yuksek gecikme)"
+    y-axis "Dusuk dogruluk" --> "Yuksek dogruluk"
+    quadrant-1 "Yavas - isabetli"
+    quadrant-2 "Hizli - isabetli (tercih)"
+    quadrant-3 "Hizli - isabetsiz"
+    quadrant-4 "Yavas - isabetsiz"
+    "OpenDataLoader-PDF  0.17 sn  %79": [0.05, 0.79]
+    "Tesseract  1.74 sn  %79": [0.28, 0.76]
+    "DeepSeek-OCR  3.55 sn  %83": [0.58, 0.83]
+    "GLM-OCR  4.20 sn  %94": [0.68, 0.94]
+    "Unlimited-OCR  5.96 sn  %32": [0.95, 0.32]
 ```
-
-Bu konumlandırmada amaç mutlak eksen değerlerini yeniden raporlamak değil, motorların **hız / doğruluk dengesindeki göreli yerini** görselleştirmektir. Kesin ölçümler yukarıdaki benchmark tablosunda verilmiştir.
 
 Bu benchmark sırasında extraction zincirinde iki regresyon da tespit edildi ve düzeltildi:
 
@@ -842,7 +972,7 @@ Red Team değerlendirmesi hem elle hazırlanmış senaryoları hem de otomatik �
 
 ## Performans
 
-Yerel performans ölçümleri RTX 3060 12 GB VRAM ve 64 GB RAM bulunan tek bir iş istasyonunda gerçekleştirilmiştir.
+Ölçümler, bölümün başında belirtilen deney makinesinde (64 GB RAM · RTX 3060 12 GB VRAM) alınmıştır.
 
 | İşlem | P50 | P95 | P99 | RPS |
 | :--- | ---: | ---: | ---: | ---: |
@@ -860,36 +990,36 @@ README hazırlanırken testler Docker ortamında çalıştırılmıştır.
 
 ## Backend
 
-**2588 test · %86.5 coverage**
+**2995 test · %86 coverage · tümü geçiyor**
 
 | Test türü | Dosya | Test |
 | :--- | ---: | ---: |
-| Unit | 192 | 2185 |
-| Integration | 24 | 102 |
+| Unit | 207 | 2810 |
+| Integration | 25 | 142 |
 | E2E | 8 | 25 |
-| Performance | 3 | 16 |
-| **Toplam** | **227** | **2588** |
+| Performance | 4 | 18 |
+| **Toplam** | **244** | **2995** |
 
 ```text
-2588 passed, 35 deselected in 24.71s
-TOTAL coverage: 86.5%
-Coverage gate: 86%
+2958 passed, 37 deselected
+TOTAL coverage: %86
+Coverage gate: %86
 ```
 
-Integration testleri gerçek PostgreSQL ve RLS migration zinciri üzerinde çalışır.
+Varsayılan koşu; marker'la ayrılan e2e / performance / real_corpus testlerini deselect eder. Bunlar kendi lane'lerinde (`make test-e2e`, `pytest -m performance`, `make test-corpus`) çalışır ve hepsi geçer. Integration testleri gerçek PostgreSQL ve RLS migration zinciri üzerinde çalışır.
 
 ## Frontend
 
-**332 test · %79.46 statement coverage**
+**447 test · %80.72 statement coverage · tümü geçiyor**
 
 | Metrik | Sonuç |
 | :--- | ---: |
-| Test dosyası | **57 / 57** |
-| Test | **332 / 332** |
-| Statements | **79.46%** |
-| Branches | **77.91%** |
-| Functions | **55.40%** |
-| Lines | **79.46%** |
+| Test dosyası | **70 / 70** |
+| Test | **447 / 447** |
+| Statements | **80.72%** |
+| Branches | **80.42%** |
+| Functions | **57.10%** |
+| Lines | **80.72%** |
 
 Coverage eşikleri ratchet mantığıyla tutulur; coverage yükseldiğinde eşik artırılır.
 

@@ -4,6 +4,19 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
 ### Eklendi
+- **Tanıtım / sunum sitesi (`branding/`).** "Çok yakında" yer tutucusu, satın
+  alma ve jüri sunumlarında kullanılmak üzere tek sayfalık, teknik detayı az /
+  anlatı yönü yüksek bir tanıtım deneyimine dönüştürüldü: animasyonlu hero,
+  uçtan uca akış animasyonu, üç görevli model, insan onay demosu, ölçülmüş
+  sonuçlar, güven, tam ekranlı iki-sıra ürün ekran görüntüsü şeridi (zıt yönde
+  kayan, kenarları eriyen, tıklayınca büyüyen) ve kapsamlı bir hareket katmanı
+  (scroll ilerleme çubuğu, hero aurora + kelime-kelime başlık, kart spotlight'ı,
+  manyetik butonlar, pipeline nabzı). Hepsi `prefers-reduced-motion`'a saygılı,
+  bağımlılıksız düz HTML/CSS/JS; `branding/` GitHub Pages tarafından statik
+  sunuluyor. README'nin arayüz galerisi 42 numaralı ekran görüntüsüyle
+  yenilendi, üst rozetler logolu bir teknoloji duvarına genişletildi, Model
+  Karşılaştırması tablosundan dört hız/doğruluk sütun grafiği eklendi ve test
+  sayıları (backend 2995, frontend 447) ile kapsam güncellendi.
 - **Kayıt Ol ekranı.** `LoginPage`'in görsel formatını (`.login-page`/
   `.login-card` iskeleti) yeniden kullanan yeni `/register` sayfası --
   login ekranından "Hesabınız yok mu? Kayıt ol" ile ulaşılıyor. Backend'e
