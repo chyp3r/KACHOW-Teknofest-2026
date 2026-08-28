@@ -95,6 +95,36 @@ async def test_a_grounded_pii_free_revision_does_not_require_approval(fake_llm):
 
 
 @pytest.mark.asyncio
+async def test_a_rewrite_dropping_the_date_line_is_backfilled_with_the_original_date_not_today(fake_llm):
+    """A rewrite pass that fails to reproduce the original "Tarih:" line
+    verbatim and instead leaves a placeholder ("Tarih: [Tarih]") must be
+    backfilled with the ORIGINAL draft's own date, never with "today" --
+    a revision must never silently change a field the user didn't touch
+    (see app.ai.workflows.dates's own docstring). `today` is deliberately
+    set to a different, obviously-wrong value here to prove the fallback
+    ignores it whenever the original draft's own date can be recovered."""
+    fake_llm.stream_chunks = [
+        "Konu: Yıllık İzin Talebi\nSayı: E-1\nTarih: [Tarih]\n\nSayın Makam,\n\n"
+        "İlgi yazı kapsamında personelimizin izin talebi tarafımıza iletilmiştir.\n\n"
+        "Arz ederim.\n\nAli Veli\nGenel Müdür"
+    ]
+    graph = create_revise_graph(fake_llm)
+
+    result = await graph.ainvoke(
+        {
+            "active_draft": _active_draft(),  # text carries "Tarih: 30.07.2026"
+            "instructions": "Bunu daha iyi yap.",
+            "reasoning_level": "fast",
+            "today": "01.01.2099",
+        }
+    )
+
+    assert result["status"] == StepStatus.COMPLETED
+    assert "Tarih: 30.07.2026" in result["draft"]
+    assert "01.01.2099" not in result["draft"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("blank_instruction", ["", "   ", "\n\n"])
 async def test_a_blank_instruction_is_a_no_op_not_a_whole_draft_rewrite(fake_llm, blank_instruction):
     """C21: decompose_instruction("") used to resolve to a single

@@ -34,6 +34,18 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Frontend seçim alanları, tarayıcı varsayılanı yerine erişilebilir ortak `Dropdown` bileşenine taşındı.
 
 ### Düzeltildi
+- **Revizyonda taslağın tarihi bugünle sessizce değişiyordu.** Bir
+  yeniden yazım/onarım geçişi taslağın orijinal "Tarih:" satırını verbatim
+  koruyamayıp bir yer tutucuyla ("Tarih: [Tarih]") değiştirdiğinde,
+  deterministik yedek mekanizma bunu revizyon anının bugünkü tarihiyle
+  (`today_tr()`) dolduruyordu -- oysa bir revizyon, yapısı gereği orijinal
+  taslağın tarihini değiştirmemeli. Yeni `extract_draft_date()`
+  (`app.ai.workflows.dates`), revize edilmekte olan taslağın kendi
+  mevcut "Tarih:" satırından değeri çıkarıyor ve yedek mekanizma artık
+  önce onu deniyor; `today_tr()` yalnızca orijinal taslakta bile
+  ayrıştırılabilir bir tarih yoksa son çare olarak devreye giriyor. İlk
+  taslak oluşturmanın kendi `today_tr()` kullanımı (`draft_graph.py`)
+  değişmedi -- bu yalnızca revize yoluna özgü bir düzeltme.
 - **Asistan, aracı hiç çağırmadan bir transfer/gönderim onay ekranı vaat
   edebiliyordu.** Kullanıcı "taslağı X'e gönder" dediğinde, model bazen
   `propose_transfer` aracını hiç çağırmadan "gönderilmek üzere önerildi,
