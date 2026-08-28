@@ -233,14 +233,30 @@ Her işlem adımı LangGraph üzerinde ayrı bir düğüm olarak çalışır. Ak
 
 ### Platform görünümü
 
-| | |
-| :---: | :---: |
-| ![Ana Sayfa — koyu tema](assets/screenshots/2.png) | ![Karar Destek Sohbeti — kurum/kişi tespiti](assets/screenshots/22.png) |
-| *Ana Sayfa — koyu tema* | *Karar Destek Sohbeti — kurum/kişi tespiti* |
-| ![Mesajlar — yeni konuşma](assets/screenshots/5.png) | ![Evrak Kütüphanesi — özet sekmesi](assets/screenshots/8.png) |
-| *Mesajlar — yeni konuşma* | *Evrak Kütüphanesi — özet sekmesi* |
-| ![Taslaklar — önizleme ve gönderim](assets/screenshots/14.png) | ![Mevzuat Haritası — ilişki grafiği](assets/screenshots/17.png) |
-| *Taslaklar — önizleme ve gönderim* | *Mevzuat Haritası — ilişki grafiği* |
+<p align="center">
+  <img src="assets/screenshots/2.png" alt="Ana Sayfa — koyu tema" width="720"><br>
+  <em>Ana Sayfa — koyu tema</em>
+</p>
+<p align="center">
+  <img src="assets/screenshots/22.png" alt="Karar Destek Sohbeti — kurum/kişi tespiti" width="720"><br>
+  <em>Karar Destek Sohbeti — kurum/kişi tespiti</em>
+</p>
+<p align="center">
+  <img src="assets/screenshots/5.png" alt="Mesajlar — yeni konuşma" width="720"><br>
+  <em>Mesajlar — yeni konuşma</em>
+</p>
+<p align="center">
+  <img src="assets/screenshots/8.png" alt="Evrak Kütüphanesi — özet sekmesi" width="720"><br>
+  <em>Evrak Kütüphanesi — özet sekmesi</em>
+</p>
+<p align="center">
+  <img src="assets/screenshots/14.png" alt="Taslaklar — önizleme ve gönderim" width="720"><br>
+  <em>Taslaklar — önizleme ve gönderim</em>
+</p>
+<p align="center">
+  <img src="assets/screenshots/17.png" alt="Mevzuat Haritası — ilişki grafiği" width="720"><br>
+  <em>Mevzuat Haritası — ilişki grafiği</em>
+</p>
 
 Tüm 42 ekran görüntüsü ve başlıkları için: **[Ekran Görüntüsü Galerisi](assets/screenshots/GALERI.md)**
 
