@@ -1582,9 +1582,18 @@ class DocumentService:
         return analysis
 
     async def _extract_with_vision_cascade(self, content: bytes) -> ExtractedDocument:
-        """Vision OCR, llm-fast first, escalating to llm-large once if the
-        fast tier's result doesn't clear the same acceptance bar
-        `FallbackDocumentExtractor._is_acceptable` uses.
+        """Vision OCR, llm-fast first, escalating to llm-large if the fast
+        tier either fails outright or its result doesn't clear the same
+        acceptance bar `FallbackDocumentExtractor._is_acceptable` uses.
+
+        The fast-tier call is wrapped in its own try/except specifically
+        because it's a hard dependency on a single upstream model group --
+        if that group has an outage (observed in production: Evren's own
+        `llm-fast` backend unreachable), letting the exception propagate
+        would make this feature entirely unusable even though `llm-large`
+        is healthy and could serve every request on its own. A quality-bar
+        miss and an outright failure both fall through to the same
+        escalation call below; only the log line distinguishes them.
 
         Ollama has no equivalent fast/large split (a single
         `OLLAMA_VISION_MODEL`), so `LOCAL_MODE=true` always uses
@@ -1595,25 +1604,35 @@ class DocumentService:
             content: Raw document bytes.
 
         Returns:
-            The extraction result -- from the fast tier if it was good
-            enough, otherwise from the large-tier escalation.
+            The extraction result -- from the fast tier if it was
+            available and good enough, otherwise from the large-tier
+            escalation.
         """
         if settings.LOCAL_MODE or not isinstance(self.vision_extractor, EvrenVisionExtractor):
             return await self.vision_extractor.extract(content)
 
-        fast_result = await self.vision_extractor.extract(content)
-        if (
-            fast_result.char_count >= MIN_EXTRACTED_CHAR_COUNT
-            and fast_result.quality_ratio >= MIN_TEXT_QUALITY_RATIO
-        ):
-            return fast_result
+        try:
+            fast_result = await self.vision_extractor.extract(content)
+        except DocumentExtractionError:
+            logger.warning(
+                "Detailed analysis: llm-fast vision call failed outright; "
+                "escalating to llm-large without a quality comparison.",
+                exc_info=True,
+            )
+            fast_result = None
 
-        logger.info(
-            "Detailed analysis: llm-fast vision result below the quality bar "
-            "(char_count=%d, quality_ratio=%.2f); escalating to llm-large.",
-            fast_result.char_count,
-            fast_result.quality_ratio,
-        )
+        if fast_result is not None:
+            if (
+                fast_result.char_count >= MIN_EXTRACTED_CHAR_COUNT
+                and fast_result.quality_ratio >= MIN_TEXT_QUALITY_RATIO
+            ):
+                return fast_result
+            logger.info(
+                "Detailed analysis: llm-fast vision result below the quality bar "
+                "(char_count=%d, quality_ratio=%.2f); escalating to llm-large.",
+                fast_result.char_count,
+                fast_result.quality_ratio,
+            )
         return await EvrenVisionExtractor(model=settings.EVREN_LLM_LARGE_MODEL).extract(content)
 
     async def generate_detailed_analysis(

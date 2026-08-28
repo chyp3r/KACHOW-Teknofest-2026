@@ -46,6 +46,19 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 - Frontend seçim alanları, tarayıcı varsayılanı yerine erişilebilir ortak `Dropdown` bileşenine taşındı.
 
 ### Düzeltildi
+- **"Detaylı Analiz", `llm-fast` kesintisinde `llm-large` sağlıklı olsa
+  bile tamamen çöküyordu.** `_extract_with_vision_cascade`, `llm-fast`'ı
+  önce deneyip kalite yetersizse `llm-large`'a yükselecek şekilde
+  tasarlanmıştı, ama yükseltme yalnızca "düşük kalite" sonucuna bağlıydı
+  -- `llm-fast` çağrısının kendisi bir istisna fırlattığında (paylaşılan
+  Evren API'sinde o model grubuna özgü bir kesinti gibi) istisna hiç
+  yakalanmadan doğrudan yukarı yayılıyor, `llm-large`'ı hiç denemeden
+  özelliği tamamen kullanılamaz hale getiriyordu. `llm-fast` çağrısı artık
+  kendi try/except'inde; bir istisna, düşük-kalite sinyaliyle aynı
+  yükseltme yoluna düşüyor (yalnızca log satırı ayrım yapıyor). Her iki
+  katman da başarısız olursa istisna hâlâ `generate_detailed_analysis`'in
+  mevcut yakalama bloğuna kadar yayılıyor -- davranış değişmedi, yalnızca
+  yükseltme koşulu genişledi.
 - **Sohbette güvenlik kontrolü (maskeleme) uyarısı kapatılamıyordu.** Bir
   yanıt PII/gizlilik nedeniyle maskelendiğinde gösterilen "Maskelendi"
   uyarı kartının kapatılacak hiçbir kontrolü yoktu -- yalnızca yeni bir
