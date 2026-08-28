@@ -233,50 +233,16 @@ Her işlem adımı LangGraph üzerinde ayrı bir düğüm olarak çalışır. Ak
 
 ### Platform görünümü
 
-|  |  |
+| | |
 | :---: | :---: |
-| ![Ekran 1](assets/screenshots/1.png) | ![Ekran 2](assets/screenshots/2.png) |
-| *Başlık 1* | *Başlık 2* |
-| ![Ekran 3](assets/screenshots/3.png) | ![Ekran 4](assets/screenshots/4.png) |
-| *Başlık 3* | *Başlık 4* |
-| ![Ekran 5](assets/screenshots/5.png) | ![Ekran 6](assets/screenshots/6.png) |
-| *Başlık 5* | *Başlık 6* |
-| ![Ekran 7](assets/screenshots/7.png) | ![Ekran 8](assets/screenshots/8.png) |
-| *Başlık 7* | *Başlık 8* |
-| ![Ekran 9](assets/screenshots/9.png) | ![Ekran 10](assets/screenshots/10.png) |
-| *Başlık 9* | *Başlık 10* |
-| ![Ekran 11](assets/screenshots/11.png) | ![Ekran 12](assets/screenshots/12.png) |
-| *Başlık 11* | *Başlık 12* |
-| ![Ekran 13](assets/screenshots/13.png) | ![Ekran 14](assets/screenshots/14.png) |
-| *Başlık 13* | *Başlık 14* |
-| ![Ekran 15](assets/screenshots/15.png) | ![Ekran 16](assets/screenshots/16.png) |
-| *Başlık 15* | *Başlık 16* |
-| ![Ekran 17](assets/screenshots/17.png) | ![Ekran 18](assets/screenshots/18.png) |
-| *Başlık 17* | *Başlık 18* |
-| ![Ekran 19](assets/screenshots/19.png) | ![Ekran 20](assets/screenshots/20.png) |
-| *Başlık 19* | *Başlık 20* |
-| ![Ekran 21](assets/screenshots/21.png) | ![Ekran 22](assets/screenshots/22.png) |
-| *Başlık 21* | *Başlık 22* |
-| ![Ekran 23](assets/screenshots/23.png) | ![Ekran 24](assets/screenshots/24.png) |
-| *Başlık 23* | *Başlık 24* |
-| ![Ekran 25](assets/screenshots/25.png) | ![Ekran 26](assets/screenshots/26.png) |
-| *Başlık 25* | *Başlık 26* |
-| ![Ekran 27](assets/screenshots/27.png) | ![Ekran 28](assets/screenshots/28.png) |
-| *Başlık 27* | *Başlık 28* |
-| ![Ekran 29](assets/screenshots/29.png) | ![Ekran 30](assets/screenshots/30.png) |
-| *Başlık 29* | *Başlık 30* |
-| ![Ekran 31](assets/screenshots/31.png) | ![Ekran 32](assets/screenshots/32.png) |
-| *Başlık 31* | *Başlık 32* |
-| ![Ekran 33](assets/screenshots/33.png) | ![Ekran 34](assets/screenshots/34.png) |
-| *Başlık 33* | *Başlık 34* |
-| ![Ekran 35](assets/screenshots/35.png) | ![Ekran 36](assets/screenshots/36.png) |
-| *Başlık 35* | *Başlık 36* |
-| ![Ekran 37](assets/screenshots/37.png) | ![Ekran 38](assets/screenshots/38.png) |
-| *Başlık 37* | *Başlık 38* |
-| ![Ekran 39](assets/screenshots/39.png) | ![Ekran 40](assets/screenshots/40.png) |
-| *Başlık 39* | *Başlık 40* |
-| ![Ekran 41](assets/screenshots/41.png) | ![Ekran 42](assets/screenshots/42.png) |
-| *Başlık 41* | *Başlık 42* |
+| ![Ana Sayfa — koyu tema](assets/screenshots/2.png) | ![Karar Destek Sohbeti — kurum/kişi tespiti](assets/screenshots/22.png) |
+| *Ana Sayfa — koyu tema* | *Karar Destek Sohbeti — kurum/kişi tespiti* |
+| ![Mesajlar — yeni konuşma](assets/screenshots/5.png) | ![Evrak Kütüphanesi — özet sekmesi](assets/screenshots/8.png) |
+| *Mesajlar — yeni konuşma* | *Evrak Kütüphanesi — özet sekmesi* |
+| ![Taslaklar — önizleme ve gönderim](assets/screenshots/14.png) | ![Mevzuat Haritası — ilişki grafiği](assets/screenshots/17.png) |
+| *Taslaklar — önizleme ve gönderim* | *Mevzuat Haritası — ilişki grafiği* |
+
+Tüm 42 ekran görüntüsü ve başlıkları için: **[Ekran Görüntüsü Galerisi](assets/screenshots/GALERI.md)**
 
 Arayüzde özellikle üç nokta görünür tutulur:
 
