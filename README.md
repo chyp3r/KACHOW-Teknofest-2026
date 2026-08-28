@@ -765,7 +765,7 @@ Local Mode'da, dengeli (Balanced) profille alınan sonuçlar:
 | Retrieval MRR | **0.892** |
 | Retrieval nDCG@10 | **0.908** |
 | Taslak LLM-Judge | **4.78 / 5.0** |
-| PII Precision / Recall | **%99.8 / %99.9** |
+| PII Precision / Recall | **%98 / %99.9** |
 | Routing Accuracy | **%94.6** |
 
 ---
