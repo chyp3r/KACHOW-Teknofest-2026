@@ -26,6 +26,7 @@ from app.infrastructure.extractors.base import (
     ExtractedDocument,
 )
 from app.infrastructure.extractors.marks import DetectedMark
+from app.infrastructure.extractors.vision import EvrenVisionExtractor
 from app.infrastructure.storage.base import BaseStorage
 
 #: A real, minimally valid PDF (one blank page) -- not just bytes starting
@@ -240,8 +241,34 @@ async def test_analyze_populates_signature_assessment_from_detected_marks():
 
 
 @pytest.mark.asyncio
-async def test_analyze_reports_an_unsigned_document_with_no_detected_marks():
-    service, _, _, _ = _build_service()  # default fixture: detected_marks=[]
+async def test_analyze_reports_unknown_signature_status_when_detection_never_ran():
+    """Default fixture never passes detected_marks= -- simulates a
+    non-OCR extractor path (opendataloader/pdfium/plain_text), where
+    detect_marks never ran at all. Must read as unknown (None), not
+    False (checked, found nothing)."""
+    service, _, _, _ = _build_service()
+
+    result = await service.analyze_document(
+        owner_id="user-1",
+        company_id="company-1",
+        file_name="evrak.pdf", content=PDF_BYTES, content_type="application/pdf"
+    )
+
+    assert result.signature.is_signed is None
+    assert result.signature.has_stamp is None
+    assert result.signature.marks == []
+
+
+@pytest.mark.asyncio
+async def test_analyze_reports_unsigned_when_detection_ran_and_found_nothing():
+    """Distinct from the "never ran" case above: an OCR extractor that
+    genuinely found no marks passes detected_marks=[] explicitly."""
+    text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+    extracted = ExtractedDocument(
+        text=text, pages=[text], page_count=1,
+        extractor="tesseract", used_ocr=True, detected_marks=[],
+    )
+    service, _, _, _ = _build_service(extracted=extracted)
 
     result = await service.analyze_document(
         owner_id="user-1",
@@ -767,10 +794,12 @@ async def test_update_document_fields_reruns_compliance_and_persists_the_correct
 async def test_get_cached_analysis_loads_a_pre_signature_field_cache():
     """A cache written before `signature` existed on the response schema has
     no such key in its `analysis` object at all -- must still validate, with
-    `signature` taking its default (empty), the same guarantee `guardrail`
-    already relies on. Without a default this would 404 every document
-    analysed before this feature shipped (see get_cached_analysis's own
-    docstring: a validation failure returns None -> the router 404s)."""
+    `signature` taking its default (is_signed=None, unknown -- correctly so,
+    since no detection ever ran against this pre-feature cache), the same
+    guarantee `guardrail` already relies on. Without a default this would
+    404 every document analysed before this feature shipped (see
+    get_cached_analysis's own docstring: a validation failure returns
+    None -> the router 404s)."""
     storage_path = "uploads/old.pdf"
     service, storage, _, _ = _build_service()
     storage.blobs[_analysis_cache_key(storage_path)] = json.dumps(
@@ -799,7 +828,7 @@ async def test_get_cached_analysis_loads_a_pre_signature_field_cache():
     result = await service.get_cached_analysis(storage_path)
 
     assert result is not None
-    assert result.signature.is_signed is False
+    assert result.signature.is_signed is None
     assert result.signature.marks == []
 
 
@@ -1189,6 +1218,203 @@ async def test_generate_detailed_summary_wraps_a_timeout_in_ai_exception_without
 
     assert exc_info.value.message == "Detaylı özet oluşturma zaman aşımına uğradı."
     assert storage.blobs[_analysis_cache_key(storage_path)] == before
+
+
+# ==========================================
+# On-demand detailed analysis (vision OCR cascade + full re-analysis)
+# ==========================================
+@pytest.mark.asyncio
+async def test_generate_detailed_analysis_reruns_the_full_graph_and_persists():
+    """Unlike reextract_document_text (deterministic field re-derivation
+    only), this replaces document_type/summary/fields/compliance_status
+    from a freshly re-run analysis graph -- and unlike generate_detailed_
+    summary, it carries forward any already-built detailed_summary rather
+    than recomputing it."""
+    storage_path = "uploads/abc.pdf"
+    analysis = _base_analysis(storage_path, detailed_summary="Önceden üretilmiş ayrıntılı özet.")
+    new_state = {
+        "document_type": DocumentType.PETITION.value,
+        "document_type_label": "Dilekçe",
+        "summary": "Yeniden OCR sonrası özet.",
+        "fields": {"konu": "Netleşen Konu"},
+        "missing_fields": [],
+        "compliance_status": ComplianceStatus.COMPLIANT.value,
+        "mevzuat_suggestions": [],
+    }
+    service, storage, _, graph = _build_service(graph_state=new_state)
+    _write_cache(storage, storage_path, analysis)
+    storage.blobs[storage_path] = b"%PDF-1.7 raw bytes"
+    vision_extractor = AsyncMock()
+    ocr_text = "Konu : Netleşen Konu"
+    vision_extractor.extract.return_value = ExtractedDocument(
+        text=ocr_text, pages=[ocr_text], page_count=1,
+        extractor="evren_vision", used_ocr=True,
+    )
+    service.vision_extractor = vision_extractor
+
+    result = await service.generate_detailed_analysis(storage_path, "company-1")
+
+    assert result is not None
+    assert result.document_type == DocumentType.PETITION
+    assert result.summary == "Yeniden OCR sonrası özet."
+    assert result.fields.konu == "Netleşen Konu"
+    assert result.compliance_status == ComplianceStatus.COMPLIANT
+    # detailed_summary is owned by generate_detailed_summary -- carried over,
+    # not recomputed.
+    assert result.detailed_summary == "Önceden üretilmiş ayrıntılı özet."
+    graph.ainvoke.assert_awaited_once()
+
+    saved = _read_cache(storage, storage_path)
+    assert saved["analysis"]["document_type"] == DocumentType.PETITION.value
+
+
+@pytest.mark.asyncio
+async def test_generate_detailed_analysis_returns_none_when_nothing_is_cached():
+    service, _, _, _ = _build_service()
+    service.vision_extractor = AsyncMock()
+
+    result = await service.generate_detailed_analysis("uploads/missing.pdf", "company-1")
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_generate_detailed_analysis_wraps_a_timeout_in_ai_exception_without_corrupting_cache(
+    monkeypatch,
+):
+    monkeypatch.setattr(settings, "DETAILED_ANALYSIS_TIMEOUT_SECONDS", 0.01)
+    storage_path = "uploads/abc.pdf"
+    analysis = _base_analysis(storage_path)
+    service, storage, _, _ = _build_service()
+    _write_cache(storage, storage_path, analysis)
+    storage.blobs[storage_path] = b"%PDF-1.7 raw bytes"
+    before = storage.blobs[_analysis_cache_key(storage_path)]
+
+    async def _never_finishes(*_args, **_kwargs):
+        await asyncio.sleep(5)
+
+    vision_extractor = AsyncMock()
+    vision_extractor.extract.side_effect = _never_finishes
+    service.vision_extractor = vision_extractor
+
+    with pytest.raises(AIException) as exc_info:
+        await service.generate_detailed_analysis(storage_path, "company-1")
+
+    assert exc_info.value.message == "Detaylı analiz zaman aşımına uğradı."
+    assert storage.blobs[_analysis_cache_key(storage_path)] == before
+
+
+@pytest.mark.asyncio
+async def test_vision_cascade_uses_the_fast_tier_result_when_it_clears_the_quality_bar():
+    """The common case: the injected vision_extractor (already the fast
+    tier -- see get_document_extractor/dependency.py) is good enough on
+    its own, no escalation call."""
+    service, _, _, _ = _build_service()
+    good_text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+    fast_extractor = AsyncMock(spec=EvrenVisionExtractor)
+    fast_extractor.extract.return_value = ExtractedDocument(
+        text=good_text, pages=[good_text], page_count=1,
+        extractor="evren_vision", used_ocr=True,
+    )
+    service.vision_extractor = fast_extractor
+
+    with patch.object(settings, "LOCAL_MODE", False):
+        result = await service._extract_with_vision_cascade(b"raw bytes")
+
+    assert result.text == good_text
+    fast_extractor.extract.assert_awaited_once_with(b"raw bytes")
+
+
+@pytest.mark.asyncio
+async def test_vision_cascade_escalates_to_llm_large_when_fast_tier_is_poor_quality():
+    service, _, _, _ = _build_service()
+    fast_extractor = AsyncMock(spec=EvrenVisionExtractor)
+    fast_extractor.extract.return_value = ExtractedDocument(
+        text="ab", pages=["ab"], page_count=1,  # below MIN_EXTRACTED_CHAR_COUNT
+        extractor="evren_vision", used_ocr=True,
+    )
+    service.vision_extractor = fast_extractor
+    good_text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+
+    # autospec preserves EvrenVisionExtractor.extract's real signature, so
+    # the mock's recorded call includes `self` -- lets this test confirm
+    # *which* instance (and thus which model) the escalation call was made
+    # on, without needing to also mock the class constructor.
+    with patch.object(EvrenVisionExtractor, "extract", autospec=True) as mock_extract:
+        mock_extract.return_value = ExtractedDocument(
+            text=good_text, pages=[good_text], page_count=1,
+            extractor="evren_vision", used_ocr=True,
+        )
+        with patch.object(settings, "LOCAL_MODE", False):
+            result = await service._extract_with_vision_cascade(b"raw bytes")
+
+    assert result.text == good_text
+    escalated_instance = mock_extract.call_args.args[0]
+    assert escalated_instance.model == settings.EVREN_LLM_LARGE_MODEL
+    mock_extract.assert_awaited_once_with(escalated_instance, b"raw bytes")
+
+
+@pytest.mark.asyncio
+async def test_vision_cascade_escalates_to_llm_large_when_fast_tier_fails_outright():
+    """Regression: llm-fast throwing (not just returning a poor result --
+    e.g. an upstream outage on that specific model group) must still fall
+    through to the llm-large escalation, exactly like a quality-bar miss.
+    Before this fix an unguarded exception from the fast tier propagated
+    straight out, making the whole feature unusable even with llm-large
+    healthy."""
+    service, _, _, _ = _build_service()
+    fast_extractor = AsyncMock(spec=EvrenVisionExtractor)
+    fast_extractor.extract.side_effect = DocumentExtractionError("Cannot connect to host")
+    service.vision_extractor = fast_extractor
+    good_text = "Sayı: E-123\nKonu: İzin\n" + "x" * 300
+
+    with patch.object(EvrenVisionExtractor, "extract", autospec=True) as mock_extract:
+        mock_extract.return_value = ExtractedDocument(
+            text=good_text, pages=[good_text], page_count=1,
+            extractor="evren_vision", used_ocr=True,
+        )
+        with patch.object(settings, "LOCAL_MODE", False):
+            result = await service._extract_with_vision_cascade(b"raw bytes")
+
+    assert result.text == good_text
+    escalated_instance = mock_extract.call_args.args[0]
+    assert escalated_instance.model == settings.EVREN_LLM_LARGE_MODEL
+
+
+@pytest.mark.asyncio
+async def test_vision_cascade_raises_when_both_tiers_fail():
+    """Neither tier available -- the escalation's own failure must still
+    propagate (generate_detailed_analysis's DocumentExtractionError catch
+    is the actual safety net, not this method silently swallowing it)."""
+    service, _, _, _ = _build_service()
+    fast_extractor = AsyncMock(spec=EvrenVisionExtractor)
+    fast_extractor.extract.side_effect = DocumentExtractionError("llm-fast unreachable")
+    service.vision_extractor = fast_extractor
+
+    with patch.object(EvrenVisionExtractor, "extract", autospec=True) as mock_extract:
+        mock_extract.side_effect = DocumentExtractionError("llm-large unreachable")
+        with patch.object(settings, "LOCAL_MODE", False):
+            with pytest.raises(DocumentExtractionError, match="llm-large unreachable"):
+                await service._extract_with_vision_cascade(b"raw bytes")
+
+
+@pytest.mark.asyncio
+async def test_vision_cascade_uses_the_single_configured_extractor_under_local_mode():
+    """Ollama has no fast/large split (a single OLLAMA_VISION_MODEL) --
+    LOCAL_MODE=true must never attempt the Evren-specific escalation."""
+    service, _, _, _ = _build_service()
+    vision_extractor = AsyncMock()
+    text = "Sayı: E-123"
+    vision_extractor.extract.return_value = ExtractedDocument(
+        text=text, pages=[text], page_count=1, extractor="ollama_vision", used_ocr=True,
+    )
+    service.vision_extractor = vision_extractor
+
+    with patch.object(settings, "LOCAL_MODE", True):
+        result = await service._extract_with_vision_cascade(b"raw bytes")
+
+    assert result.text == text
+    vision_extractor.extract.assert_awaited_once_with(b"raw bytes")
 
 
 # ==========================================

@@ -130,6 +130,25 @@ describe("DocumentAnalysisPanel", () => {
     ).toBeInTheDocument();
   });
 
+  it("shows a neutral not-checked badge when detection never ran", () => {
+    render(
+      <DocumentAnalysisPanel
+        analysis={{
+          ...analysis,
+          signature: { is_signed: null, has_stamp: null, marks: [] },
+        }}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("İmza ve mühür"));
+
+    expect(screen.getByText("İmza kontrol edilmedi")).toBeInTheDocument();
+    expect(
+      screen.getByText("Bu belge için imza/mühür tespiti çalıştırılmadı."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("İmza tespit edilmedi")).not.toBeInTheDocument();
+  });
+
   it("discards edits on cancel without calling onSave", () => {
     const onSave = vi.fn();
     render(<DocumentAnalysisPanel analysis={analysis} onSave={onSave} />);
@@ -349,42 +368,54 @@ describe("DocumentAnalysisPanel", () => {
     expect(screen.queryByLabelText("Sayfa 1/2")).not.toBeInTheDocument();
   });
 
-  it("does not offer Yeniden OCR without onReextract", () => {
-    render(<DocumentAnalysisPanel analysis={analysis} documentText={documentText} />);
-    fireEvent.click(screen.getByText("Belge metni"));
+  it("does not offer Detaylı Analiz without onGenerateDetailedAnalysis", () => {
+    render(<DocumentAnalysisPanel analysis={analysis} variant="compact" />);
     expect(
-      screen.queryByRole("button", { name: "Yeniden OCR" }),
+      screen.queryByRole("button", { name: "Detaylı Analiz" }),
     ).not.toBeInTheDocument();
   });
 
-  it("triggers onReextract when Yeniden OCR is clicked", () => {
-    const onReextract = vi.fn().mockResolvedValue(undefined);
+  it("triggers onGenerateDetailedAnalysis when Detaylı Analiz is clicked", () => {
+    const onGenerateDetailedAnalysis = vi.fn().mockResolvedValue(undefined);
     render(
       <DocumentAnalysisPanel
         analysis={analysis}
-        documentText={documentText}
-        onReextract={onReextract}
+        variant="compact"
+        onGenerateDetailedAnalysis={onGenerateDetailedAnalysis}
       />,
     );
 
-    fireEvent.click(screen.getByText("Belge metni"));
-    fireEvent.click(screen.getByRole("button", { name: "Yeniden OCR" }));
+    fireEvent.click(screen.getByRole("button", { name: "Detaylı Analiz" }));
 
-    expect(onReextract).toHaveBeenCalledTimes(1);
+    expect(onGenerateDetailedAnalysis).toHaveBeenCalledTimes(1);
   });
 
-  it("disables Yeniden OCR while a re-extraction is already pending", () => {
+  it("disables Detaylı Analiz while generation is already pending", () => {
     render(
       <DocumentAnalysisPanel
         analysis={analysis}
-        documentText={documentText}
-        onReextract={vi.fn()}
-        reextracting
+        variant="compact"
+        onGenerateDetailedAnalysis={vi.fn()}
+        generatingDetailedAnalysis
       />,
     );
 
-    fireEvent.click(screen.getByText("Belge metni"));
+    expect(screen.getByRole("button", { name: "Detaylı Analiz" })).toBeDisabled();
+  });
 
-    expect(screen.getByRole("button", { name: "Yeniden OCR" })).toBeDisabled();
+  it("surfaces a Detaylı Analiz failure inline", async () => {
+    const onGenerateDetailedAnalysis = vi.fn().mockRejectedValue(new Error("zaman aşımı"));
+    render(
+      <DocumentAnalysisPanel
+        analysis={analysis}
+        variant="compact"
+        onGenerateDetailedAnalysis={onGenerateDetailedAnalysis}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Detaylı Analiz" }));
+
+    await waitFor(() => expect(onGenerateDetailedAnalysis).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText("zaman aşımı")).toBeInTheDocument());
   });
 });

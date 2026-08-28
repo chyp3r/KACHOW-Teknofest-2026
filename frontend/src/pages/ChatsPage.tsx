@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { AlertCircle, GitBranch, History, PauseCircle, Plus, RotateCcw } from "lucide-react";
+import { AlertCircle, GitBranch, History, PauseCircle, Plus, RotateCcw, X } from "lucide-react";
 import { PageHeader } from "../components/PageHeader";
 import { ChatComposer } from "../features/chat/ChatComposer";
 import { ChatDropZone } from "../features/chat/ChatDropZone";
@@ -19,7 +19,7 @@ import type {
 } from "../types/chat";
 import type { DocumentMetadata, DocumentText, ReasoningLevel } from "../types/documents";
 import { useDrafts } from "../hooks/useDrafts";
-import { Button } from "../components/Button";
+import { Button, IconButton } from "../components/Button";
 import { Alert, Spinner } from "../components/Surface";
 
 export function ChatsPage({
@@ -41,6 +41,7 @@ export function ChatsPage({
   contextUsage,
   onCompact,
   guardrailEvents,
+  onDismissGuardrailEvent,
   interrupt,
   workflowOpen,
   historyOpen,
@@ -90,6 +91,10 @@ export function ChatsPage({
   contextUsage: ContextUsage | null;
   onCompact: () => void | Promise<void>;
   guardrailEvents: GuardrailEvent[];
+  // Optional the same way onDeleteDocument/etc. are elsewhere in this file
+  // -- a caller that doesn't wire it just keeps the alert non-dismissible
+  // (its pre-existing behavior) instead of crashing.
+  onDismissGuardrailEvent?: (index: number) => void;
   interrupt: InterruptState | null;
   workflowOpen: boolean;
   historyOpen: boolean;
@@ -252,6 +257,15 @@ export function ChatsPage({
                   variant={guardrail.decision === "blocked" ? "error" : "warning"}
                   title={`Güvenlik kontrolü: ${guardrailDecisionLabel(guardrail.decision)}`}
                   key={`${guardrail.stage}-${guardrail.kind}-${index}`}
+                  action={onDismissGuardrailEvent && (
+                    <IconButton
+                      variant="ghost"
+                      size="sm"
+                      icon={<X />}
+                      aria-label="Uyarıyı kapat"
+                      onClick={() => onDismissGuardrailEvent(index)}
+                    />
+                  )}
                 >
                   <div className="chat-guardrail-reasons">
                     {summary.length > 0 && (

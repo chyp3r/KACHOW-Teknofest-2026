@@ -10,7 +10,6 @@ import {
   FileText,
   MessageSquare,
   Pencil,
-  RefreshCw,
   Search,
   X,
 } from "lucide-react";
@@ -94,8 +93,9 @@ export function DocumentTable({
   documentText,
   onSaveText,
   savingText,
-  onReextract,
-  reextracting,
+  onGenerateDetailedAnalysis,
+  generatingDetailedAnalysis,
+  generatingDetailedAnalysisPath,
   showUploader = false,
 }: {
   documents: DocumentMetadata[];
@@ -118,8 +118,9 @@ export function DocumentTable({
   documentText?: DocumentText | null;
   onSaveText?: (storagePath: string, pages: string[]) => Promise<void>;
   savingText?: boolean;
-  onReextract?: (storagePath: string) => Promise<void>;
-  reextracting?: boolean;
+  onGenerateDetailedAnalysis?: (storagePath: string) => Promise<void>;
+  generatingDetailedAnalysis?: boolean;
+  generatingDetailedAnalysisPath?: string | null;
   showUploader?: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -226,6 +227,14 @@ export function DocumentTable({
     && (
       generatingDetailedSummaryPath == null
       || generatingDetailedSummaryPath === selected.storage_path
+    ),
+  );
+  const selectedIsGeneratingDetailedAnalysis = Boolean(
+    selected
+    && generatingDetailedAnalysis
+    && (
+      generatingDetailedAnalysisPath == null
+      || generatingDetailedAnalysisPath === selected.storage_path
     ),
   );
   const analysisActionLabel = selectedIsAnalyzing
@@ -428,7 +437,7 @@ export function DocumentTable({
                 </dl>
               ) : detailTab === "text" ? (
                 <section className="document-reference-text">
-                  <header><div><h3>Belge Metni</h3><p>Çıkarılan metin sayfa düzeni korunarak gösterilir.</p></div><div>{onSaveText && !editingText && <Button variant="secondary" size="sm" leadingIcon={<Pencil />} onClick={() => { setTextDraft(documentText?.pages ?? []); setEditingText(true); setTextError(null); }}>Düzenle</Button>}{onReextract && !editingText && <Button variant="ghost" size="sm" leadingIcon={<RefreshCw />} loading={reextracting} onClick={() => void onReextract(selected.storage_path).catch(() => setTextError("Belge metni yeniden çıkarılamadı."))}>Yeniden çıkar</Button>}</div></header>
+                  <header><div><h3>Belge Metni</h3><p>Çıkarılan metin sayfa düzeni korunarak gösterilir.</p></div><div>{onSaveText && !editingText && <Button variant="secondary" size="sm" leadingIcon={<Pencil />} onClick={() => { setTextDraft(documentText?.pages ?? []); setEditingText(true); setTextError(null); }}>Düzenle</Button>}</div></header>
                   {textError && <p className="document-text-error">{textError}</p>}
                   {!documentText?.pages.length ? <p className="detail-empty">Belge metni henüz yüklenmedi veya bulunmuyor.</p> : editingText ? (
                     <div className="document-text-editor">{textDraft.map((pageText, index) => <Textarea key={index} label={`Sayfa ${index + 1}/${textDraft.length}`} rows={12} value={pageText} onChange={(event) => setTextDraft((current) => current.map((value, pageIndex) => pageIndex === index ? event.target.value : value))} />)}<div><Button variant="ghost" disabled={savingText} onClick={() => setEditingText(false)}>Vazgeç</Button><Button loading={savingText} onClick={() => void onSaveText?.(selected.storage_path, textDraft).then(() => setEditingText(false)).catch(() => setTextError("Belge metni kaydedilemedi."))}>Kaydet</Button></div></div>
@@ -439,7 +448,7 @@ export function DocumentTable({
                   <section className={`document-analysis-verdict ${analysisIssues.length ? "needs-review" : "is-ready"}`}><span>{analysisIssues.length ? <AlertTriangle /> : <CheckCircle2 />}</span><div><h3>{analysisIssues.length ? `${analysisIssues.length} konu incelenmeli` : "Belge karar sürecine hazır"}</h3><p>{analysisIssues.length ? "Taslak veya yönlendirme öncesinde aşağıdaki bulguları doğrulayın." : "Zorunlu alanlar ve güvenlik kontrolleri tamamlandı."}</p></div></section>
                   {analysisIssues.length > 0 && <section><h3>İnceleme başlıkları</h3><ol className="document-issue-list">{analysisIssues.map((issue, index) => <li key={`${issue.title}-${index}`} className={`is-${issue.tone}`}><span>{index + 1}</span><div><strong>{issue.title}</strong><p>{issue.detail}</p></div></li>)}</ol></section>}
                   {analysis && <section><h3>Mevzuat ve dayanaklar</h3>{analysis.mevzuat_references.length ? <ul className="document-reference-list">{analysis.mevzuat_references.map((item, index) => <li key={`${item.mevzuat}-${index}`}><strong>{item.mevzuat}</strong><p>{item.aciklama}</p></li>)}</ul> : <p className="detail-empty">Ek bir mevzuat önerisi bulunmadı.</p>}</section>}
-                  <DocumentAnalysisPanel variant="compact" analysis={analysis} saving={updatingFields} onSave={onUpdateFields && analysis ? (fields) => onUpdateFields(analysis.storage_path, fields) : undefined} generatingDetailedSummary={selectedIsGeneratingDetailedSummary} onGenerateDetailedSummary={onGenerateDetailedSummary && analysis ? () => onGenerateDetailedSummary(analysis.storage_path) : undefined} documentGraph={documentGraph} loadingDocumentGraph={loadingDocumentGraph} />
+                  <DocumentAnalysisPanel variant="compact" analysis={analysis} saving={updatingFields} onSave={onUpdateFields && analysis ? (fields) => onUpdateFields(analysis.storage_path, fields) : undefined} generatingDetailedSummary={selectedIsGeneratingDetailedSummary} onGenerateDetailedSummary={onGenerateDetailedSummary && analysis ? () => onGenerateDetailedSummary(analysis.storage_path) : undefined} generatingDetailedAnalysis={selectedIsGeneratingDetailedAnalysis} onGenerateDetailedAnalysis={onGenerateDetailedAnalysis && analysis ? () => onGenerateDetailedAnalysis(analysis.storage_path) : undefined} documentGraph={documentGraph} loadingDocumentGraph={loadingDocumentGraph} />
                 </div>
               )}
             </div>

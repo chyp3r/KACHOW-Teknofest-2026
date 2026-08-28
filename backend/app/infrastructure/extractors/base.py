@@ -48,14 +48,21 @@ class ExtractedDocument(BaseModel):
         default=False,
         description="Metin OCR ile okunduysa true; alan değerleri doğrulanmalıdır.",
     )
-    detected_marks: list[DetectedMark] = Field(
-        default_factory=list,
+    detected_marks: Optional[list[DetectedMark]] = Field(
+        default=None,
         description=(
             "Taranmış sayfalarda tespit edilen olası imza/mühür/el yazısı "
             "bölgeleri. Yalnızca OCR yolundaki çıkarıcılar doldurur "
-            "(TesseractExtractor, OllamaVisionExtractor) -- doğrudan metin "
-            "katmanı okunan belgeler sayfa hiç görüntüye çevrilmediğinden "
-            "boş liste döner. Bir inceleme ipucudur, adli tespit değildir."
+            "(TesseractExtractor, OllamaVisionExtractor/EvrenVisionExtractor) "
+            "-- doğrudan metin katmanı okunan belgeler (OpenDataLoader, "
+            "Pdfium, PlainText) sayfa hiç görüntüye çevrilmediği için bu "
+            "alana hiç dokunmaz, `None` kalır: tespit hiç ÇALIŞMADI, "
+            "bilinmiyor. Boş liste (`[]`) ayrı bir anlam taşır: tespit "
+            "ÇALIŞTI ve hiçbir bölge bulamadı. Bu ayrım `check_compliance_node` "
+            "ve `DocumentService._assemble`'ın `is_signed`/`has_stamp`'i "
+            "None (kontrol edilmedi) ile False (kontrol edildi, bulunamadı) "
+            "olarak doğru ayırabilmesi için önemlidir. Bir inceleme ipucudur, "
+            "adli tespit değildir."
         ),
     )
 

@@ -7,6 +7,7 @@ import { useDocuments } from "./useDocuments";
 const mocks = vi.hoisted(() => ({
   list: vi.fn(), analyze: vi.fn(), getAnalysis: vi.fn(), getText: vi.fn(),
   generateDetailedSummary: vi.fn(),
+  generateDetailedAnalysis: vi.fn(),
   documentGraph: vi.fn(),
 }));
 
@@ -44,6 +45,7 @@ describe("useDocuments", () => {
       used_ocr: false,
     });
     mocks.generateDetailedSummary.mockReset();
+    mocks.generateDetailedAnalysis.mockReset();
     mocks.documentGraph.mockReset().mockResolvedValue(null);
   });
 
@@ -169,5 +171,35 @@ describe("useDocuments", () => {
 
     await waitFor(() => expect(result.current.generatingDetailedSummaryPath).toBeNull());
     expect(result.current.analysis?.detailed_summary).toBe("Detaylı özet metni.");
+  });
+
+  it("tracks detailed analysis generation by storage path and publishes the result", async () => {
+    let resolveAnalysis!: (analysis: typeof remoteDocument) => void;
+    const analysisPromise = new Promise<typeof remoteDocument>((resolve) => {
+      resolveAnalysis = resolve;
+    });
+    mocks.generateDetailedAnalysis.mockReturnValue(analysisPromise);
+    const { result } = renderHook(() => useDocuments("user-1"), { wrapper });
+    await waitFor(() => expect(result.current.documents).toEqual([remoteDocument]));
+
+    act(() => result.current.setSelectedDocument(remoteDocument));
+    await waitFor(() => expect(result.current.analysis).toMatchObject(remoteDocument));
+
+    let generatePromise!: Promise<void>;
+    act(() => {
+      generatePromise = result.current.generateDetailedAnalysis(remoteDocument.storage_path);
+    });
+
+    await waitFor(() =>
+      expect(result.current.generatingDetailedAnalysisPath).toBe(remoteDocument.storage_path),
+    );
+
+    await act(async () => {
+      resolveAnalysis({ ...remoteDocument, summary: "Yeniden analiz edildi." });
+      await generatePromise;
+    });
+
+    await waitFor(() => expect(result.current.generatingDetailedAnalysisPath).toBeNull());
+    expect(result.current.analysis?.summary).toBe("Yeniden analiz edildi.");
   });
 });

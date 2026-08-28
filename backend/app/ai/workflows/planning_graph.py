@@ -1,6 +1,7 @@
 import asyncio
 import hashlib
 import logging
+import re
 import time
 from typing import Annotated, Any, Awaitable, Callable, Optional, TypedDict
 from uuid import uuid4
@@ -71,10 +72,33 @@ from app.observability.ai_metrics import (
     ROUTER_CONFIDENCE,
     ROUTER_DECISIONS,
     ROUTER_SEMANTIC_AVAILABLE,
+    TRANSFER_REPLY_WITHOUT_PROPOSAL,
 )
 from app.observability.run_recorder import end_run, record_step, start_run
 
 logger = logging.getLogger(__name__)
+
+#: `_run_assist`'in `TRANSFER_REPLY_WITHOUT_PROPOSAL` belirti dedektörünün
+#: kullandığı iki grup -- her ikisi de eşleşirse (bir gönderim fiili +
+#: bir onay-ekranı ifadesi) ve `pending_transfer` boşsa, model aracı hiç
+#: çağırmadan bir gönderim/onay vaadi kurmuş demektir (bkz. #318). Yanlış
+#: pozitifler yalnızca bir sayaç artışına yol açar, `reply`'yi değiştirmez.
+_TRANSFER_VERB_PATTERN = re.compile(
+    "|".join((r"gönder", r"transfer", r"yolla", r"ilet", r"paylaş")),
+    re.IGNORECASE,
+)
+_TRANSFER_CONFIRMATION_CLAIM_PATTERN = re.compile(
+    "|".join(
+        (
+            r"onay\s*ekran",
+            r"onayınızı\s+bekliyor",
+            r"onaylaman",
+            r"onaylarsanız",
+            r"onayladığınızda",
+        )
+    ),
+    re.IGNORECASE,
+)
 
 QA_RESULT_LIMIT = get_policy().memory.qa_result_limit
 
@@ -1460,6 +1484,20 @@ def create_planning_graph(
             )
             reply = verdict.text
             flagged = verdict.action != "pass"
+
+            if (
+                not pending_transfer
+                and _TRANSFER_VERB_PATTERN.search(reply)
+                and _TRANSFER_CONFIRMATION_CLAIM_PATTERN.search(reply)
+            ):
+                logger.warning(
+                    "Assist reply narrates a transfer confirmation without "
+                    "propose_transfer having been called this turn "
+                    "(thread_id=%s run_id=%s) -- see #318.",
+                    (config.get("configurable") or {}).get("thread_id", ""),
+                    state.get("run_id"),
+                )
+                TRANSFER_REPLY_WITHOUT_PROPOSAL.inc()
 
             if flagged:
                 guardrail_kind = classify_reason_kind(verdict.reasons)

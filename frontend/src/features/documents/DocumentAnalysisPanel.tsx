@@ -78,8 +78,8 @@ export function DocumentAnalysisPanel({
   documentText,
   onSaveText,
   savingText = false,
-  onReextract,
-  reextracting = false,
+  onGenerateDetailedAnalysis,
+  generatingDetailedAnalysis = false,
   variant = "full",
 }: {
   analysis: DocumentAnalysis | null;
@@ -106,8 +106,11 @@ export function DocumentAnalysisPanel({
   documentText?: DocumentText | null;
   onSaveText?: (pages: string[]) => Promise<void>;
   savingText?: boolean;
-  onReextract?: () => Promise<void>;
-  reextracting?: boolean;
+  // Undefined when not wired -- same convention as onGenerateDetailedSummary
+  // above. Replaces the old "Yeniden OCR" trigger: OCR (llm-fast->llm-large
+  // vision) plus a full re-run of the analysis graph, not just the text.
+  onGenerateDetailedAnalysis?: () => Promise<void>;
+  generatingDetailedAnalysis?: boolean;
   variant?: "full" | "compact";
 }) {
   const [isEditing, setIsEditing] = useState(false);
@@ -117,7 +120,7 @@ export function DocumentAnalysisPanel({
   const [isEditingText, setIsEditingText] = useState(false);
   const [textDraft, setTextDraft] = useState<string[]>([]);
   const [textSaveError, setTextSaveError] = useState<string | null>(null);
-  const [reextractError, setReextractError] = useState<string | null>(null);
+  const [detailedAnalysisError, setDetailedAnalysisError] = useState<string | null>(null);
 
   // A different document (or a fresh save) must never keep a stale edit
   // session open on top of it.
@@ -127,7 +130,7 @@ export function DocumentAnalysisPanel({
     setDetailedSummaryError(null);
     setIsEditingText(false);
     setTextSaveError(null);
-    setReextractError(null);
+    setDetailedAnalysisError(null);
   }, [analysis?.storage_path]);
 
   if (!analysis)
@@ -194,14 +197,14 @@ export function DocumentAnalysisPanel({
     }
   };
 
-  const reextractText = async () => {
-    if (!onReextract) return;
-    setReextractError(null);
+  const generateDetailedAnalysis = async () => {
+    if (!onGenerateDetailedAnalysis) return;
+    setDetailedAnalysisError(null);
     try {
-      await onReextract();
+      await onGenerateDetailedAnalysis();
     } catch (error) {
-      setReextractError(
-        error instanceof Error ? error.message : "Belge yeniden OCR ile işlenemedi.",
+      setDetailedAnalysisError(
+        error instanceof Error ? error.message : "Detaylı analiz oluşturulamadı.",
       );
     }
   };
@@ -223,12 +226,28 @@ export function DocumentAnalysisPanel({
       <section className={`document-analysis-fields${isEditing ? " is-editing" : ""}`} aria-label="Temel bilgiler">
         <header>
           <h3>Temel bilgiler</h3>
-          {onSave && !isEditing && (
-            <Button variant="ghost" size="sm" leadingIcon={<Pencil />} aria-label="Temel bilgileri düzenle" onClick={startEditing}>
-              Düzenle
-            </Button>
+          {!isEditing && (onSave || onGenerateDetailedAnalysis) && (
+            <div className="document-compact-header-actions">
+              {onGenerateDetailedAnalysis && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leadingIcon={<FileSearch />}
+                  loading={generatingDetailedAnalysis}
+                  onClick={() => void generateDetailedAnalysis()}
+                >
+                  Detaylı Analiz
+                </Button>
+              )}
+              {onSave && (
+                <Button variant="ghost" size="sm" leadingIcon={<Pencil />} aria-label="Temel bilgileri düzenle" onClick={startEditing}>
+                  Düzenle
+                </Button>
+              )}
+            </div>
           )}
         </header>
+        {detailedAnalysisError && <Alert variant="error">{detailedAnalysisError}</Alert>}
         {isEditing ? (
           <div className="document-compact-fields-editor">
             {saveError && <Alert variant="error">{saveError}</Alert>}
@@ -364,8 +383,20 @@ export function DocumentAnalysisPanel({
         <details>
           <summary>İmza ve mühür</summary>
           <div className="guardrail-summary">
-            <StatusBadge tone={analysis.signature.is_signed ? "success" : "warning"}>
-              {analysis.signature.is_signed ? "İmzalı" : "İmza tespit edilmedi"}
+            <StatusBadge
+              tone={
+                analysis.signature.is_signed === null
+                  ? "neutral"
+                  : analysis.signature.is_signed
+                  ? "success"
+                  : "warning"
+              }
+            >
+              {analysis.signature.is_signed === null
+                ? "İmza kontrol edilmedi"
+                : analysis.signature.is_signed
+                ? "İmzalı"
+                : "İmza tespit edilmedi"}
             </StatusBadge>
             {analysis.signature.marks.length ? (
               <ul className="detail-list">
@@ -376,6 +407,10 @@ export function DocumentAnalysisPanel({
                   </li>
                 ))}
               </ul>
+            ) : analysis.signature.is_signed === null ? (
+              <p className="detail-empty">
+                Bu belge için imza/mühür tespiti çalıştırılmadı.
+              </p>
             ) : (
               <p className="detail-empty">
                 Sayfada imza, mühür veya el yazısı bölgesi tespit edilmedi.
@@ -520,18 +555,6 @@ export function DocumentAnalysisPanel({
                   <p className="document-text-page">{page}</p>
                 </div>
               ))}
-              {onReextract && (
-                <div className="reextract-action">
-                  <p className="detail-empty">
-                    Belge, görüntü tabanlı bir yapay zeka modeliyle yeniden okunabilir. Bu
-                    işlem birkaç dakika sürebilir.
-                  </p>
-                  {reextractError && <Alert variant="error">{reextractError}</Alert>}
-                  <Button loading={reextracting} onClick={() => void reextractText()}>
-                    Yeniden OCR
-                  </Button>
-                </div>
-              )}
             </div>
           )}
         </details>

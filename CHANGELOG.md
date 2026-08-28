@@ -3,8 +3,121 @@
 Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
 
 ## [Unreleased]
+### Eklendi
+- **Tanıtım / sunum sitesi (`branding/`).** "Çok yakında" yer tutucusu, satın
+  alma ve jüri sunumlarında kullanılmak üzere tek sayfalık, teknik detayı az /
+  anlatı yönü yüksek bir tanıtım deneyimine dönüştürüldü: animasyonlu hero,
+  uçtan uca akış animasyonu, üç görevli model, insan onay demosu, ölçülmüş
+  sonuçlar, güven, tam ekranlı iki-sıra ürün ekran görüntüsü şeridi (zıt yönde
+  kayan, kenarları eriyen, tıklayınca büyüyen) ve kapsamlı bir hareket katmanı
+  (scroll ilerleme çubuğu, hero aurora + kelime-kelime başlık, kart spotlight'ı,
+  manyetik butonlar, pipeline nabzı). Hepsi `prefers-reduced-motion`'a saygılı,
+  bağımlılıksız düz HTML/CSS/JS; `branding/` GitHub Pages tarafından statik
+  sunuluyor. README'nin arayüz galerisi 42 numaralı ekran görüntüsüyle
+  yenilendi, üst rozetler logolu bir teknoloji duvarına genişletildi, Model
+  Karşılaştırması tablosundan dört hız/doğruluk sütun grafiği eklendi ve test
+  sayıları (backend 2995, frontend 447) ile kapsam güncellendi.
+- **Kayıt Ol ekranı.** `LoginPage`'in görsel formatını (`.login-page`/
+  `.login-card` iskeleti) yeniden kullanan yeni `/register` sayfası --
+  login ekranından "Hesabınız yok mu? Kayıt ol" ile ulaşılıyor. Backend'e
+  hiçbir değişiklik yok: mevcut, davet-tabanlı `POST /api/v1/users` olduğu
+  gibi kullanılıyor (bir admin/manager önce `AdminPage`'den e-postayı
+  davet etmeli; yeni hesabın şirketini ve rolünü kayıt formu değil davet
+  belirliyor -- kiracılar arası kendi kendine yetki atamayı önleyen kasıtlı
+  bir tasarım). Kayıt formu bu yüzden rol/şirket seçimi göstermiyor;
+  davetsiz bir e-postayla denenirse backend'in düz İngilizce hatası
+  ("This email address has not been invited...") Türkçeye çevrilerek
+  gösteriliyor. Başarılı kayıt sonrası otomatik giriş yapılıyor (kayıt
+  token döndürmediği için).
+- **"Detaylı Analiz" butonu.** Belge yüklemede artık hiç ağ vision çağrısı
+  yapılmıyor (aşağıya bakın); OCR gereken taranmış/bozuk belgeler için
+  kullanıcı "Temel bilgiler" başlığındaki bu butona basınca `llm-fast`
+  vision ile OCR yapılıyor, sonuç kalite eşiğini geçemezse `llm-large`'a
+  yükseliyor, ardından belge tipi/özet/tüm alanlar/uyum/mevzuat dahil tam
+  analiz grafiği yeniden çalıştırılıyor (`DocumentService.
+  generate_detailed_analysis`, `POST /documents/{storage_path}/detailed-
+  analysis`). Eski "Yeniden OCR"/"Yeniden çıkar" UI tetikleyicilerinin
+  yerini aldı (backend'deki eski re-extract endpoint'i API uyumluluğu için
+  duruyor, sadece arayüzden kaldırıldı).
+
 ### Değiştirildi
+- **Yükleme hızı: OCR artık opt-in.** Kök neden ölçüldü -- varsayılan
+  çıkarım zinciri, kabul edilen her sonuçta koşulsuz bir sayfa-1 vision
+  onarımını tetikliyordu (antetli taramalarda/logolu PDF'lerde), yüklemeyi
+  ~14sn'den ~34sn'ye çıkarıyordu. `get_document_extractor()` artık her
+  modda `[PlainText, OpenDataLoader, Pdfium, Tesseract]` zincirini
+  kuruyor, `header_repair`/`scan_text_layer_probe`/`signature_probe`
+  hiçbiri bağlanmıyor -- varsayılan yükleme yolunda artık hiç ağ vision
+  çağrısı yok. Tesseract (yerel, ağ çağrısı yok) geri getirildi, taranmış
+  belgeler artık "Detaylı Analiz" ile isteğe bağlı vision OCR'a
+  yükseltilebiliyor (yukarıya bakın).
+- **İmza artık bir uyum gerekliliği değil.** `imza_sahibi` kuralı 6 belge
+  tipinin tamamından kaldırıldı; imzanın eksik olması artık belgeyi
+  `INCOMPLETE` yapmıyor (imza tespiti kendisi, "İmza ve mühür" bölümünde
+  bilgilendirme amaçlı hâlâ gösteriliyor). `imza_unvani` (tavsiye
+  niteliğinde) değişmeden kaldı.
 - Frontend seçim alanları, tarayıcı varsayılanı yerine erişilebilir ortak `Dropdown` bileşenine taşındı.
+
+### Düzeltildi
+- **"Detaylı Analiz", `llm-fast` kesintisinde `llm-large` sağlıklı olsa
+  bile tamamen çöküyordu.** `_extract_with_vision_cascade`, `llm-fast`'ı
+  önce deneyip kalite yetersizse `llm-large`'a yükselecek şekilde
+  tasarlanmıştı, ama yükseltme yalnızca "düşük kalite" sonucuna bağlıydı
+  -- `llm-fast` çağrısının kendisi bir istisna fırlattığında (paylaşılan
+  Evren API'sinde o model grubuna özgü bir kesinti gibi) istisna hiç
+  yakalanmadan doğrudan yukarı yayılıyor, `llm-large`'ı hiç denemeden
+  özelliği tamamen kullanılamaz hale getiriyordu. `llm-fast` çağrısı artık
+  kendi try/except'inde; bir istisna, düşük-kalite sinyaliyle aynı
+  yükseltme yoluna düşüyor (yalnızca log satırı ayrım yapıyor). Her iki
+  katman da başarısız olursa istisna hâlâ `generate_detailed_analysis`'in
+  mevcut yakalama bloğuna kadar yayılıyor -- davranış değişmedi, yalnızca
+  yükseltme koşulu genişledi.
+- **Sohbette güvenlik kontrolü (maskeleme) uyarısı kapatılamıyordu.** Bir
+  yanıt PII/gizlilik nedeniyle maskelendiğinde gösterilen "Maskelendi"
+  uyarı kartının kapatılacak hiçbir kontrolü yoktu -- yalnızca yeni bir
+  mesaj/sohbet/oturum değişiminde temizleniyordu. Bir "maskeyi kaldır"
+  işlemi de değerlendirildi ama bu sohbet çıktı-kapısı maskelemesi için
+  uygulanabilir değil: maskelenen değerin ham hâli hiçbir yerde
+  saklanmıyor (kasıtlı tasarım) -- bunu eklemek ya yeni bir hassas-veri
+  deposu gerektirir ya da guardrail'in az önce engellediği değeri yeniden
+  ifşa eder. Bunun yerine uyarı kartına bir kapatma butonu eklendi.
+- **Revizyonda taslağın tarihi bugünle sessizce değişiyordu.** Bir
+  yeniden yazım/onarım geçişi taslağın orijinal "Tarih:" satırını verbatim
+  koruyamayıp bir yer tutucuyla ("Tarih: [Tarih]") değiştirdiğinde,
+  deterministik yedek mekanizma bunu revizyon anının bugünkü tarihiyle
+  (`today_tr()`) dolduruyordu -- oysa bir revizyon, yapısı gereği orijinal
+  taslağın tarihini değiştirmemeli. Yeni `extract_draft_date()`
+  (`app.ai.workflows.dates`), revize edilmekte olan taslağın kendi
+  mevcut "Tarih:" satırından değeri çıkarıyor ve yedek mekanizma artık
+  önce onu deniyor; `today_tr()` yalnızca orijinal taslakta bile
+  ayrıştırılabilir bir tarih yoksa son çare olarak devreye giriyor. İlk
+  taslak oluşturmanın kendi `today_tr()` kullanımı (`draft_graph.py`)
+  değişmedi -- bu yalnızca revize yoluna özgü bir düzeltme.
+- **Asistan, aracı hiç çağırmadan bir transfer/gönderim onay ekranı vaat
+  edebiliyordu.** Kullanıcı "taslağı X'e gönder" dediğinde, model bazen
+  `propose_transfer` aracını hiç çağırmadan "gönderilmek üzere önerildi,
+  onay ekranınız açılacak" gibi bir yanıt yazıyordu -- ama araç
+  çağrılmadığı için hiçbir onay ekranı (`TransferConfirmCard`) açılmıyordu.
+  Kök neden: aracın kendi açıklaması onay-ekranı mekanizmasını anlatıyor
+  ama hiçbir mekanizma modeli bu aracı gerçekten çağırmaya zorlamıyordu
+  (belge sorularındaki `_final_answer_nudge`'ın aksine, transfer istekleri
+  hiçbir "gerçekten araç çağır" baskısına tabi değildi). `assistant.md`'ye
+  ve `propose_transfer`'ın araç açıklamasına, bu vaadin yalnızca aracı
+  gerçekten çağırdıktan sonra kurulabileceğini belirten açık bir kısıt
+  eklendi. Ayrıca yeni bir `TRANSFER_REPLY_WITHOUT_PROPOSAL` sayaçı, bu
+  desenin (yanıt metni transferi anlatıyor ama araç hiç çağrılmamış)
+  gelecekte tekrarlanmasını sessizce geçiştirmeyecek (davranışı
+  değiştirmez, yalnızca gözlemler).
+- **İmza durumunda "kontrol edilmedi" ile "bulunamadı" ayrıştırıldı.**
+  Vision opt-in olunca (yukarıya bakın) `detect_marks` çoğu belgede artık
+  çalışmıyor; `ExtractedDocument.detected_marks`'ın varsayılanı boş liste
+  olduğundan bu durum sessizce "kontrol edildi, imza yok"a dönüşüyor,
+  arayüz her belgede "İmza tespit edilmedi" gösteriyordu. Alan artık
+  `None` (varsayılan, "hiç kontrol edilmedi") ile `[]` ("kontrol edildi,
+  bulunamadı") arasında ayrım yapıyor; `SignatureAssessmentSchema.
+  is_signed`/`has_stamp` de `Optional[bool]` oldu. Arayüzde üç durumlu bir
+  rozet var: nötr "İmza kontrol edilmedi", yeşil "İmzalı", turuncu "İmza
+  tespit edilmedi".
 - **İmza tespiti doğruluğu gerçek korpusta ölçüldü ve düzeltildi.**
   `detect_marks`'ın (`marks.py`) imza recall'ı, elle etiketlenmiş 23
   belgelik gerçek korpusta (`datasets/resmi_yazisma/ocr_ground_truth.json`)
@@ -21,17 +134,6 @@ Tüm önemli değişiklikler bu dosyada kayıt altına alınacaktır.
   gerilemeyecek.
 
 ### Eklendi
-- **Tanıtım / sunum sitesi (`branding/`).** "Çok yakında" yer tutucusu,
-  satın alma ve jüri sunumlarında kullanılmak üzere tek sayfalık, teknik
-  detayı az / anlatı yönü yüksek bir tanıtım deneyimine dönüştürüldü:
-  animasyonlu istatistik sayaçları içeren hero, sorunun çerçevelenmesi,
-  uçtan uca akışın canlı çalışan bir "pipeline" animasyonu, üç görevli
-  model, insan onay adımını gösteren canlı ajan-ilerleme demosu,
-  farklılaştırıcılar, ölçülmüş sonuçlar (README benchmark rakamları),
-  güven/güvenlik ve kapanış vizyonu. Bağımlılıksız düz HTML/CSS/JS
-  (`branding/` GitHub Pages tarafından statik sunuluyor); scroll ile
-  beliren bölümler, sayaçlar ve pipeline animasyonu `prefers-reduced-motion`
-  tercihine saygı duyar ve gözlemci beslenemezse içerik yine de görünür.
 - **NER PoC script'i (`scripts/ner_poc.py`).** `entities[]` alanı için ayrı bir
   dedicated NER modelinin (Türkçe BERT tabanlı) mevcut LLM çıktısına karşı
   nitel karşılaştırması -- backend'in `requirements.txt`'ine eklenmez, ayrı

@@ -31,6 +31,7 @@ from app.ai.llms.base import ToolCallResponse
 from app.ai.workflows.planning_graph import create_planning_graph
 from app.core.config import settings
 from app.domains.transfers.provider import ArtifactResolutionSnapshot, DraftCandidate, IntentSnapshot, TransferOutcome
+from app.observability.ai_metrics import TRANSFER_REPLY_WITHOUT_PROPOSAL
 
 
 class FakeTransferProvider:
@@ -198,6 +199,44 @@ async def test_a_message_naming_nobody_never_calls_the_tool_at_all(fake_llm, fak
         assert provider.execute_calls == []
         snapshot = await graph.aget_state(config)
         assert not snapshot.next
+    finally:
+        settings.AI_TRANSFER_ENABLED = monkeypatch_settings
+
+
+@pytest.mark.asyncio
+async def test_model_narrates_a_transfer_confirmation_without_calling_the_tool(fake_llm, fake_fast_llm):
+    """Reproduces #318: the model claims a transfer was proposed and a
+    confirmation screen will open, but never actually calls
+    `propose_transfer` this turn. No tool call means no `pending_transfer`,
+    so the graph must never detour to `transfer_gate` -- exactly like the
+    "naming nobody" case above, except here the *reply text* itself falsely
+    promises the confirmation flow ran. The `TRANSFER_REPLY_WITHOUT_PROPOSAL`
+    symptom counter must catch this even though nothing in the graph's
+    control flow does (see the metric's own docstring in ai_metrics.py)."""
+    monkeypatch_settings = settings.AI_TRANSFER_ENABLED
+    settings.AI_TRANSFER_ENABLED = True
+    before = TRANSFER_REPLY_WITHOUT_PROPOSAL._value.get()
+    try:
+        provider = FakeTransferProvider()
+        fake_llm.generate_with_tools_side_effect = [
+            ToolCallResponse(
+                content=(
+                    "Taslak, 'manager' adlı kişiye gönderilmek üzere önerildi. "
+                    "Gönderim işlemi için onay ekranınız açılacaktır; lütfen "
+                    "gönderimi oradan onaylayınız."
+                )
+            )
+        ]
+        graph = _build_graph(provider, fake_llm)
+        config = {"configurable": {"thread_id": "transfer-narrated-without-call"}}
+
+        result = await graph.ainvoke(_initial_state("bu taslağı manager kişisine yolla"), config=config)
+
+        assert result["final_output"]["status"] == "COMPLETED"
+        assert provider.execute_calls == []
+        snapshot = await graph.aget_state(config)
+        assert not snapshot.next
+        assert TRANSFER_REPLY_WITHOUT_PROPOSAL._value.get() == before + 1
     finally:
         settings.AI_TRANSFER_ENABLED = monkeypatch_settings
 

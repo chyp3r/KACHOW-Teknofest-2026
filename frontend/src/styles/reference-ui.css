@@ -240,6 +240,9 @@ body { background: var(--surface-app); }
 .login-card .form-stack { gap: 1rem; }
 .login-card .button-primary { margin-top: 0.375rem; }
 .login-security-note { margin-top: 1.25rem; padding-top: 1.25rem; border-top: 1px solid var(--border-default); }
+.login-alt-action { margin-top: 0.875rem; text-align: center; color: var(--text-secondary); }
+.login-alt-action a { color: var(--accent-blue); font-weight: 600; text-decoration: none; }
+.login-alt-action a:hover { text-decoration: underline; }
 
 /* Conversation workspace */
 .chat-page { padding: 1.25rem 1.75rem 0; background: var(--surface-content); }
@@ -519,6 +522,7 @@ body { background: var(--surface-app); }
 .document-decision-analysis > .document-analysis-fields { padding: 0; }
 .document-analysis-fields > header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3.25rem; padding: 0.625rem 1rem; border-bottom: 1px solid var(--border-default); }
 .document-analysis-fields > header .button { flex: 0 0 auto; }
+.document-compact-header-actions { display: flex; align-items: center; gap: 0.5rem; }
 .document-analysis-fields > dl,
 .document-compact-fields-editor { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-inline: 1rem; }
 .document-analysis-fields > dl > div { display: grid; grid-template-columns: minmax(7.5rem, 0.72fr) minmax(0, 1.28fr); align-items: baseline; gap: 0.75rem; min-height: 2.75rem; padding: 0.625rem 0; border-bottom: 1px solid color-mix(in srgb, var(--border-default) 76%, transparent); }

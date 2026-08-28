@@ -121,12 +121,13 @@ export function useDocuments(
       queryClient.setQueryData(queryKeys.documentAnalysis(analysis.storage_path), analysis);
     },
   });
-  const reextractTextMutation = useMutation({
-    mutationFn: (storagePath: string) => documentService.reextractText(storagePath),
+  const detailedAnalysisMutation = useMutation({
+    mutationFn: (storagePath: string) => documentService.generateDetailedAnalysis(storagePath),
     onSuccess: (analysis) => {
-      // Unlike updateTextMutation, the client has no idea what the vision
-      // model actually transcribed -- documentText must be refetched, not
-      // guessed at.
+      // Vision OCR + a full re-run of the analysis graph -- the client has
+      // no idea what the model actually transcribed or derived, so
+      // documentText must be refetched, not guessed at (same reasoning
+      // re-extract used to have here).
       void queryClient.invalidateQueries({
         queryKey: queryKeys.documentText(analysis.storage_path),
       });
@@ -191,8 +192,11 @@ export function useDocuments(
     generatingDetailedSummaryPath: detailedSummaryMutation.isPending
       ? detailedSummaryMutation.variables ?? null
       : null,
+    generatingDetailedAnalysis: detailedAnalysisMutation.isPending,
+    generatingDetailedAnalysisPath: detailedAnalysisMutation.isPending
+      ? detailedAnalysisMutation.variables ?? null
+      : null,
     savingText: updateTextMutation.isPending,
-    reextracting: reextractTextMutation.isPending,
     deleting: removeMutation.isPending,
     error: error instanceof Error ? error.message : null,
     refresh: async () => {
@@ -235,11 +239,11 @@ export function useDocuments(
     generateDetailedSummary: async (storagePath: string) => {
       await detailedSummaryMutation.mutateAsync(storagePath);
     },
+    generateDetailedAnalysis: async (storagePath: string) => {
+      await detailedAnalysisMutation.mutateAsync(storagePath);
+    },
     saveText: async (storagePath: string, pages: string[]) => {
       await updateTextMutation.mutateAsync({ storagePath, pages });
-    },
-    reextractText: async (storagePath: string) => {
-      await reextractTextMutation.mutateAsync(storagePath);
     },
     deleteDocument: async (storagePath: string) => {
       if (pendingDocumentsRef.current.some((item) => item.storage_path === storagePath)) {

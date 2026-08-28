@@ -237,6 +237,19 @@ ROUTER_ASSIST_HANDOFFS = Counter(
     ["reason", "target"],
 )
 
+#: Asistan modelinin, o turda ``propose_transfer`` aracını hiç çağırmamışken
+#: (``pending_transfer`` boşken) yanıt metninde bir gönderimin önerildiğini
+#: veya bir onay ekranı açılacağını anlattığı sayı -- #318'in kök nedeni.
+#: Modelin bir vaadi, onu gerçekleştirecek aracı çağırmadan kurduğu bir
+#: *belirti dedektörü*dür; ``reply`` metnini asla değiştirmez, yalnızca
+#: gözlemler. Bu sayı yükselirse (prompt düzeltmesine rağmen tekrar ederse)
+#: modeli o turda zorla araca yönlendiren proaktif bir düzeltme (belge
+#: yolundaki ``_final_answer_nudge``'a benzer) gündeme gelir.
+TRANSFER_REPLY_WITHOUT_PROPOSAL = Counter(
+    "kachow_transfer_reply_without_proposal_total",
+    "Assist replies that narrate a transfer confirmation without propose_transfer having been called this turn.",
+)
+
 #: İnsan onay kapısının "revizyon iste" döngüsünün (planning_graph
 #: gate_revise_node/route_after_gate) nasıl sonuçlandığı: başka bir tur
 #: üretildi (hâlâ HITL_MAX_GATE_REVISIONS içinde) mi yoksa tur sınırına
