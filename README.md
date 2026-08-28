@@ -229,6 +229,8 @@ Her işlem adımı LangGraph üzerinde ayrı bir düğüm olarak çalışır. Ak
 
 ## Demo ve Arayüz
 
+> **Demo videosu:** YouTube / Loom bağlantısı buraya eklenecek.
+
 ### Platform görünümü
 
 <p align="center">
