@@ -17,8 +17,21 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="style.css" />
+
+<link rel="preload" as="image" href="shots/01.png" />
+<link rel="preload" as="image" href="shots/02.png" />
+<link rel="preload" as="image" href="shots/03.png" />
+<link rel="preload" as="image" href="shots/04.png" />
+<link rel="preload" as="image" href="shots/05.png" />
+<link rel="preload" as="image" href="shots/06.png" />
+<link rel="preload" as="image" href="shots/07.png" />
+<link rel="preload" as="image" href="shots/08.png" />
+<link rel="preload" as="image" href="shots/09.png" />
+<link rel="preload" as="image" href="shots/10.png" />
 </head>
 <body>
+
+<div class="scrollbar" id="scrollbar" aria-hidden="true"></div>
 
 <!-- ============ BACKDROP ============ -->
 <div class="backdrop" aria-hidden="true">
@@ -48,6 +61,7 @@
   <nav class="nav__links" aria-label="Bölümler">
     <a href="#problem">Sorun</a>
     <a href="#akis">Nasıl Çalışır</a>
+    <a href="#urun">Ürün</a>
     <a href="#fark">Farkımız</a>
     <a href="#sonuc">Sonuçlar</a>
     <a href="#guven">Güven</a>
@@ -60,12 +74,13 @@
 
 <!-- ============ HERO ============ -->
 <section class="hero" id="hero">
+  <div class="hero__aurora" aria-hidden="true"></div>
   <div class="hero__inner reveal">
     <div class="badge-row">
-      <span class="badge badge--red">TEKNOFEST 2026</span>
+      <span class="badge badge--red"><span class="badge__pulse"></span>TEKNOFEST 2026</span>
       <span class="badge">Karar Destek Sistemi</span>
     </div>
-    <h1 class="hero__title">
+    <h1 class="hero__title" data-split>
       Kamu yazışmalarında<br /><span class="grad">yeni bir çağ</span> başlıyor.
     </h1>
     <p class="hero__lede">
@@ -85,7 +100,6 @@
       <div><dt data-count="0" data-prefix="&lt;" data-suffix="sn" data-raw="4 sn">4</dt><dd>Uçtan uca analiz süresi</dd></div>
     </dl>
   </div>
-  <div class="hero__scroll" aria-hidden="true"><span></span>kaydır</div>
 </section>
 
 <!-- ============ TRUST STRIP ============ -->
@@ -162,6 +176,45 @@
       <div class="pipeline__packet" aria-hidden="true"></div>
     </div>
     <p class="pipeline__hint">Akış sunucuda tutulur — sayfa yenilense bile bekleyen onay kaybolmaz.</p>
+  </div>
+</section>
+
+<!-- ============ PRODUCT SHOWCASE ============ -->
+<section class="section section--showcase" id="urun">
+  <div class="section__head section__head--center reveal">
+    <span class="kicker kicker--center">Ürün</span>
+    <h2>Slayt değil. Çalışan ürün.</h2>
+    <p class="section__sub">Girişten imzaya kadar tek platform: dashboard, evrak analizi, mevzuat haritası, çok-ajanlı taslak akışı, insan onay kapısı, denetim ve gözlemlenebilirlik.</p>
+  </div>
+
+  <div class="showcase reveal" id="showcase" aria-label="Ürün ekran görüntüleri">
+    <div class="marquee" data-marquee>
+      <div class="marquee__row" data-row="1">
+        <figure class="shot"><img src="shots/01.png" alt="KACHOW giriş ekranı" decoding="async" /><figcaption>Güvenli giriş</figcaption></figure>
+        <figure class="shot"><img src="shots/02.png" alt="Ana dashboard" decoding="async" /><figcaption>Kurum dashboard'u</figcaption></figure>
+        <figure class="shot"><img src="shots/03.png" alt="Evrak kütüphanesi ve analiz" decoding="async" /><figcaption>Evrak analizi &amp; mevzuat</figcaption></figure>
+        <figure class="shot"><img src="shots/04.png" alt="Mevzuat bilgi haritası" decoding="async" /><figcaption>Mevzuat bilgi haritası</figcaption></figure>
+        <figure class="shot"><img src="shots/05.png" alt="Çok-ajanlı taslak akışı" decoding="async" /><figcaption>Çok-ajanlı taslak akışı</figcaption></figure>
+        <figure class="shot"><img src="shots/06.png" alt="İnsan onay kapısı" decoding="async" /><figcaption>İnsan onay kapısı</figcaption></figure>
+        <figure class="shot"><img src="shots/07.png" alt="Taslak denetimi ve güven skoru" decoding="async" /><figcaption>Taslak denetimi &amp; güven skoru</figcaption></figure>
+        <figure class="shot"><img src="shots/08.png" alt="Denetim kayıtları" decoding="async" /><figcaption>Tam denetim izi</figcaption></figure>
+        <figure class="shot"><img src="shots/09.png" alt="Grafana gözlemlenebilirlik" decoding="async" /><figcaption>Canlı gözlemlenebilirlik</figcaption></figure>
+        <figure class="shot"><img src="shots/10.png" alt="Platform yönetimi ve çok kurumluluk" decoding="async" /><figcaption>Çok kurumlu yönetim</figcaption></figure>
+      </div>
+      <div class="marquee__row" data-row="2">
+        <figure class="shot"><img src="shots/10.png" alt="Platform yönetimi ve çok kurumluluk" decoding="async" /><figcaption>Çok kurumlu yönetim</figcaption></figure>
+        <figure class="shot"><img src="shots/09.png" alt="Grafana gözlemlenebilirlik" decoding="async" /><figcaption>Canlı gözlemlenebilirlik</figcaption></figure>
+        <figure class="shot"><img src="shots/08.png" alt="Denetim kayıtları" decoding="async" /><figcaption>Tam denetim izi</figcaption></figure>
+        <figure class="shot"><img src="shots/07.png" alt="Taslak denetimi ve güven skoru" decoding="async" /><figcaption>Taslak denetimi &amp; güven skoru</figcaption></figure>
+        <figure class="shot"><img src="shots/06.png" alt="İnsan onay kapısı" decoding="async" /><figcaption>İnsan onay kapısı</figcaption></figure>
+        <figure class="shot"><img src="shots/05.png" alt="Çok-ajanlı taslak akışı" decoding="async" /><figcaption>Çok-ajanlı taslak akışı</figcaption></figure>
+        <figure class="shot"><img src="shots/04.png" alt="Mevzuat bilgi haritası" decoding="async" /><figcaption>Mevzuat bilgi haritası</figcaption></figure>
+        <figure class="shot"><img src="shots/03.png" alt="Evrak kütüphanesi ve analiz" decoding="async" /><figcaption>Evrak analizi &amp; mevzuat</figcaption></figure>
+        <figure class="shot"><img src="shots/02.png" alt="Ana dashboard" decoding="async" /><figcaption>Kurum dashboard'u</figcaption></figure>
+        <figure class="shot"><img src="shots/01.png" alt="KACHOW giriş ekranı" decoding="async" /><figcaption>Güvenli giriş</figcaption></figure>
+      </div>
+    </div>
+    <p class="showcase__hint">İncelemek için tıklayın</p>
   </div>
 </section>
 
@@ -334,8 +387,8 @@
 
 <!-- ============ TECH AT A GLANCE ============ -->
 <section class="section section--tech" id="tech">
-  <div class="section__head reveal">
-    <span class="kicker">Kaputun Altında</span>
+  <div class="section__head section__head--center reveal">
+    <span class="kicker kicker--center">Kaputun Altında</span>
     <h2>Kanıtlanmış, açık teknolojilerle kurulu.</h2>
   </div>
   <ul class="tech-row reveal">
@@ -372,6 +425,16 @@
   <span>KACHOW — kamu resmî evrak süreçleri için çok-ajanlı karar destek platformu.</span>
   <span>Apache License 2.0 · TEKNOFEST 2026</span>
 </footer>
+
+<div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-modal="true" aria-label="Ekran görüntüsü">
+  <button class="lightbox__nav lightbox__prev" type="button" aria-label="Önceki">‹</button>
+  <figure class="lightbox__stage">
+    <img id="lightboxImg" alt="" />
+    <figcaption id="lightboxCap"></figcaption>
+  </figure>
+  <button class="lightbox__nav lightbox__next" type="button" aria-label="Sonraki">›</button>
+  <button class="lightbox__close" type="button" aria-label="Kapat">×</button>
+</div>
 
 <script src="script.js"></script>
 </body>

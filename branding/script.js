@@ -7,9 +7,26 @@
 
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  /* ---------- Sticky nav ---------- */
+  /* ---------- Sticky nav + scroll progress ---------- */
   const nav = document.getElementById("nav");
-  const onScroll = () => nav.classList.toggle("is-stuck", window.scrollY > 12);
+  const scrollbar = document.getElementById("scrollbar");
+  const gridLines = document.querySelector(".grid-lines");
+  const heroAurora = document.querySelector(".hero__aurora");
+  function onScroll() {
+    const y = window.scrollY;
+    nav.classList.toggle("is-stuck", y > 12);
+    if (scrollbar) {
+      const max = document.documentElement.scrollHeight - window.innerHeight;
+      scrollbar.style.width = (max > 0 ? (y / max) * 100 : 0) + "%";
+    }
+    if (!reduceMotion) {
+      if (gridLines) gridLines.style.transform = "translate3d(0," + (y * 0.12).toFixed(1) + "px,0)";
+      // .style.translate composes with the rotate() animation on the aurora
+      if (heroAurora && y < window.innerHeight * 1.4) {
+        heroAurora.style.translate = "0 " + (y * 0.25).toFixed(1) + "px";
+      }
+    }
+  }
   onScroll();
   window.addEventListener("scroll", onScroll, { passive: true });
 
@@ -55,6 +72,7 @@
 
     const duration = 1400;
     const start = performance.now();
+    el.classList.add("is-counting");
     function tick(now) {
       const p = Math.min(1, (now - start) / duration);
       const val = target * easeOut(p);
@@ -63,6 +81,7 @@
         requestAnimationFrame(tick);
       } else {
         el.textContent = raw || prefix + target.toFixed(decimals) + suffix;
+        el.classList.remove("is-counting");
       }
     }
     requestAnimationFrame(tick);
@@ -209,5 +228,138 @@
       { threshold: 0.5, rootMargin: "-20% 0px -60% 0px" }
     );
     targets.forEach((t) => sio.observe(t));
+  }
+
+  /* ---------- Hero title: split into words, reveal on load ---------- */
+  const heroSection = document.getElementById("hero");
+  const heroTitle = document.querySelector("[data-split]");
+  if (heroTitle && heroSection) {
+    if (reduceMotion) {
+      heroSection.classList.add("is-ready");
+    } else {
+      const walk = (node) => {
+        Array.from(node.childNodes).forEach((child) => {
+          if (child.nodeType === 3) {
+            const frag = document.createDocumentFragment();
+            child.textContent.split(/(\s+)/).forEach((tok) => {
+              if (tok.trim() === "") {
+                frag.appendChild(document.createTextNode(tok));
+              } else {
+                const w = document.createElement("span");
+                w.className = "word";
+                const inner = document.createElement("span");
+                inner.textContent = tok;
+                w.appendChild(inner);
+                frag.appendChild(w);
+              }
+            });
+            node.replaceChild(frag, child);
+          } else if (child.nodeType === 1 && child.tagName !== "BR") {
+            // keep <span class="grad"> as one animated unit
+            if (child.classList.contains("grad")) {
+              const w = document.createElement("span");
+              w.className = "word";
+              child.parentNode.insertBefore(w, child);
+              w.appendChild(child);
+            } else {
+              walk(child);
+            }
+          }
+        });
+      };
+      try {
+        walk(heroTitle);
+      } catch (err) {
+        /* if splitting fails for any reason, fall through to just showing it */
+      }
+      requestAnimationFrame(() => heroSection.classList.add("is-ready"));
+    }
+    // Hard safety net: the title must never stay invisible.
+    setTimeout(() => heroSection.classList.add("is-ready"), 2500);
+  }
+
+  /* ---------- Card spotlight (mouse-follow glow) ---------- */
+  if (!reduceMotion && window.matchMedia("(pointer:fine)").matches) {
+    const spotCards = document.querySelectorAll(".pain, .task, .diff, .trust, .metric");
+    spotCards.forEach((card) => {
+      card.addEventListener("pointermove", (e) => {
+        const r = card.getBoundingClientRect();
+        card.style.setProperty("--mx", ((e.clientX - r.left) / r.width) * 100 + "%");
+        card.style.setProperty("--my", ((e.clientY - r.top) / r.height) * 100 + "%");
+      });
+    });
+
+    /* ---------- Magnetic primary buttons ---------- */
+    document.querySelectorAll(".btn--primary").forEach((btn) => {
+      btn.addEventListener("pointermove", (e) => {
+        const r = btn.getBoundingClientRect();
+        const mx = e.clientX - r.left - r.width / 2;
+        const my = e.clientY - r.top - r.height / 2;
+        btn.style.transform = "translate(" + mx * 0.18 + "px," + my * 0.28 + "px)";
+      });
+      btn.addEventListener("pointerleave", () => { btn.style.transform = ""; });
+    });
+  }
+
+  /* ---------- Product showcase marquee + lightbox ---------- */
+  const marquee = document.querySelector("[data-marquee]");
+  if (marquee && !reduceMotion) {
+    // duplicate each row's cards so the -50% keyframe loops seamlessly
+    marquee.querySelectorAll(".marquee__row").forEach((row) => {
+      row.innerHTML += row.innerHTML;
+    });
+  }
+
+  const shots = Array.from(document.querySelectorAll(".shot"));
+  const lightbox = document.getElementById("lightbox");
+  if (shots.length && lightbox) {
+    const lbImg = document.getElementById("lightboxImg");
+    const lbCap = document.getElementById("lightboxCap");
+    // de-duplicate the (possibly cloned) list into unique sources, in order
+    const gallery = [];
+    const seen = new Set();
+    shots.forEach((fig) => {
+      const img = fig.querySelector("img");
+      if (!seen.has(img.src)) {
+        seen.add(img.src);
+        gallery.push({ src: img.src, cap: (fig.querySelector("figcaption") || {}).textContent || "" });
+      }
+    });
+    let cur = 0;
+
+    const show = (i) => {
+      cur = (i + gallery.length) % gallery.length;
+      lbImg.src = gallery[cur].src;
+      lbImg.alt = gallery[cur].cap;
+      lbCap.textContent = gallery[cur].cap;
+    };
+    const open = (i) => {
+      show(i);
+      lightbox.classList.add("is-open");
+      lightbox.setAttribute("aria-hidden", "false");
+      document.body.style.overflow = "hidden";
+    };
+    const close = () => {
+      lightbox.classList.remove("is-open");
+      lightbox.setAttribute("aria-hidden", "true");
+      document.body.style.overflow = "";
+    };
+
+    shots.forEach((fig) => {
+      fig.addEventListener("click", () => {
+        const src = fig.querySelector("img").src;
+        open(gallery.findIndex((g) => g.src === src));
+      });
+    });
+    lightbox.querySelector(".lightbox__close").addEventListener("click", close);
+    lightbox.querySelector(".lightbox__prev").addEventListener("click", () => show(cur - 1));
+    lightbox.querySelector(".lightbox__next").addEventListener("click", () => show(cur + 1));
+    lightbox.addEventListener("click", (e) => { if (e.target === lightbox) close(); });
+    document.addEventListener("keydown", (e) => {
+      if (!lightbox.classList.contains("is-open")) return;
+      if (e.key === "Escape") close();
+      else if (e.key === "ArrowLeft") show(cur - 1);
+      else if (e.key === "ArrowRight") show(cur + 1);
+    });
   }
 })();
